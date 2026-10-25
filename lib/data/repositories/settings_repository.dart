@@ -7,6 +7,7 @@ import '../../core/design/app_colors.dart' show AccentColor;
 import '../../core/design/app_font.dart' show AppFont;
 import '../../domain/transaction_type.dart';
 import '../../domain/week_mode.dart';
+import '../backup/backup_data.dart';
 
 /// Everything the Settings screen controls, plus the last-used categories.
 class AppSettings {
@@ -154,5 +155,44 @@ class SettingsRepository {
         ? _lastExpenseKey
         : _lastIncomeKey;
     return _prefs.setInt(key, categoryId);
+  }
+
+  /// The settings that travel in a backup. Last-used categories are left out:
+  /// they are ids that may not exist on the phone that restores.
+  BackupSettings toBackup() {
+    final s = load();
+    return BackupSettings(
+      currency: s.currency.code,
+      themeMode: s.themeMode.name,
+      accent: s.accent.name,
+      textFont: s.textFont.name,
+      labFlavor: s.labFlavor,
+      openingBalanceCents: s.openingBalanceCents,
+      weekMode: s.weekMode.name,
+      weekStartDay: s.weekStartDay,
+    );
+  }
+
+  /// Writes the settings a backup carries (skipping any it lacks), forgets the
+  /// last-used categories, and marks the welcome tour as done: someone
+  /// restoring a backup has already set the app up.
+  Future<void> applyBackup(BackupSettings b) async {
+    if (b.currency != null) await _prefs.setString(_currencyKey, b.currency!);
+    if (b.themeMode != null) {
+      await _prefs.setString(_themeModeKey, b.themeMode!);
+    }
+    if (b.accent != null) await _prefs.setString(_accentKey, b.accent!);
+    if (b.textFont != null) await _prefs.setString(_textFontKey, b.textFont!);
+    if (b.labFlavor != null) await _prefs.setBool(_labFlavorKey, b.labFlavor!);
+    if (b.openingBalanceCents != null) {
+      await _prefs.setInt(_openingBalanceKey, b.openingBalanceCents!);
+    }
+    if (b.weekMode != null) await _prefs.setString(_weekModeKey, b.weekMode!);
+    if (b.weekStartDay != null) {
+      await _prefs.setInt(_weekStartDayKey, b.weekStartDay!);
+    }
+    await _prefs.remove(_lastExpenseKey);
+    await _prefs.remove(_lastIncomeKey);
+    await _prefs.setBool(_onboardingKey, true);
   }
 }

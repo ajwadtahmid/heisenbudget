@@ -129,6 +129,13 @@ class TransactionRepository {
     return query.watch().map((rows) => rows.map(_toModel).toList());
   }
 
+  /// Every transaction, oldest first (for the CSV export).
+  Future<List<TransactionWithCategory>> getAll() async {
+    final rows = await (_joined()..orderBy(_ordering(SortOption.oldestFirst)))
+        .get();
+    return rows.map(_toModel).toList();
+  }
+
   /// Ids of categories that at least one transaction uses. History's filter
   /// offers archived categories only if they are in this set.
   Stream<Set<int>> watchUsedCategoryIds() {
