@@ -51,3 +51,6 @@ extra/
 
 # Local Claude Code instructions
 CLAUDE.md
+
+# Local design review screenshots
+.impeccable/review/
