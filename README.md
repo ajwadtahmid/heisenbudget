@@ -30,8 +30,13 @@ cloud, no analytics. Everything is stored on the device.
   week mode (calendar weeks or fixed 7-day blocks) and which weekday a week
   starts on.
 
-Out of scope for v1 (planned for later): budgets, recurring transactions,
-charts, export/import, search, multiple accounts.
+- Backup (Settings): save everything (transactions, categories, settings) to
+  one JSON file, restore it later or on a new phone, or export transactions as
+  a CSV for a spreadsheet. The app only creates the file and opens the phone's
+  share sheet; where it goes is your choice. Restoring checks the whole file
+  first and replaces everything only if it is valid.
+
+Planned for later: budgets, recurring transactions, search, multiple accounts.
 
 ## Run it
 
@@ -83,7 +88,8 @@ Then turn on airplane mode and check the app still works.
 ```
 lib/
   core/        constants, theme, money parser, formatters
-  data/        drift database, repositories (transactions, categories, settings)
+  data/        drift database, repositories (transactions, categories, settings),
+               backup (file format, restore, CSV, share sheet and file picker)
   domain/      pure Dart: DateRange and Period math, summaries, sort options
   providers/   Riverpod providers (no code generation)
   features/    shell, home, history, transaction_form, settings, shared widgets
