@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T20:18:50+00:00",
+  "title": "Design System: Heisenbudget",
+  "extensions": {
+    "colorMeta": {
+      "ink-ground": {
+        "role": "neutral",
+        "displayName": "Ink Ground",
+        "canonical": "#070A09",
+        "tonalRamp": [
+          "#020302",
+          "#030504",
+          "#050706",
+          "#060908",
+          "#262928",
+          "#656767",
+          "#A4A6A5",
+          "#E3E4E4"
+        ]
+      },
+      "ink-panel": {
+        "role": "neutral",
+        "displayName": "Ink Panel",
+        "canonical": "#0D1210",
+        "tonalRamp": [
+          "#040504",
+          "#060908",
+          "#090C0B",
+          "#0C100E",
+          "#2C302E",
+          "#696C6B",
+          "#A7A8A8",
+          "#E4E5E4"
+        ]
+      },
+      "ink-text": {
+        "role": "neutral",
+        "displayName": "Bone Text",
+        "canonical": "#E6EDE9",
+        "tonalRamp": [
+          "#3F4140",
+          "#6F7270",
+          "#9EA3A0",
+          "#CED4D1",
+          "#E9EFEC",
+          "#F0F4F1",
+          "#F6F8F7",
+          "#FCFDFD"
+        ]
+      },
+      "ink-received": {
+        "role": "secondary",
+        "displayName": "Received Green (Ink)",
+        "canonical": "#3EE08F",
+        "tonalRamp": [
+          "#113D27",
+          "#1E6C45",
+          "#2B9A62",
+          "#38C980",
+          "#57E49D",
+          "#88ECBA",
+          "#B9F4D6",
+          "#EAFCF3"
+        ]
+      },
+      "ink-spent": {
+        "role": "secondary",
+        "displayName": "Spent Amber (Ink)",
+        "canonical": "#FFB547",
+        "tonalRamp": [
+          "#463113",
+          "#7B5722",
+          "#B07D31",
+          "#E5A240",
+          "#FFBE5E",
+          "#FFD18D",
+          "#FFE4BC",
+          "#FFF7EB"
+        ]
+      },
+      "bench-ground": {
+        "role": "neutral",
+        "displayName": "Bench Ground",
+        "canonical": "#F4F6F5",
+        "tonalRamp": [
+          "#434343",
+          "#757676",
+          "#A8A9A9",
+          "#DBDCDC",
+          "#F5F7F6",
+          "#F8F9F9",
+          "#FBFCFB",
+          "#FEFEFE"
+        ]
+      },
+      "bench-received": {
+        "role": "secondary",
+        "displayName": "Received Green (Bench)",
+        "canonical": "#0B7A48",
+        "tonalRamp": [
+          "#032114",
+          "#053B23",
+          "#085432",
+          "#0A6D41",
+          "#2A8B5F",
+          "#68AD8E",
+          "#A6CEBC",
+          "#E4F0EB"
+        ]
+      },
+      "bench-spent": {
+        "role": "secondary",
+        "displayName": "Spent Amber (Bench)",
+        "canonical": "#9A5600",
+        "tonalRamp": [
+          "#2A1700",
+          "#4A2900",
+          "#6A3B00",
+          "#8A4D00",
+          "#A76B20",
+          "#C09661",
+          "#DAC1A2",
+          "#F4ECE3"
+        ]
+      },
+      "accent-assay-ink": {
+        "role": "primary",
+        "displayName": "Assay Teal (Ink)",
+        "canonical": "#2FD6C0",
+        "tonalRamp": [
+          "#0D3A34",
+          "#17675C",
+          "#209384",
+          "#2AC0AC",
+          "#49DBC8",
+          "#7EE6D8",
+          "#B3F0E8",
+          "#E8FAF8"
+        ]
+      },
+      "accent-assay-bench": {
+        "role": "primary",
+        "displayName": "Assay Teal (Bench)",
+        "canonical": "#087569",
+        "tonalRamp": [
+          "#02201D",
+          "#043832",
+          "#065148",
+          "#07695E",
+          "#27877C",
+          "#66AAA2",
+          "#A5CDC8",
+          "#E4F0EE"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "Home balance, 44sp Geist Mono."
+      },
+      "label": {
+        "displayName": "Tracked label",
+        "purpose": "12sp tracked section and ledger labels."
+      },
+      "ledger-value": {
+        "displayName": "Ledger value",
+        "purpose": "Right-aligned tabular mono values."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "count",
+        "value": "350ms easeOutCubic",
+        "purpose": "Balance counts to new value."
+      },
+      {
+        "name": "ruler-fill",
+        "value": "420ms easeOutCubic",
+        "purpose": "Tick ruler fills on period change."
+      },
+      {
+        "name": "chart-rise",
+        "value": "700ms easeOutCubic, 0.12 stagger",
+        "purpose": "Spectrum peaks rise left to right."
+      },
+      {
+        "name": "welcome-slide",
+        "value": "280ms",
+        "purpose": "Welcome step transition."
+      },
+      {
+        "name": "reduce-motion",
+        "value": "0ms",
+        "purpose": "All of the above skip to the final state when system animations are disabled."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "large-text",
+        "value": "text scale above 1.3: add key becomes icon only, theme picker becomes chips"
+      },
+      {
+        "name": "readout-cap",
+        "value": "text scale capped at 1.3 on big readouts and chart labels"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Add key",
+      "kind": "button",
+      "refersTo": "add-key",
+      "description": "Extended accent key, 10dp radius, LOG or ADD.",
+      "html": "<button class=\"ds-add\">+ LOG</button>",
+      "css": ".ds-add{background:#2FD6C0;color:#04120B;border:0;border-radius:10px;padding:16px 20px;font:600 14px Geist,Inter,sans-serif;letter-spacing:1.1px;box-shadow:none}.ds-add:hover{background:#4fe0cd}.ds-add:focus-visible{outline:2px solid #E6EDE9;outline-offset:2px}"
+    },
+    {
+      "name": "Ledger row",
+      "kind": "custom",
+      "refersTo": "ledger-row",
+      "description": "Label, dotted leader, right-aligned tabular mono value.",
+      "html": "<div class=\"ds-row\"><span class=\"ds-l\">RECEIVED</span><span class=\"ds-dots\"></span><span class=\"ds-v\">+$4,500.00</span></div>",
+      "css": ".ds-row{display:flex;align-items:flex-end;gap:8px;min-height:40px;background:#070A09;padding:8px 0}.ds-l{font:600 12px Geist,sans-serif;letter-spacing:.9px;color:#8A9892}.ds-dots{flex:1;height:8px;background:radial-gradient(circle,#56625C 0.8px,transparent 1px) 0 100%/4px 4px repeat-x}.ds-v{font:500 17px 'Geist Mono',monospace;font-variant-numeric:tabular-nums;color:#3EE08F}"
+    },
+    {
+      "name": "Section label",
+      "kind": "custom",
+      "description": "Tracked caps label with a hairline running out.",
+      "html": "<div class=\"ds-sec\"><span>SPECTRUM</span><i></i></div>",
+      "css": ".ds-sec{display:flex;align-items:center;gap:12px;background:#070A09;padding:8px 0}.ds-sec span{font:600 12px Geist,sans-serif;letter-spacing:.9px;color:#8A9892}.ds-sec i{flex:1;height:1px;background:#26302B}"
+    },
+    {
+      "name": "Transaction row",
+      "kind": "card",
+      "description": "Outlined icon square, name and date, signed mono amount, hairline below.",
+      "html": "<div class=\"ds-tx\"><b class=\"ds-tile\"></b><div><div class=\"ds-n\">Food</div><div class=\"ds-d\">Oct 13, 2026</div></div><span class=\"ds-a\">-$228.00</span></div>",
+      "css": ".ds-tx{display:flex;align-items:center;gap:16px;padding:10px 0;background:#070A09;border-bottom:1px solid #26302B}.ds-tile{width:36px;height:36px;border:1px solid #56625C;border-radius:8px}.ds-tx>div{flex:1}.ds-n{font:500 16px Geist,sans-serif;color:#E6EDE9}.ds-d{font:400 13px Geist,sans-serif;color:#8A9892}.ds-a{font:500 16px 'Geist Mono',monospace;font-variant-numeric:tabular-nums;color:#FFB547}"
+    },
+    {
+      "name": "Choice chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Hairline chip, 8dp radius; selected is accent-tinted.",
+      "html": "<span class=\"ds-chip ds-sel\">This month</span> <span class=\"ds-chip\">All time</span>",
+      "css": ".ds-chip{display:inline-block;padding:8px 12px;border:1px solid #26302B;border-radius:8px;font:500 14px Geist,sans-serif;color:#E6EDE9;background:transparent}.ds-chip.ds-sel{background:#0F2B27;color:#2FD6C0}.ds-chip:focus-visible{outline:2px solid #2FD6C0}"
+    },
+    {
+      "name": "Navigation bar",
+      "kind": "nav",
+      "refersTo": "navigation-bar",
+      "description": "Three tabs, hairline above, tonal selected indicator.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-on\">Home</a><a>History</a><a>Settings</a></nav>",
+      "css": ".ds-nav{display:flex;justify-content:space-around;height:68px;align-items:center;background:#070A09;border-top:1px solid #26302B}.ds-nav a{padding:8px 16px;border-radius:10px;font:500 12px Geist,sans-serif;letter-spacing:.4px;color:#8A9892}.ds-nav a.ds-on{background:#0F2B27;color:#2FD6C0;font-weight:600}"
+    },
+    {
+      "name": "Spectrum peak",
+      "kind": "custom",
+      "description": "24dp amber peak with mono percentage above and name below.",
+      "html": "<div class=\"ds-pk\"><span>50%</span><i></i><em>Rent</em></div>",
+      "css": ".ds-pk{display:inline-flex;flex-direction:column;align-items:center;justify-content:flex-end;height:120px;background:#070A09;padding:4px 12px;border-bottom:1.5px solid #56625C}.ds-pk span{font:500 12px 'Geist Mono',monospace;color:#8A9892}.ds-pk i{width:24px;height:70px;background:#FFB547;border-radius:4px 4px 0 0}.ds-pk em{font:500 12px Geist,sans-serif;color:#8A9892;font-style:normal}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Bench Instrument",
+    "overview": "Money is a measurement. The app reads like a small, calm piece of lab equipment: ruled readouts, a tick scale for the period, one spectrum chart. Dark first (Ink), with a light Bench sibling. Depth is tonal panels and 1dp hairlines; no shadows. Two fixed channels, Received green and Spent amber, never change with the one switchable accent, which colours chrome only. Every number is Geist Mono tabular.",
+    "keyCharacteristics": [
+      "Ink and Bench palettes, tonal panels plus 1dp hairlines, zero shadows.",
+      "Two money channels independent of five selectable accents.",
+      "Geist Mono tabular for every number; UI text in a user-chosen face.",
+      "Small radii (8 to 20dp), nothing is a pill; add key is 10dp.",
+      "Instrument furniture is local: graticule in the chart, tick ruler on the period control, leaders on Home's three summary rows."
+    ],
+    "rules": [
+      {
+        "name": "The Two Channels Rule",
+        "body": "Received is green and Spent is amber in every theme and under every accent. The accent never borrows either hue, and amber is never an accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Sign Plus Colour Rule",
+        "body": "A money event is never told apart by colour alone: amounts carry a visible + or - and rows carry an arrow glyph.",
+        "section": "colors"
+      },
+      {
+        "name": "The Faint Is Not Text Rule",
+        "body": "The faint grey is for marks. Words use text or dim.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every digit that stands for money, a date range, a percentage or a count is in Geist Mono with tabular figures. Words are never in mono.",
+        "section": "typography"
+      },
+      {
+        "name": "The 12sp Floor Rule",
+        "body": "Nothing is set below 12sp. All sizes are sp and follow the system font size.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Separate with a 1dp hairline or a tonal step. Never with a shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use Gap and Radii constants; build on the 4dp grid.",
+      "Do put every number in Geist Mono tabular, and sign every amount with + or - plus its channel colour.",
+      "Do keep the accent on chrome only and Received and Spent on money only.",
+      "Do separate with hairlines (1dp) and tonal panels, in both Ink and Bench.",
+      "Do keep touch targets at 48dp or larger, text at 12sp or larger, and cap big readouts at 130% text scale while letting everything else scale fully.",
+      "Do honour reduce-motion on every animation and give each new animation a skip path.",
+      "Do keep all wording in Copy so Lab on and off both stay complete.",
+      "Do keep launcher artwork original and fonts bundled under OFL."
+    ],
+    "donts": [
+      "Don't add shadows, glow, surface tint, pill buttons, stat cards or donut charts.",
+      "Don't offer amber as an accent or let any accent land near the Received green.",
+      "Don't use the faint grey for words.",
+      "Don't spread leaders, graticule or tick ruler to other screens.",
+      "Don't use any show logo, show lettering, or hat-and-glasses silhouette, quote the show, or hard-code a \"99.1%\" purity figure.",
+      "Don't make the Lab flavor change layout or colour."
+    ]
+  }
+}
