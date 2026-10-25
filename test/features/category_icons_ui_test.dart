@@ -28,8 +28,8 @@ Future<void> openCategoryManager(WidgetTester tester) async {
     200,
     scrollable: find.byType(Scrollable).first,
   );
-  // Clear the bottom navigation bar, which can cover the row on small screens.
-  await tester.drag(find.byType(Scrollable).first, const Offset(0, -150));
+  // Bring the row clear of the bottom navigation bar on small screens.
+  await tester.ensureVisible(find.byKey(const ValueKey('manage-categories')));
   await tester.pump();
   await tester.tap(find.byKey(const ValueKey('manage-categories')));
   await settle(tester);

@@ -9,6 +9,7 @@ import '../../domain/week_mode.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/appearance_pickers.dart';
 import '../shared/opening_balance_dialog.dart';
+import 'backup_section.dart';
 import 'category_manager_screen.dart';
 
 const _weekdayNames = [
@@ -171,6 +172,9 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
+          const SizedBox(height: Gap.l),
+          const SectionLabel('Backup'),
+          const BackupSection(),
           const SizedBox(height: Gap.l),
           const SectionLabel('About'),
           const ListTile(
