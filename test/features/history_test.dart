@@ -441,13 +441,20 @@ void main() {
       final sort = tester.getRect(find.byKey(const ValueKey('sort-button')));
       expect(filter.top, greaterThan(title.bottom));
       expect(sort.top, greaterThan(title.bottom));
-      // Nothing is left in the app bar's action area.
+      // Filter and Sort are not in the app bar; only Search is.
       expect(
         find.descendant(
           of: find.byType(AppBar),
           matching: find.byType(IconButton),
         ),
-        findsNothing,
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(const ValueKey('search-button')),
+        ),
+        findsOneWidget,
       );
       expect(filter.height, greaterThanOrEqualTo(48));
       expect(sort.height, greaterThanOrEqualTo(48));

@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/iso_date.dart';
+import '../../domain/search.dart';
 import '../../domain/sort_option.dart';
 import '../../domain/transaction_type.dart';
 import '../../providers/category_providers.dart';
@@ -30,6 +34,55 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   /// but the database stream only updates a moment later, so hide them here.
   final _dismissed = <int>{};
 
+  /// The search box. It is shown while it is open or holds a query, and the
+  /// text reaches the filter a moment after typing stops.
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+  Timer? _debounce;
+  bool _searchOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final query = ref.read(historyFilterProvider).query;
+    _searchController.text = query;
+    _searchOpen = query.trim().isNotEmpty;
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String text) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) ref.read(historyFilterProvider.notifier).setQuery(text);
+    });
+  }
+
+  /// Opens the search box, or closes it and drops the query.
+  void _toggleSearch(bool isOpen) {
+    if (isOpen) {
+      _clearSearch();
+      setState(() => _searchOpen = false);
+      return;
+    }
+    setState(() => _searchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _searchController.clear();
+    ref.read(historyFilterProvider.notifier).setQuery('');
+  }
+
   Future<void> _delete(TransactionWithCategory item) async {
     final row = item.transaction;
     setState(() => _dismissed.add(row.id));
@@ -54,66 +107,102 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Widget build(BuildContext context) {
     final filter = ref.watch(historyFilterProvider);
     final symbol = ref.watch(settingsProvider.select((s) => s.currencySymbol));
-    final items = (ref.watch(historyListProvider).value ?? const [])
+    final items = (ref.watch(historyResultsProvider).value ?? const [])
         .where((i) => !_dismissed.contains(i.transaction.id))
         .toList();
+    final searchShown = _searchOpen || filter.isSearching;
+
+    // The query can also be cleared from the chip: keep the box in step.
+    ref.listen(historyFilterProvider.select((f) => f.query), (_, query) {
+      if (_searchController.text != query && !_searchFocus.hasFocus) {
+        _searchController.text = query;
+      }
+    });
 
     return Scaffold(
       floatingActionButton: const AddKey(),
-      appBar: AppBar(title: const Text('History')),
-      body: Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _ControlFace(
-                    key: const ValueKey('filter-button'),
-                    tooltip: 'Filter',
-                    icon: Icons.filter_list,
-                    label: filter.activeCount > 0
-                        ? 'Filter · ${filter.activeCount}'
-                        : 'Filter',
-                    highlighted: filter.hasFilters,
-                    onTap: () => showFilterSheet(context),
-                  ),
-                  PopupMenuButton<SortOption>(
-                    key: const ValueKey('sort-button'),
-                    tooltip: 'Sort',
-                    initialValue: filter.sort,
-                    onSelected: ref
-                        .read(historyFilterProvider.notifier)
-                        .setSort,
-                    itemBuilder: (_) => [
-                      for (final option in SortOption.values)
-                        CheckedPopupMenuItem(
-                          value: option,
-                          checked: option == filter.sort,
-                          child: Text(option.label),
-                        ),
-                    ],
-                    // Shows how the list is sorted right now.
-                    child: _ControlFace(
-                      icon: Icons.swap_vert,
-                      label: filter.sort.label,
-                      trailing: Icons.arrow_drop_down,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (filter.hasFilters) const _ActiveFilterChips(),
-          Expanded(
-            child: items.isEmpty
-                ? _emptyState(filter)
-                : _list(items, symbol, groupByDay: _isDateSort(filter.sort)),
+      appBar: AppBar(
+        title: const Text('History'),
+        actions: [
+          IconButton(
+            key: const ValueKey('search-button'),
+            tooltip: searchShown ? 'Close search' : 'Search',
+            icon: Icon(searchShown ? Icons.search_off : Icons.search),
+            onPressed: () => _toggleSearch(searchShown),
           ),
         ],
+      ),
+      body: LayoutBuilder(
+        builder: (context, box) => Column(
+          children: [
+            // The controls scroll if they ever need more than half the screen
+            // (large text, search open), so the list always keeps room.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: box.maxHeight * 0.5),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (searchShown) _searchField(),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _ControlFace(
+                              key: const ValueKey('filter-button'),
+                              tooltip: 'Filter',
+                              icon: Icons.filter_list,
+                              label: filter.activeCount > 0
+                                  ? 'Filter · ${filter.activeCount}'
+                                  : 'Filter',
+                              highlighted: filter.hasFilters,
+                              onTap: () => showFilterSheet(context),
+                            ),
+                            PopupMenuButton<SortOption>(
+                              key: const ValueKey('sort-button'),
+                              tooltip: 'Sort',
+                              initialValue: filter.sort,
+                              onSelected: ref
+                                  .read(historyFilterProvider.notifier)
+                                  .setSort,
+                              itemBuilder: (_) => [
+                                for (final option in SortOption.values)
+                                  CheckedPopupMenuItem(
+                                    value: option,
+                                    checked: option == filter.sort,
+                                    child: Text(option.label),
+                                  ),
+                              ],
+                              // Shows how the list is sorted right now.
+                              child: _ControlFace(
+                                icon: Icons.swap_vert,
+                                label: filter.sort.label,
+                                trailing: Icons.arrow_drop_down,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (filter.hasFilters || filter.isSearching)
+                      _ActiveFilterChips(onClearSearch: _clearSearch),
+                    if (filter.isSearching && items.isNotEmpty)
+                      _searchSummary(items, symbol),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: items.isEmpty
+                  ? _emptyState(filter)
+                  : _list(items, symbol, groupByDay: _isDateSort(filter.sort)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -121,7 +210,70 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   bool _isDateSort(SortOption sort) =>
       sort == SortOption.newestFirst || sort == SortOption.oldestFirst;
 
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+      child: TextField(
+        key: const ValueKey('search-field'),
+        controller: _searchController,
+        focusNode: _searchFocus,
+        textInputAction: TextInputAction.search,
+        inputFormatters: [LengthLimitingTextInputFormatter(maxSearchLength)],
+        decoration: InputDecoration(
+          hintText: 'Search notes, categories, amounts',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (_, value, _) => value.text.isEmpty
+                ? const SizedBox.shrink()
+                : IconButton(
+                    key: const ValueKey('search-clear'),
+                    tooltip: 'Clear search',
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _clearSearch();
+                      _searchFocus.requestFocus();
+                    },
+                  ),
+          ),
+        ),
+        onChanged: _onSearchChanged,
+        onSubmitted: (text) {
+          _debounce?.cancel();
+          ref.read(historyFilterProvider.notifier).setQuery(text);
+        },
+      ),
+    );
+  }
+
+  /// "12 results · net -$84.20" under the controls while searching.
+  Widget _searchSummary(List<TransactionWithCategory> items, String symbol) {
+    final net = items.fold<int>(0, (sum, i) => sum + _signed(i));
+    final n = items.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          '$n result${n == 1 ? '' : 's'} · net '
+          '${formatMoney(net, symbol, showPlus: true)}',
+          key: const ValueKey('search-summary'),
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: context.appColors.dim),
+        ),
+      ),
+    );
+  }
+
   Widget _emptyState(HistoryFilter filter) {
+    if (filter.isSearching) {
+      return EmptyState(
+        icon: Icons.search_off,
+        message: ref.watch(copyProvider).noMatches(filter.query.trim()),
+        actionLabel: 'Clear search',
+        onAction: _clearSearch,
+      );
+    }
     if (filter.hasFilters) {
       return EmptyState(
         icon: Icons.search_off,
@@ -163,6 +315,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       child: TransactionTile(
         item: item,
         currencySymbol: symbol,
+        highlight: ref.watch(searchQueryProvider),
         onTap: () => showTransactionForm(context, editId: item.transaction.id),
       ),
     );
@@ -291,7 +444,9 @@ class _DayHeaderDelegate extends SliverPersistentHeaderDelegate {
 
 /// Removable chips for each active filter.
 class _ActiveFilterChips extends ConsumerWidget {
-  const _ActiveFilterChips();
+  const _ActiveFilterChips({required this.onClearSearch});
+
+  final VoidCallback onClearSearch;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -307,6 +462,13 @@ class _ActiveFilterChips extends ConsumerWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         children: [
+          if (filter.isSearching)
+            _chip(
+              'search',
+              'Search: ${filter.query.trim()}',
+              onClearSearch,
+              tooltip: 'Remove search',
+            ),
           if (filter.type != null)
             _chip(
               'type',
@@ -334,14 +496,22 @@ class _ActiveFilterChips extends ConsumerWidget {
     );
   }
 
-  Widget _chip(String key, String label, VoidCallback onDeleted) {
+  Widget _chip(
+    String key,
+    String label,
+    VoidCallback onDeleted, {
+    String tooltip = 'Remove filter',
+  }) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: InputChip(
         key: ValueKey('active-$key'),
-        label: Text(label),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
         onDeleted: onDeleted,
-        deleteButtonTooltipMessage: 'Remove filter',
+        deleteButtonTooltipMessage: tooltip,
       ),
     );
   }

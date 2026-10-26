@@ -21,7 +21,7 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.appColors;
     final theme = Theme.of(context);
-    return Center(
+    final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(Gap.xl),
         child: Column(
@@ -49,6 +49,18 @@ class EmptyState extends StatelessWidget {
           ],
         ),
       ),
+    );
+    // In a short, bounded area (large text, a tall header above) it scrolls
+    // instead of overflowing; inside a list it simply takes its own height.
+    return LayoutBuilder(
+      builder: (context, box) => box.hasBoundedHeight
+          ? SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: content,
+              ),
+            )
+          : content,
     );
   }
 }

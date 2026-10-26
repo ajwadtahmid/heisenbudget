@@ -19,6 +19,11 @@ class Copy {
       ? 'Flat line. Nothing spent in this period.'
       : 'Nothing spent in this period.';
 
+  /// History search found nothing.
+  String noMatches(String query) => lab
+      ? 'Flat line.\nNothing matches “$query”.'
+      : 'No matches for “$query”.';
+
   String get chartTitle => lab ? 'Spectrum' : 'Spending';
 
   /// Under the balance: the share of income you kept. Lab flavor calls it

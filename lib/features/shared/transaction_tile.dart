@@ -4,8 +4,10 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/iso_date.dart';
+import '../../domain/search.dart';
 import '../../domain/transaction_type.dart';
 import 'category_tile.dart';
+import 'highlighted_text.dart';
 
 /// One ledger row: icon square, category, date and note, and the amount in
 /// tabular mono on the right, closed by a hairline.
@@ -15,6 +17,8 @@ class TransactionTile extends StatelessWidget {
     required this.item,
     required this.currencySymbol,
     this.onTap,
+    this.onLongPress,
+    this.highlight,
     this.showDate = false,
     this.contentPadding = const EdgeInsets.symmetric(horizontal: 20),
   });
@@ -22,6 +26,12 @@ class TransactionTile extends StatelessWidget {
   final TransactionWithCategory item;
   final String currencySymbol;
   final VoidCallback? onTap;
+
+  /// Opens the row's menu (edit, duplicate, favorite, delete).
+  final VoidCallback? onLongPress;
+
+  /// Search words to emphasise in the category and note.
+  final SearchQuery? highlight;
 
   /// Home shows the date under each row; History groups by day instead.
   final bool showDate;
@@ -56,16 +66,16 @@ class TransactionTile extends StatelessWidget {
         ),
         child: ListTile(
           onTap: onTap,
+          onLongPress: onLongPress,
           contentPadding: contentPadding,
           minVerticalPadding: 10,
           leading: CategoryTile(
             iconKey: category.icon,
             archived: category.isArchived,
           ),
-          title: Text(
+          title: HighlightedText(
             category.isArchived ? '${category.name} (archived)' : category.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            query: highlight,
           ),
           subtitle: subtitleParts.isEmpty && !repeats
               ? null
@@ -82,10 +92,9 @@ class TransactionTile extends StatelessWidget {
                     ],
                     if (subtitleParts.isNotEmpty)
                       Flexible(
-                        child: Text(
+                        child: HighlightedText(
                           subtitleParts.join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          query: highlight,
                         ),
                       ),
                   ],
