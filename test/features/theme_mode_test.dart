@@ -7,6 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'test_helpers.dart';
 
 Future<void> goToTab(WidgetTester tester, String label) async {
+  // A page opened from Settings covers the tab bar: go back to it first.
+  for (var i = 0; i < 3 && find.byType(NavigationBar).evaluate().isEmpty; i++) {
+    await tester.pageBack();
+    await settle(tester);
+  }
   await tester.tap(
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
   );
@@ -15,6 +20,7 @@ Future<void> goToTab(WidgetTester tester, String label) async {
 
 Future<void> chooseTheme(WidgetTester tester, String label) async {
   await goToTab(tester, 'Settings');
+  await openSettingsPage(tester, 'appearance');
   await tester.tap(
     find.descendant(
       of: find.byKey(const ValueKey('theme-mode')),
@@ -66,6 +72,7 @@ void main() {
     final env = await createEnv(tester);
     await tester.pumpWidget(wholeApp(env));
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'appearance');
 
     for (final label in ['System', 'Light', 'Dark']) {
       expect(
@@ -173,6 +180,7 @@ void main() {
 
     expect(shownBrightness(tester), Brightness.dark);
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'appearance');
     final selector = tester.widget<SegmentedButton<ThemeMode>>(
       find.descendant(
         of: find.byKey(const ValueKey('theme-mode')),

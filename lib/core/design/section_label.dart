@@ -15,7 +15,10 @@ class SectionLabel extends StatelessWidget {
       header: true,
       child: Row(
         children: [
-          Text(text.toUpperCase(), style: theme.textTheme.labelMedium),
+          // Flexible so a long heading wraps at large text instead of overflowing.
+          Flexible(
+            child: Text(text.toUpperCase(), style: theme.textTheme.labelMedium),
+          ),
           const SizedBox(width: 12),
           Expanded(child: Divider(color: theme.dividerColor)),
           if (trailing != null) ...[const SizedBox(width: 4), trailing!],

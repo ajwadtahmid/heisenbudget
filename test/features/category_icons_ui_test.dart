@@ -14,6 +14,11 @@ Future<void> tapIcon(WidgetTester tester, String key) async {
 }
 
 Future<void> goToTab(WidgetTester tester, String label) async {
+  // A page opened from Settings covers the tab bar: go back to it first.
+  for (var i = 0; i < 3 && find.byType(NavigationBar).evaluate().isEmpty; i++) {
+    await tester.pageBack();
+    await settle(tester);
+  }
   await tester.tap(
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
   );

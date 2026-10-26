@@ -10,6 +10,7 @@ import 'package:heisenbudget/data/shortcuts/shortcut_service.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
+import 'package:heisenbudget/features/shell/app_shell.dart';
 import 'package:heisenbudget/features/transaction_form/transaction_form_screen.dart';
 import 'package:heisenbudget/providers/database_providers.dart';
 import 'package:heisenbudget/providers/period_providers.dart';
@@ -93,6 +94,16 @@ Future<TestEnv> createEnv(
 }
 
 Future<void> disposeEnv(WidgetTester tester, TestEnv env) async {
+  // A page opened from Settings covers the app: go back to it first, so the
+  // screens underneath wake up normally instead of during the teardown.
+  for (var i = 0; i < 3; i++) {
+    final covered =
+        find.byType(AppShell, skipOffstage: false).evaluate().isNotEmpty &&
+        find.byType(NavigationBar).evaluate().isEmpty;
+    if (!covered || find.byType(BackButton).evaluate().isEmpty) break;
+    await tester.pageBack();
+    await settle(tester);
+  }
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(milliseconds: 100));
   await tester.runAsync(env.db.close);
@@ -215,5 +226,16 @@ Future<void> swipePeriod(WidgetTester tester, {required bool forward}) async {
     Offset(forward ? -300 : 300, 0),
     1500,
   );
+  await settle(tester);
+}
+
+/// From the Settings tab, opens a sub-page: `'appearance'` or `'money'`.
+Future<void> openSettingsPage(WidgetTester tester, String which) async {
+  final row = find.byKey(
+    ValueKey(which == 'appearance' ? 'settings-appearance' : 'settings-money'),
+  );
+  await tester.ensureVisible(row);
+  await tester.pump();
+  await tester.tap(row);
   await settle(tester);
 }

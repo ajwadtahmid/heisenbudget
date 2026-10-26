@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import 'core/constants.dart';
 import 'core/theme.dart';
@@ -8,12 +9,31 @@ import 'features/shell/app_shell.dart';
 import 'features/welcome/welcome_flow.dart';
 import 'domain/quick_add.dart';
 import 'data/shortcuts/shortcut_service.dart';
+import 'providers/comparison_providers.dart';
 import 'providers/favorite_providers.dart';
+import 'providers/history_providers.dart';
 import 'providers/period_providers.dart';
 import 'providers/quick_add_providers.dart';
 import 'providers/recurring_providers.dart';
 import 'providers/settings_providers.dart';
 import 'providers/transaction_providers.dart';
+
+/// What Home and History show. They are listened to here, above the
+/// navigator, so they stay current while a page (a Settings page, say) covers
+/// those screens. Riverpod pauses the providers of a covered screen, and
+/// waking them as the page closes, in the middle of building, fails when a
+/// setting changed meanwhile (currency, week start). With nothing stale, there
+/// is nothing to wake.
+final _keptFresh = <ProviderListenable<Object?>>[
+  periodSummaryProvider,
+  spendByCategoryProvider,
+  recentTransactionsProvider,
+  balanceProvider,
+  comparisonViewProvider,
+  comingUpProvider,
+  historyResultsProvider,
+  copyProvider,
+];
 
 class HeisenbudgetApp extends ConsumerStatefulWidget {
   const HeisenbudgetApp({super.key});
@@ -75,6 +95,9 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
 
   @override
   Widget build(BuildContext context) {
+    for (final provider in _keptFresh) {
+      ref.listen(provider, (_, _) {});
+    }
     // The favorite shortcut follows the first favorite.
     ref.listen(favoritesProvider, (_, _) => _syncShortcuts());
     // A new day may bring repeating transactions due.

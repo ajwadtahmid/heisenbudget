@@ -266,6 +266,9 @@ Signature. Label (12sp tracked, dim) at left, a row of faint 1.6dp-diameter dots
 ### Section label
 Uppercase 12sp tracked dim label with a hairline running out to the right and an optional trailing text button. Marked as a header for screen readers.
 
+### Settings page
+A short ListView in four SectionLabel groups (Appearance and numbers, Manage, Your data, About). Each row is a ListTile with an outlined leading icon, the title, a dim live summary (up to three lines) and a chevron when it opens a page. Appearance and Money & dates are pushed pages of the same pattern: dim subheads, then the controls unchanged. Erase everything is drawn in the error colour. A backup older than 30 days has its line in full-strength semibold text and says "N days ago": words and weight, never the Spent amber, which stays a money colour. Section labels wrap at large text.
+
 ### Tick ruler
 16dp tall, under the period control. One tick per day (per week above 62 days): past ticks dim, future ticks faint, major ticks every 7th (every 4th when weekly), today a 14dp accent tick 2dp wide. It fills in left to right over 420ms once per period change.
 
@@ -320,7 +323,7 @@ Ground background, 68dp, hairline above, 24dp icons, 12sp labels. Selected: acce
 Short and functional: counting 350ms, ruler 420ms, chart rise 700ms, welcome slide 280ms, all ease-out. With the system reduce-motion setting on, every one of them is skipped (zero duration, final state). Save gives a light haptic tick.
 
 ### Lab flavor
-One switch, on by default, only changes strings (lib/core/copy.dart): add key LOG vs ADD, chart title Spectrum vs Spending, empty states beginning "Flat line.", and a PURITY readout under the balance (computed from the period, never a fixed value). Visuals are identical either way.
+One switch, on by default, only changes strings (lib/core/copy.dart): chart title Spectrum vs Spending, empty states beginning "Flat line.", and a PURITY readout under the balance (computed from the period, never a fixed value). Visuals are identical either way.
 
 ## Do's and Don'ts
 

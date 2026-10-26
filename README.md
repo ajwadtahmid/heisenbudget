@@ -26,9 +26,14 @@ cloud, no analytics. Everything is stored on the device.
   four text fonts (Geist, Inter, Atkinson Hyperlegible, System; numbers always
   Geist Mono); and a Lab flavor switch for the playful wording.
 - A short first-run welcome with an optional opening balance.
-- Settings: currency (searchable list of world currencies, including BDT ৳),
-  week mode (calendar weeks or fixed 7-day blocks) and which weekday a week
-  starts on.
+- Settings is a short page in four groups. Appearance (theme, accent, text
+  font, Lab flavor, with a list of what Lab flavor changes) and Money & dates
+  (currency from a searchable list including BDT ৳, opening balance, calendar
+  weeks or fixed 7-day blocks, and which weekday a week starts on) open their
+  own pages and show what is set on the row. Manage holds Categories,
+  Repeating transactions and Favorites. Your data holds Back up, Restore,
+  Export to CSV and Erase everything. About has the version, how your data is
+  kept, the licences and the not-affiliated note.
 
 - Optional titles: give a transaction a short name, such as a shop, and its
   row reads "Corner Cafe · Food" over the date, or just "Food" when there is no
@@ -66,7 +71,10 @@ cloud, no analytics. Everything is stored on the device.
   one JSON file, restore it later or on a new phone, or export transactions as
   a CSV for a spreadsheet. The app only creates the file and opens the phone's
   share sheet; where it goes is your choice. Restoring checks the whole file
-  first and replaces everything only if it is valid.
+  first and replaces everything only if it is valid. Settings shows when the
+  last backup file was made, and says so plainly after 30 days. Erase
+  everything asks twice (and offers a backup first), then clears all data and
+  starts the welcome tour again.
 
 Planned for later: budgets, multiple accounts.
 

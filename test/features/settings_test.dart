@@ -5,6 +5,11 @@ import 'package:heisenbudget/domain/transaction_type.dart';
 import 'test_helpers.dart';
 
 Future<void> goToTab(WidgetTester tester, String label) async {
+  // A page opened from Settings covers the tab bar: go back to it first.
+  for (var i = 0; i < 3 && find.byType(NavigationBar).evaluate().isEmpty; i++) {
+    await tester.pageBack();
+    await settle(tester);
+  }
   await tester.tap(
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
   );
@@ -27,6 +32,7 @@ void main() {
     final env = await createEnv(tester);
     await tester.pumpWidget(wholeApp(env));
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'money');
 
     expect(find.byKey(const ValueKey('currency-dropdown')), findsOneWidget);
     expect(find.text('\$ US Dollar (USD)'), findsOneWidget);
@@ -47,6 +53,7 @@ void main() {
     expect(_balance(tester), r'$0.00');
 
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'money');
     await tester.enterText(
       find.descendant(
         of: find.byKey(const ValueKey('currency-dropdown')),
@@ -71,6 +78,7 @@ void main() {
     final env = await createEnv(tester);
     await tester.pumpWidget(wholeApp(env));
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'money');
 
     await tester.tap(
       find.descendant(
@@ -118,6 +126,7 @@ void main() {
     );
 
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'money');
     await tester.tap(find.text('Fixed 7-day blocks'));
     await settle(tester);
 
@@ -157,6 +166,7 @@ void main() {
     expect(find.text('Aug 3 – Aug 9, 2026'), findsOneWidget, reason: 'Monday');
 
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'money');
     await tester.tap(find.byType(DropdownButtonFormField<int>));
     await settle(tester);
     await tester.tap(find.text('Sunday').last);
@@ -166,6 +176,7 @@ void main() {
     expect(find.text('Aug 2 – Aug 8, 2026'), findsOneWidget, reason: 'Sunday');
 
     await goToTab(tester, 'Settings');
+    await openSettingsPage(tester, 'money');
     await tester.tap(find.text('Fixed 7-day blocks'));
     await settle(tester);
     final dropdown = tester.widget<DropdownButtonFormField<int>>(
@@ -338,8 +349,10 @@ void main() {
     expect(_balance(tester), '£123.45');
 
     await goToTab(tester, 'Settings');
-    expect(find.text('£ British Pound (GBP)'), findsOneWidget);
     expect(find.text('Version'), findsOneWidget);
+    expect(find.textContaining('GBP'), findsOneWidget, reason: 'summary');
+    await openSettingsPage(tester, 'money');
+    expect(find.text('£ British Pound (GBP)'), findsOneWidget);
     await disposeEnv(tester, env);
   });
 }

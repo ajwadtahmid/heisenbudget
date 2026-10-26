@@ -8,11 +8,15 @@ import '../../core/formatters.dart';
 import '../../data/backup/backup_data.dart';
 import '../../data/backup/csv_export.dart';
 import '../../domain/iso_date.dart';
+import '../../domain/backup_status.dart';
 import '../../providers/backup_providers.dart';
+import '../../providers/navigation_providers.dart';
+import '../../providers/transaction_providers.dart';
 import '../../providers/history_providers.dart';
 import '../../providers/period_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/recurring_catch_up.dart';
+import 'settings_widgets.dart';
 import '../../providers/database_providers.dart';
 
 /// Back up, restore and export, all through the phone's own share sheet and
@@ -29,34 +33,52 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   @override
   Widget build(BuildContext context) {
+    final last = ref.watch(settingsProvider.select((s) => s.lastBackupAt));
+    final today = ref.watch(clockProvider);
+    final freshness = backupFreshness(last, today);
+    final status = switch (freshness) {
+      BackupFreshness.never => 'Not backed up yet',
+      BackupFreshness.recent =>
+        'Last backup file: ${formatDate(last!.toLocal())}',
+      BackupFreshness.stale =>
+        'Last backup file: ${formatDate(last!.toLocal())} · '
+            '${daysSinceBackup(last, today)} days ago',
+    };
     return Column(
       children: [
-        ListTile(
+        SettingsRow(
           key: const ValueKey('export-backup'),
-          contentPadding: EdgeInsets.zero,
+          icon: Icons.ios_share_outlined,
+          title: 'Back up',
+          summary: status,
+          emphasizeSummary: freshness == BackupFreshness.stale,
           enabled: !_busy,
-          leading: const Icon(Icons.ios_share_outlined),
-          title: const Text('Back up'),
-          subtitle: const Text('Save everything to a file you can keep.'),
           onTap: () => _run(_exportBackup),
         ),
-        ListTile(
+        SettingsRow(
           key: const ValueKey('restore-backup'),
-          contentPadding: EdgeInsets.zero,
+          icon: Icons.settings_backup_restore,
+          title: 'Restore from backup',
+          summary: 'Replace everything here with a backup file.',
           enabled: !_busy,
-          leading: const Icon(Icons.settings_backup_restore),
-          title: const Text('Restore from backup'),
-          subtitle: const Text('Replace everything here with a backup file.'),
           onTap: () => _run(_restore),
         ),
-        ListTile(
+        SettingsRow(
           key: const ValueKey('export-csv'),
-          contentPadding: EdgeInsets.zero,
+          icon: Icons.table_chart_outlined,
+          title: 'Export to CSV',
+          summary: 'All transactions, for a spreadsheet.',
           enabled: !_busy,
-          leading: const Icon(Icons.table_chart_outlined),
-          title: const Text('Export to CSV'),
-          subtitle: const Text('All transactions, for a spreadsheet.'),
           onTap: () => _run(_exportCsv),
+        ),
+        SettingsRow(
+          key: const ValueKey('erase-everything'),
+          icon: Icons.delete_forever_outlined,
+          title: 'Erase everything',
+          summary: 'Delete all data on this phone and start over.',
+          destructive: true,
+          enabled: !_busy,
+          onTap: () => _run(_erase),
         ),
       ],
     );
@@ -106,6 +128,10 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           bytes: Uint8List.fromList(utf8.encode(data.encode())),
           origin: origin,
         );
+    // Remembered for the "Last backup file" line (on this phone only).
+    await ref
+        .read(settingsProvider.notifier)
+        .setLastBackupAt(ref.read(nowProvider)());
   }
 
   Future<void> _exportCsv() async {
@@ -143,6 +169,33 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     // Repeating transactions that fell due since the backup was made.
     await runRecurringCatchUp(ref);
   }
+
+  /// Two steps, then everything is wiped and the app starts over.
+  Future<void> _erase() async {
+    final first = await showDialog<_EraseChoice>(
+      context: context,
+      builder: (_) => const _EraseWarningDialog(),
+    );
+    if (first == null || first == _EraseChoice.cancel || !mounted) return;
+    if (first == _EraseChoice.backupFirst) {
+      await _exportBackup();
+      return;
+    }
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _EraseConfirmDialog(),
+    );
+    if (sure != true) return;
+
+    await ref.read(backupServiceProvider).eraseEverything();
+    await ref.read(fileExchangeProvider).clearTemporaryFiles();
+    // Everything that held old state starts fresh; the welcome tour returns.
+    ref.invalidate(settingsProvider);
+    ref.invalidate(historyFilterProvider);
+    ref.invalidate(selectedPeriodProvider);
+    ref.invalidate(shellTabProvider);
+    ref.invalidate(needsWelcomeProvider);
+  }
 }
 
 class _ConfirmRestoreDialog extends StatelessWidget {
@@ -176,6 +229,72 @@ class _ConfirmRestoreDialog extends StatelessWidget {
           key: const ValueKey('restore-confirm'),
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('Restore'),
+        ),
+      ],
+    );
+  }
+}
+
+enum _EraseChoice { cancel, backupFirst, continueOn }
+
+/// Step one: say what will happen and offer a backup first.
+class _EraseWarningDialog extends StatelessWidget {
+  const _EraseWarningDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Erase everything?'),
+      content: const Text(
+        'This deletes every transaction, category, repeating transaction, '
+        'favorite and setting on this phone, then starts the app over. It '
+        'cannot be undone.\n\nBack up first if you might want any of it '
+        'back.',
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('erase-cancel'),
+          onPressed: () => Navigator.of(context).pop(_EraseChoice.cancel),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          key: const ValueKey('erase-backup-first'),
+          onPressed: () => Navigator.of(context).pop(_EraseChoice.backupFirst),
+          child: const Text('Back up first'),
+        ),
+        TextButton(
+          key: const ValueKey('erase-continue'),
+          onPressed: () => Navigator.of(context).pop(_EraseChoice.continueOn),
+          child: const Text('Continue'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Step two: the last chance.
+class _EraseConfirmDialog extends StatelessWidget {
+  const _EraseConfirmDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Erase everything now?'),
+      content: const Text('Everything on this phone will be deleted.'),
+      actions: [
+        TextButton(
+          key: const ValueKey('erase-keep'),
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Keep my data'),
+        ),
+        FilledButton(
+          key: const ValueKey('erase-confirm'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Erase everything'),
         ),
       ],
     );

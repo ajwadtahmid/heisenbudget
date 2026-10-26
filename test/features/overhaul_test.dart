@@ -10,6 +10,11 @@ import 'package:heisenbudget/features/home/home_screen.dart';
 import 'test_helpers.dart';
 
 Future<void> goToTab(WidgetTester tester, String label) async {
+  // A page opened from Settings covers the tab bar: go back to it first.
+  for (var i = 0; i < 3 && find.byType(NavigationBar).evaluate().isEmpty; i++) {
+    await tester.pageBack();
+    await settle(tester);
+  }
   await tester.tap(
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
   );
@@ -233,6 +238,7 @@ void main() {
       expect(find.text('PURITY 100.0%'), findsOneWidget);
 
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'appearance');
       await tapScrolled(tester, find.byKey(const ValueKey('lab-flavor')));
       await goToTab(tester, 'Home');
       expect(find.text('SAVED 100.0%'), findsOneWidget);
@@ -470,6 +476,7 @@ void main() {
         final env = await createEnv(tester);
         await tester.pumpWidget(wholeApp(env));
         await goToTab(tester, 'Settings');
+        await openSettingsPage(tester, 'appearance');
 
         for (final accent in AccentColor.values) {
           final finder = find.byKey(ValueKey('accent-${accent.name}'));
@@ -495,6 +502,7 @@ void main() {
       final env = await createEnv(tester);
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'appearance');
 
       await tapScrolled(tester, find.byKey(const ValueKey('accent-ice')));
 
@@ -518,6 +526,7 @@ void main() {
       await tester.pumpWidget(wholeApp(env));
       final before = currentTheme(tester).extension<AppColors>()!;
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'appearance');
       await tapScrolled(tester, find.byKey(const ValueKey('accent-violet')));
       final after = currentTheme(tester).extension<AppColors>()!;
       expect(after.received, before.received);
@@ -532,6 +541,7 @@ void main() {
       final env = await createEnv(tester);
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'appearance');
       expect(currentTheme(tester).textTheme.bodyMedium!.fontFamily, 'Geist');
 
       await pickFont(tester, 'Inter');
@@ -592,6 +602,7 @@ void main() {
       final env = await createEnv(tester);
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'appearance');
       expect(
         tester
             .widget<SwitchListTile>(find.byKey(const ValueKey('lab-flavor')))
@@ -623,6 +634,7 @@ void main() {
       final env = await createEnv(tester);
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'money');
 
       await open(tester);
       await tester.enterText(
@@ -657,6 +669,7 @@ void main() {
       );
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'money');
 
       await open(tester);
       await tester.enterText(
@@ -684,6 +697,7 @@ void main() {
       );
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'money');
       await open(tester);
       await tester.enterText(
         find.byKey(const ValueKey('opening-balance-field')),
@@ -1181,7 +1195,8 @@ void main() {
       final env = await createEnv(tester);
       await tester.pumpWidget(wholeApp(env));
       await goToTab(tester, 'Settings');
-      final section = tester.widget<Text>(find.text('APPEARANCE'));
+      await openSettingsPage(tester, 'appearance');
+      final section = tester.widget<Text>(find.text('LAB FLAVOR'));
       final sub = tester.widget<Text>(find.text('Accent'));
       final colors = currentTheme(tester).extension<AppColors>()!;
       expect(sub.style!.color, colors.dim);
