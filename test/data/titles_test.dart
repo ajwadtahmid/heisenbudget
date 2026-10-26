@@ -286,6 +286,7 @@ void main() {
             categories: (await db.select(db.categories).get()),
             recurringRules: const [],
             favorites: const [],
+            budgetLimits: const [],
             transactions: const [],
           ),
         );

@@ -215,4 +215,24 @@ void main() {
     )..where((f) => f.id.equals(id))).getSingle();
     expect(row.amountCents, isNull, reason: 'a favorite may have no amount');
   });
+
+  test('the upgrade also creates budget limits with their indexes', () async {
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    Future<void> add(int? cat, String month) => db
+        .into(db.budgetLimits)
+        .insert(
+          BudgetLimitsCompanion.insert(
+            categoryId: Value(cat),
+            startMonth: month,
+            amountCents: const Value(5000),
+            createdAt: DateTime(2026, 10, 25),
+          ),
+        );
+    await add(1, '2026-10');
+    await add(null, '2026-10');
+    expect(() => add(1, '2026-10'), throwsA(isA<Exception>()));
+    expect(() => add(null, '2026-10'), throwsA(isA<Exception>()));
+    await add(1, '2026-11');
+  });
 }

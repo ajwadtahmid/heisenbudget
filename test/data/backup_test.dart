@@ -364,6 +364,7 @@ void main() {
         categories: [before.categories.first],
         recurringRules: const [],
         favorites: const [],
+        budgetLimits: const [],
         transactions: [
           TransactionRow(
             id: 1,

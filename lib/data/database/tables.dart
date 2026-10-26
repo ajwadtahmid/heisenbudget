@@ -61,6 +61,30 @@ class Transactions extends Table {
   )();
 }
 
+/// A monthly spending limit. From [startMonth] onward the limit for a
+/// category (or, with no category, for all spending) is [amountCents], until a
+/// later row replaces it. A null amount means "no limit from this month on".
+/// Rows are never rewritten for past months: a change adds a row.
+///
+/// Unique per category and month; the database also keeps one overall row
+/// per month (see the partial indexes in `AppDatabase`).
+@DataClassName('BudgetLimitRow')
+class BudgetLimits extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// An expense category, or null for the limit on all spending.
+  IntColumn get categoryId =>
+      integer().nullable().references(Categories, #id)();
+
+  /// `yyyy-MM`: the budget month this row starts in.
+  TextColumn get startMonth => text()();
+
+  /// In cents, or null for "no limit from here".
+  IntColumn get amountCents =>
+      integer().nullable().check(amountCents.isBiggerThanValue(0))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 /// A saved transaction to log again with one tap ("Coffee  $4.00").
 @DataClassName('FavoriteRow')
 class Favorites extends Table {

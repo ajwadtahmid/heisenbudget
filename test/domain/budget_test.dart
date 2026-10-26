@@ -1,0 +1,459 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:heisenbudget/domain/budget.dart';
+import 'package:heisenbudget/domain/date_range.dart';
+import 'package:heisenbudget/domain/recurrence.dart';
+
+DateTime d(int y, int m, int day) => DateTime(y, m, day);
+BudgetMonth bm(int y, int m) => BudgetMonth(y, m);
+
+void main() {
+  group('BudgetMonth', () {
+    test('keys sort in time order and parse back', () {
+      expect(bm(2026, 10).key, '2026-10');
+      expect(bm(2026, 1).key, '2026-01');
+      expect(BudgetMonth.parse('2026-10'), bm(2026, 10));
+      expect(bm(2026, 9) < bm(2026, 10), isTrue);
+      expect(bm(2025, 12) < bm(2026, 1), isTrue);
+      expect(bm(2026, 10) > bm(2026, 9), isTrue);
+      expect(bm(2026, 10) <= bm(2026, 10), isTrue);
+    });
+
+    test('rejects text that is not a budget month', () {
+      for (final bad in [
+        '',
+        '2026-13',
+        '2026-00',
+        '26-10',
+        '2026-1',
+        '2026/10',
+        'x',
+      ]) {
+        expect(
+          () => BudgetMonth.parse(bad),
+          throwsFormatException,
+          reason: bad,
+        );
+      }
+    });
+
+    test('shifts across year ends', () {
+      expect(bm(2026, 10).shift(1), bm(2026, 11));
+      expect(bm(2026, 12).shift(1), bm(2027, 1));
+      expect(bm(2026, 1).shift(-1), bm(2025, 12));
+      expect(bm(2026, 3).shift(-15), bm(2024, 12));
+      expect(bm(2026, 3).shift(0), bm(2026, 3));
+    });
+
+    test('with start day 1 it is the calendar month', () {
+      expect(bm(2026, 10).range(1), DateRange(d(2026, 10, 1), d(2026, 10, 31)));
+      expect(bm(2026, 2).range(1), DateRange(d(2026, 2, 1), d(2026, 2, 28)));
+      expect(bm(2028, 2).range(1), DateRange(d(2028, 2, 1), d(2028, 2, 29)));
+    });
+
+    test('with start day 25 it runs to the 24th of the next month', () {
+      expect(
+        bm(2026, 10).range(25),
+        DateRange(d(2026, 10, 25), d(2026, 11, 24)),
+      );
+      expect(
+        bm(2026, 12).range(25),
+        DateRange(d(2026, 12, 25), d(2027, 1, 24)),
+      );
+      expect(bm(2026, 1).range(28), DateRange(d(2026, 1, 28), d(2026, 2, 27)));
+    });
+
+    test('consecutive months tile the calendar with no gap or overlap', () {
+      for (final startDay in [1, 2, 15, 25, 28]) {
+        var month = bm(2026, 1);
+        var previousEnd = month.range(startDay).end;
+        for (var i = 0; i < 36; i++) {
+          month = month.shift(1);
+          final r = month.range(startDay);
+          expect(
+            r.start,
+            DateTime(previousEnd.year, previousEnd.month, previousEnd.day + 1),
+            reason: 'start day $startDay, $month',
+          );
+          previousEnd = r.end;
+        }
+      }
+    });
+
+    test('the month containing a date, start day 1', () {
+      expect(BudgetMonth.containing(d(2026, 10, 15), 1), bm(2026, 10));
+      expect(BudgetMonth.containing(d(2026, 10, 1), 1), bm(2026, 10));
+      expect(BudgetMonth.containing(d(2026, 10, 31), 1), bm(2026, 10));
+    });
+
+    test('the month containing a date, start day 25', () {
+      expect(BudgetMonth.containing(d(2026, 10, 25), 25), bm(2026, 10));
+      expect(BudgetMonth.containing(d(2026, 10, 24), 25), bm(2026, 9));
+      expect(BudgetMonth.containing(d(2026, 10, 10), 25), bm(2026, 9));
+      expect(BudgetMonth.containing(d(2026, 11, 24), 25), bm(2026, 10));
+      expect(BudgetMonth.containing(d(2026, 11, 25), 25), bm(2026, 11));
+      expect(BudgetMonth.containing(d(2027, 1, 3), 25), bm(2026, 12));
+    });
+
+    test('every date lands inside the range of the month it is assigned', () {
+      for (final startDay in [1, 7, 25, 28]) {
+        for (var i = 0; i < 800; i += 3) {
+          final date = DateTime(2026, 1, 1 + i);
+          final month = BudgetMonth.containing(date, startDay);
+          expect(
+            month.range(startDay).contains(date),
+            isTrue,
+            reason: '$date / $startDay',
+          );
+        }
+      }
+    });
+
+    test('a start day outside 1 to 28 is refused', () {
+      for (final bad in [0, -1, 29, 31]) {
+        expect(() => bm(2026, 10).range(bad), throwsRangeError, reason: '$bad');
+        expect(
+          () => BudgetMonth.containing(d(2026, 10, 1), bad),
+          throwsRangeError,
+        );
+      }
+    });
+  });
+
+  group('resolveLimit', () {
+    LimitEntry e(int? cat, BudgetMonth start, int? cents) =>
+        LimitEntry(categoryId: cat, start: start, amountCents: cents);
+
+    test('no entries means no limit', () {
+      expect(resolveLimit(const [], 1, bm(2026, 10)), isNull);
+    });
+
+    test('a limit applies from its month onward', () {
+      final entries = [e(1, bm(2026, 9), 20000)];
+      expect(resolveLimit(entries, 1, bm(2026, 8)), isNull);
+      expect(resolveLimit(entries, 1, bm(2026, 9)), 20000);
+      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
+      expect(resolveLimit(entries, 1, bm(2030, 1)), 20000);
+    });
+
+    test('a later entry replaces it from then on, and not before', () {
+      final entries = [e(1, bm(2026, 9), 20000), e(1, bm(2026, 11), 30000)];
+      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
+      expect(resolveLimit(entries, 1, bm(2026, 11)), 30000);
+      expect(resolveLimit(entries, 1, bm(2027, 5)), 30000);
+    });
+
+    test('the order of the entries does not matter', () {
+      final entries = [e(1, bm(2026, 11), 30000), e(1, bm(2026, 9), 20000)];
+      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
+    });
+
+    test('a "no limit" entry ends the limit from that month on', () {
+      final entries = [e(1, bm(2026, 9), 20000), e(1, bm(2026, 11), null)];
+      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
+      expect(resolveLimit(entries, 1, bm(2026, 11)), isNull);
+      expect(resolveLimit(entries, 1, bm(2027, 1)), isNull);
+    });
+
+    test('a limit can be set again after being removed', () {
+      final entries = [
+        e(1, bm(2026, 9), 20000),
+        e(1, bm(2026, 10), null),
+        e(1, bm(2027, 1), 25000),
+      ];
+      expect(resolveLimit(entries, 1, bm(2026, 12)), isNull);
+      expect(resolveLimit(entries, 1, bm(2027, 1)), 25000);
+    });
+
+    test('categories and the overall limit are separate', () {
+      final entries = [
+        e(1, bm(2026, 9), 20000),
+        e(2, bm(2026, 9), 5000),
+        e(null, bm(2026, 9), 90000),
+      ];
+      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
+      expect(resolveLimit(entries, 2, bm(2026, 10)), 5000);
+      expect(resolveLimit(entries, null, bm(2026, 10)), 90000);
+      expect(resolveLimit(entries, 3, bm(2026, 10)), isNull);
+    });
+  });
+
+  group('buildBudgetStatus', () {
+    final october = bm(2026, 10).range(1);
+
+    BudgetStatus status(
+      int limit,
+      int spent,
+      DateTime today, {
+      int planned = 0,
+    }) => buildBudgetStatus(
+      limit: limit,
+      spent: spent,
+      planned: planned,
+      range: october,
+      today: today,
+    );
+
+    test('well within the limit', () {
+      final s = status(20000, 5000, d(2026, 10, 10));
+      expect(s.left, 15000);
+      expect(s.level, BudgetLevel.ok);
+      expect(s.isOver, isFalse);
+      expect(s.overBy, 0);
+      expect(s.permille, 250);
+    });
+
+    test('"almost" starts at 80 percent and stays until it is over', () {
+      expect(status(20000, 15999, d(2026, 10, 10)).level, BudgetLevel.ok);
+      expect(status(20000, 16000, d(2026, 10, 10)).level, BudgetLevel.almost);
+      expect(status(20000, 20000, d(2026, 10, 10)).level, BudgetLevel.almost);
+      expect(status(20000, 20001, d(2026, 10, 10)).level, BudgetLevel.over);
+    });
+
+    test('over by how much', () {
+      final s = status(20000, 23500, d(2026, 10, 10));
+      expect(s.isOver, isTrue);
+      expect(s.overBy, 3500);
+      expect(s.left, -3500);
+      expect(s.permille, 1000, reason: 'the bar stops at full');
+      expect(s.perDay, isNull);
+    });
+
+    test('exactly at the limit is not over, and nothing is left per day', () {
+      final s = status(20000, 20000, d(2026, 10, 10));
+      expect(s.isOver, isFalse);
+      expect(s.left, 0);
+      expect(s.perDay, isNull);
+    });
+
+    test('days left count today, and per day divides what is left', () {
+      final s = status(31000, 0, d(2026, 10, 22));
+      expect(s.daysLeft, 10, reason: 'Oct 22 to 31 inclusive');
+      expect(s.perDay, 3100);
+      expect(status(30000, 0, d(2026, 10, 31)).daysLeft, 1);
+      expect(status(30000, 0, d(2026, 10, 31)).perDay, 30000);
+    });
+
+    test('per day rounds down to whole cents', () {
+      final s = status(10000, 0, d(2026, 10, 22)); // 10 days
+      expect(s.perDay, 1000);
+      final t = status(10001, 0, d(2026, 10, 22));
+      expect(t.perDay, 1000);
+    });
+
+    test(
+      'a month that has not started: its whole length, nothing spent yet',
+      () {
+        final s = status(31000, 0, d(2026, 9, 20));
+        expect(s.hasStarted, isFalse);
+        expect(s.hasEnded, isFalse);
+        expect(s.daysLeft, 31);
+        expect(s.perDay, 1000);
+      },
+    );
+
+    test('a month that has ended: no days left, no per day, no planned', () {
+      final s = status(31000, 5000, d(2026, 11, 3), planned: 9000);
+      expect(s.hasEnded, isTrue);
+      expect(s.daysLeft, 0);
+      expect(s.perDay, isNull);
+      expect(s.planned, 0);
+      expect(s.left, 26000);
+    });
+
+    test('the first and last day are inside the month', () {
+      expect(status(100, 0, d(2026, 10, 1)).hasStarted, isTrue);
+      expect(status(100, 0, d(2026, 10, 1)).daysLeft, 31);
+      expect(status(100, 0, d(2026, 10, 31)).hasEnded, isFalse);
+      expect(status(100, 0, d(2026, 11, 1)).hasEnded, isTrue);
+    });
+
+    test('planned expenses that would break the limit are flagged', () {
+      final s = status(20000, 15000, d(2026, 10, 10), planned: 7000);
+      expect(s.isOver, isFalse);
+      expect(s.plannedWouldExceed, isTrue);
+      expect(s.plannedOverBy, 2000);
+      final ok = status(20000, 15000, d(2026, 10, 10), planned: 5000);
+      expect(ok.plannedWouldExceed, isFalse);
+      expect(ok.plannedOverBy, 0);
+    });
+
+    test('already over: the planned warning stays quiet', () {
+      final s = status(20000, 25000, d(2026, 10, 10), planned: 3000);
+      expect(s.plannedWouldExceed, isFalse);
+    });
+
+    test('a zero limit counts as fully used', () {
+      final s = status(0, 0, d(2026, 10, 10));
+      expect(s.permille, 1000);
+    });
+
+    test(
+      'a budget month that starts on the 25th counts days across the month end',
+      () {
+        final range = bm(2026, 10).range(25);
+        final s = buildBudgetStatus(
+          limit: 30000,
+          spent: 0,
+          range: range,
+          today: d(2026, 11, 20),
+        );
+        expect(s.daysLeft, 5); // Nov 20 to Nov 24
+        expect(s.perDay, 6000);
+      },
+    );
+  });
+
+  group('plannedByCategory', () {
+    PlannedRule monthly(int cat, int cents, DateTime start, {int next = 0}) =>
+        PlannedRule(
+          categoryId: cat,
+          amountCents: cents,
+          recurrence: Recurrence(
+            unit: RecurrenceUnit.month,
+            interval: 1,
+            start: start,
+          ),
+          nextIndex: next,
+        );
+
+    test('counts what is still due later this month', () {
+      final october = bm(2026, 10).range(1);
+      // Rent on the 28th, due again Oct 28 (index 1 after Sep 28).
+      final planned = plannedByCategory(
+        [monthly(1, 120000, d(2026, 9, 28), next: 1)],
+        october,
+        d(2026, 10, 15),
+      );
+      expect(planned, {1: 120000});
+    });
+
+    test('does not count what is due today or earlier (already added)', () {
+      final october = bm(2026, 10).range(1);
+      expect(
+        plannedByCategory(
+          [monthly(1, 100, d(2026, 9, 15), next: 1)],
+          october,
+          d(2026, 10, 15),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('counts every occurrence in the rest of the month', () {
+      final october = bm(2026, 10).range(1);
+      final weekly = PlannedRule(
+        categoryId: 2,
+        amountCents: 1000,
+        recurrence: Recurrence(
+          unit: RecurrenceUnit.week,
+          interval: 1,
+          start: d(2026, 10, 1),
+        ),
+        nextIndex: 2, // Oct 15 was index 2 and is already added
+      );
+      // Oct 22 and Oct 29 remain.
+      expect(plannedByCategory([weekly], october, d(2026, 10, 15)), {2: 2000});
+    });
+
+    test('adds up rules of the same category and keeps others apart', () {
+      final october = bm(2026, 10).range(1);
+      final planned = plannedByCategory(
+        [
+          monthly(1, 100, d(2026, 9, 20), next: 1),
+          monthly(1, 250, d(2026, 9, 25), next: 1),
+          monthly(2, 700, d(2026, 9, 30), next: 1),
+        ],
+        october,
+        d(2026, 10, 15),
+      );
+      expect(planned, {1: 350, 2: 700});
+    });
+
+    test('nothing for a month that is over, and the future month gets its occurrences', () {
+      final september = bm(2026, 9).range(1);
+      expect(
+        plannedByCategory(
+          [monthly(1, 100, d(2026, 8, 20), next: 2)],
+          september,
+          d(2026, 10, 15),
+        ),
+        isEmpty,
+      );
+      final december = bm(2026, 12).range(1);
+      expect(
+        plannedByCategory(
+          [monthly(1, 100, d(2026, 8, 20), next: 2)],
+          december,
+          d(2026, 10, 15),
+        ),
+        {1: 100},
+      );
+    });
+
+    test('a rule that has ended counts nothing', () {
+      final october = bm(2026, 10).range(1);
+      final ended = PlannedRule(
+        categoryId: 1,
+        amountCents: 100,
+        recurrence: Recurrence(
+          unit: RecurrenceUnit.month,
+          interval: 1,
+          start: d(2026, 5, 20),
+          end: d(2026, 9, 20),
+        ),
+        nextIndex: 5,
+      );
+      expect(plannedByCategory([ended], october, d(2026, 10, 15)), isEmpty);
+    });
+
+    test('a daily rule and a far-away month stay bounded and correct', () {
+      final daily = PlannedRule(
+        categoryId: 1,
+        amountCents: 100,
+        recurrence: Recurrence(
+          unit: RecurrenceUnit.day,
+          interval: 1,
+          start: d(2026, 10, 1),
+        ),
+        nextIndex: 15,
+      );
+      final october = bm(2026, 10).range(1);
+      expect(plannedByCategory([daily], october, d(2026, 10, 15)), {1: 1600});
+    });
+
+    test('works across a start-day-25 budget month', () {
+      final range = bm(2026, 10).range(25); // Oct 25 - Nov 24
+      final planned = plannedByCategory(
+        [monthly(1, 500, d(2026, 9, 1), next: 2)], // Nov 1 is index 2
+        range,
+        d(2026, 10, 28),
+      );
+      expect(planned, {1: 500});
+    });
+  });
+
+  group('suggestLimit', () {
+    test('the average, rounded to a whole unit', () {
+      expect(suggestLimit([10000, 20000, 30000]), 20000);
+      expect(suggestLimit([10050, 10000, 10000]), 10000);
+      expect(
+        suggestLimit([10150, 10150, 10150]),
+        10200,
+        reason: 'to the nearest unit',
+      );
+    });
+
+    test('months with nothing spent still count towards the average', () {
+      expect(suggestLimit([30000, 0, 0]), 10000);
+    });
+
+    test('a tiny average is not rounded down to zero', () {
+      expect(suggestLimit([10, 0, 0]), 100);
+    });
+
+    test('nothing spent, or no months, gives no suggestion', () {
+      expect(suggestLimit([0, 0, 0]), isNull);
+      expect(suggestLimit(const []), isNull);
+    });
+  });
+}

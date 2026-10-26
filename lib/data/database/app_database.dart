@@ -10,7 +10,9 @@ import 'tables.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [Categories, Transactions, RecurringRules, Favorites])
+@DriftDatabase(
+  tables: [Categories, Transactions, RecurringRules, Favorites, BudgetLimits],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
@@ -34,6 +36,7 @@ class AppDatabase extends _$AppDatabase {
         'CREATE UNIQUE INDEX categories_type_name '
         'ON categories (type, name COLLATE NOCASE)',
       );
+      await _createBudgetIndexes();
       await seedDefaultCategories(this);
     },
     onUpgrade: (m, from, to) async {
@@ -49,10 +52,27 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(transactions, transactions.title);
         await m.createIndex(transactionsRuleDate);
         await m.createTable(favorites);
+        await m.createTable(budgetLimits);
+        await _createBudgetIndexes();
       }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
+
+  /// Drift's table DSL cannot express partial indexes, so these are by hand:
+  /// one limit per category and month, and one overall limit per month (a
+  /// plain unique index would let two null-category rows through).
+  Future<void> _createBudgetIndexes() async {
+    await customStatement(
+      'CREATE UNIQUE INDEX budget_limits_category_month '
+      'ON budget_limits (category_id, start_month) '
+      'WHERE category_id IS NOT NULL',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX budget_limits_overall_month '
+      'ON budget_limits (start_month) WHERE category_id IS NULL',
+    );
+  }
 }

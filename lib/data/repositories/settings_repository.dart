@@ -21,6 +21,7 @@ class AppSettings {
     required this.onboardingDone,
     required this.weekMode,
     required this.weekStartDay,
+    required this.monthStartDay,
     required this.lastExpenseCategoryId,
     required this.lastIncomeCategoryId,
     this.lastBackupAt,
@@ -51,6 +52,9 @@ class AppSettings {
 
   /// 1 = Monday ... 7 = Sunday (ISO).
   final int weekStartDay;
+
+  /// The day of the month budget months start on, 1 to 28.
+  final int monthStartDay;
   final int? lastExpenseCategoryId;
   final int? lastIncomeCategoryId;
 
@@ -96,6 +100,7 @@ class SettingsRepository {
   static const _onboardingKey = 'onboarding_done';
   static const _weekModeKey = 'week_mode';
   static const _weekStartDayKey = 'week_start_day';
+  static const _monthStartDayKey = 'month_start_day';
   static const _lastExpenseKey = 'last_category_expense';
   static const _lastIncomeKey = 'last_category_income';
   static const _lastBackupKey = 'last_backup_at';
@@ -119,6 +124,7 @@ class SettingsRepository {
           ? WeekMode.fixed
           : WeekMode.calendar,
       weekStartDay: storedDay.clamp(1, 7),
+      monthStartDay: (_prefs.getInt(_monthStartDayKey) ?? 1).clamp(1, 28),
       lastExpenseCategoryId: _prefs.getInt(_lastExpenseKey),
       lastIncomeCategoryId: _prefs.getInt(_lastIncomeKey),
       lastBackupAt: DateTime.tryParse(_prefs.getString(_lastBackupKey) ?? ''),
@@ -157,6 +163,11 @@ class SettingsRepository {
     return _prefs.setInt(_weekStartDayKey, day);
   }
 
+  Future<void> setMonthStartDay(int day) {
+    RangeError.checkValueInInterval(day, 1, 28, 'day');
+    return _prefs.setInt(_monthStartDayKey, day);
+  }
+
   Future<void> setLastBackupAt(DateTime when) =>
       _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());
 
@@ -183,6 +194,7 @@ class SettingsRepository {
       openingBalanceCents: s.openingBalanceCents,
       weekMode: s.weekMode.name,
       weekStartDay: s.weekStartDay,
+      monthStartDay: s.monthStartDay,
     );
   }
 
@@ -203,6 +215,9 @@ class SettingsRepository {
     if (b.weekMode != null) await _prefs.setString(_weekModeKey, b.weekMode!);
     if (b.weekStartDay != null) {
       await _prefs.setInt(_weekStartDayKey, b.weekStartDay!);
+    }
+    if (b.monthStartDay != null) {
+      await _prefs.setInt(_monthStartDayKey, b.monthStartDay!);
     }
     await _prefs.remove(_lastExpenseKey);
     await _prefs.remove(_lastIncomeKey);

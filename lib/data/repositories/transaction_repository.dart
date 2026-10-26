@@ -205,6 +205,23 @@ class TransactionRepository {
   /// Received/Spent totals for a range, summed in SQL.
   Stream<Summary> watchSummary(DateRange range) => _watchSums(_inRange(range));
 
+  /// Expenses dated inside [range] (both ends inclusive), in cents, for one
+  /// category or, with none given, for all of them.
+  Future<int> spentInRange(DateRange range, {int? categoryId}) async {
+    final total = _t.amountCents.sum();
+    final query = _db.selectOnly(_t)
+      ..addColumns([total])
+      ..where(
+        _t.type.equalsValue(TransactionType.expense) &
+            _inRange(range) &
+            (categoryId == null
+                ? const Constant(true)
+                : _t.categoryId.equals(categoryId)),
+      );
+    final row = await query.getSingle();
+    return row.read(total) ?? 0;
+  }
+
   /// Totals for everything dated on or before [date]; feeds the balance.
   Stream<Summary> watchTotalsUpTo(DateTime date) {
     return _watchSums(_t.date.isSmallerOrEqualValue(toIsoDate(date)));

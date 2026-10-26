@@ -24,6 +24,9 @@ class BackupService {
       final favorites = await (_db.select(
         _db.favorites,
       )..orderBy([(f) => OrderingTerm.asc(f.id)])).get();
+      final limits = await (_db.select(
+        _db.budgetLimits,
+      )..orderBy([(b) => OrderingTerm.asc(b.id)])).get();
       final transactions = await (_db.select(
         _db.transactions,
       )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
@@ -33,6 +36,7 @@ class BackupService {
         categories: categories,
         recurringRules: rules,
         favorites: favorites,
+        budgetLimits: limits,
         transactions: transactions,
       );
     });
@@ -49,11 +53,13 @@ class BackupService {
       await _db.delete(_db.transactions).go();
       await _db.delete(_db.favorites).go();
       await _db.delete(_db.recurringRules).go();
+      await _db.delete(_db.budgetLimits).go();
       await _db.delete(_db.categories).go();
       await _db.batch((batch) {
         batch.insertAll(_db.categories, data.categories);
         batch.insertAll(_db.recurringRules, data.recurringRules);
         batch.insertAll(_db.favorites, data.favorites);
+        batch.insertAll(_db.budgetLimits, data.budgetLimits);
         batch.insertAll(_db.transactions, data.transactions);
       });
     });
@@ -68,6 +74,7 @@ class BackupService {
       await _db.delete(_db.transactions).go();
       await _db.delete(_db.favorites).go();
       await _db.delete(_db.recurringRules).go();
+      await _db.delete(_db.budgetLimits).go();
       await _db.delete(_db.categories).go();
       await seedDefaultCategories(_db);
     });

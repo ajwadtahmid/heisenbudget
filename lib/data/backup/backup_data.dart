@@ -48,6 +48,7 @@ class BackupSettings {
     this.openingBalanceCents,
     this.weekMode,
     this.weekStartDay,
+    this.monthStartDay,
   });
 
   final String? currency;
@@ -58,6 +59,7 @@ class BackupSettings {
   final int? openingBalanceCents;
   final String? weekMode;
   final int? weekStartDay;
+  final int? monthStartDay;
 
   Map<String, Object?> toJson() => {
     'currency': currency,
@@ -68,6 +70,7 @@ class BackupSettings {
     'openingBalanceCents': openingBalanceCents,
     'weekMode': weekMode,
     'weekStartDay': weekStartDay,
+    'monthStartDay': monthStartDay,
   };
 
   /// Reads whatever it understands and ignores the rest.
@@ -82,6 +85,7 @@ class BackupSettings {
     final currency = m['currency'];
     final opening = m['openingBalanceCents'];
     final day = m['weekStartDay'];
+    final monthDay = m['monthStartDay'];
     final lab = m['labFlavor'];
     return BackupSettings(
       currency: currency is String && currencyByCode(currency) != null
@@ -99,6 +103,9 @@ class BackupSettings {
           : null,
       weekMode: oneOf('weekMode', WeekMode.values.asNameMap().keys),
       weekStartDay: day is int && day >= 1 && day <= 7 ? day : null,
+      monthStartDay: monthDay is int && monthDay >= 1 && monthDay <= 28
+          ? monthDay
+          : null,
     );
   }
 }
@@ -112,6 +119,7 @@ class BackupData {
     required this.categories,
     required this.recurringRules,
     required this.favorites,
+    required this.budgetLimits,
     required this.transactions,
   });
 
@@ -120,6 +128,7 @@ class BackupData {
   final List<CategoryRow> categories;
   final List<RecurringRuleRow> recurringRules;
   final List<FavoriteRow> favorites;
+  final List<BudgetLimitRow> budgetLimits;
   final List<TransactionRow> transactions;
 
   /// The file's text. Pretty-printed so it can be inspected in any editor.
@@ -172,6 +181,16 @@ class BackupData {
             'title': f.title,
             'sortOrder': f.sortOrder,
             'createdAt': f.createdAt.toUtc().toIso8601String(),
+          },
+      ],
+      'budgetLimits': [
+        for (final b in budgetLimits)
+          {
+            'id': b.id,
+            'categoryId': b.categoryId,
+            'startMonth': b.startMonth,
+            'amountCents': b.amountCents,
+            'createdAt': b.createdAt.toUtc().toIso8601String(),
           },
       ],
       'transactions': [
@@ -227,6 +246,7 @@ class BackupData {
     final byId = {for (final c in categories) c.id: c};
     final rules = _parseRules(root['recurringRules'], byId);
     final favorites = _parseFavorites(root['favorites'], byId);
+    final limits = _parseBudgetLimits(root['budgetLimits'], byId);
     final transactions = _parseTransactions(root['transactions'], byId, {
       for (final r in rules) r.id,
     });
@@ -240,6 +260,7 @@ class BackupData {
       categories: categories,
       recurringRules: rules,
       favorites: favorites,
+      budgetLimits: limits,
       transactions: transactions,
     );
   }
@@ -360,6 +381,64 @@ List<RecurringRuleRow> _parseRules(
         endDate: end as String?,
         isActive: item['isActive'] != false,
         nextIndex: next,
+        createdAt: created,
+      ),
+    );
+  }
+  return rows;
+}
+
+/// Backups made before budgets existed have no `budgetLimits`; that restores
+/// as "no limits".
+List<BudgetLimitRow> _parseBudgetLimits(
+  Object? json,
+  Map<int, CategoryRow> categories,
+) {
+  if (json == null) return const [];
+  if (json is! List) throw _damaged('budget limits', 'not a list');
+  if (json.length > 10000) throw _damaged('budget limits', 'far too many');
+  final rows = <BudgetLimitRow>[];
+  final ids = <int>{};
+  final seen = <String>{};
+  for (final item in json) {
+    if (item is! Map<String, Object?>) {
+      throw _damaged('budget limit', 'not an object');
+    }
+    final id = item['id'];
+    if (id is! int || id < 1 || !ids.add(id)) {
+      throw _damaged('budget limit', 'bad or repeated id');
+    }
+    final where = 'budget limit $id';
+    final categoryId = item['categoryId'];
+    if (categoryId != null) {
+      final category = categories[categoryId];
+      if (category == null) throw _damaged(where, 'unknown category');
+      if (category.type != TransactionType.expense) {
+        throw _damaged(where, 'not an expense category');
+      }
+    }
+    final start = item['startMonth'];
+    if (start is! String ||
+        !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(start)) {
+      throw _damaged(where, 'bad month');
+    }
+    // One row per category and month; the database enforces it too.
+    if (!seen.add('$categoryId:$start')) {
+      throw _damaged(where, 'two limits for one month');
+    }
+    final amount = item['amountCents'];
+    if (amount != null &&
+        (amount is! int || amount < 1 || amount > maxAmountCents)) {
+      throw _damaged(where, 'amount out of range');
+    }
+    final created = _time(item['createdAt']);
+    if (created == null) throw _damaged(where, 'bad timestamp');
+    rows.add(
+      BudgetLimitRow(
+        id: id,
+        categoryId: categoryId as int?,
+        startMonth: start,
+        amountCents: amount as int?,
         createdAt: created,
       ),
     );

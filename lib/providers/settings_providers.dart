@@ -62,6 +62,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setWeekStartDay(int day) =>
       _save(() => _repo.setWeekStartDay(day));
 
+  Future<void> setMonthStartDay(int day) =>
+      _save(() => _repo.setMonthStartDay(day));
+
   Future<void> setLastBackupAt(DateTime when) =>
       _save(() => _repo.setLastBackupAt(when));
 
