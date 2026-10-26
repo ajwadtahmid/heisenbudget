@@ -1,17 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../providers/favorite_providers.dart';
 import '../../providers/navigation_providers.dart';
+import '../../providers/quick_add_providers.dart';
+import '../favorites/quick_log.dart';
 import '../history/history_screen.dart';
 import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
+import '../transaction_form/transaction_draft.dart';
+import '../transaction_form/transaction_form_screen.dart';
 
 /// Bottom navigation scaffold. IndexedStack keeps each tab's state alive.
-class AppShell extends ConsumerWidget {
+///
+/// It is also where a launcher shortcut ("Add expense") is acted on: the shell
+/// only exists once the welcome tour is done, so a shortcut chosen earlier
+/// waits and is opened as soon as the shell appears.
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openRequested());
+  }
+
+  /// Opens the Add sheet for a pending shortcut, once.
+  Future<void> _openRequested() async {
+    if (!mounted) return;
+    final request = ref.read(quickAddRequestProvider);
+    if (request == null) return;
+    ref.read(quickAddRequestProvider.notifier).clear();
+    // Someone is already typing in an Add sheet: leave it alone.
+    if (ref.read(addSheetCountProvider) > 0) return;
+
+    final favoriteId = request.favoriteId;
+    if (favoriteId != null) {
+      final favorite = await ref
+          .read(favoriteRepositoryProvider)
+          .getById(favoriteId);
+      if (!mounted) return;
+      if (favorite != null) {
+        await openFavoriteInForm(context, ref, favorite);
+      } else {
+        // The favorite was deleted since the shortcut was made.
+        await showTransactionForm(context);
+      }
+      return;
+    }
+    await showTransactionForm(
+      context,
+      draft: TransactionDraft(type: request.type!),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(quickAddRequestProvider, (_, request) {
+      if (request != null) _openRequested();
+    });
     final index = ref.watch(shellTabProvider);
     return Scaffold(
       body: IndexedStack(

@@ -17,6 +17,7 @@ import '../../domain/transaction_type.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/database_providers.dart';
 import '../../providers/period_providers.dart';
+import '../../providers/quick_add_providers.dart';
 import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../providers/transaction_providers.dart';
@@ -105,9 +106,16 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
 
   bool get _isEdit => widget.existing != null;
 
+  late final AddSheetCount _openSheets;
+
   @override
   void initState() {
     super.initState();
+    // Counted so a launcher shortcut does not open a second sheet on top of
+    // this one. The updates wait a moment: a provider must not change while
+    // the widget tree is being built.
+    _openSheets = ref.read(addSheetCountProvider.notifier);
+    Future.microtask(_openSheets.opened);
     final tx = widget.existing?.transaction;
     final draft = widget.draft;
     _type = tx?.type ?? draft?.type ?? TransactionType.expense;
@@ -122,6 +130,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
 
   @override
   void dispose() {
+    Future.microtask(_openSheets.closed);
     _amount.dispose();
     _note.dispose();
     super.dispose();

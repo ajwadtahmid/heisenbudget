@@ -6,14 +6,39 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/app.dart';
 import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
+import 'package:heisenbudget/data/shortcuts/shortcut_service.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/transaction_form/transaction_form_screen.dart';
 import 'package:heisenbudget/providers/database_providers.dart';
 import 'package:heisenbudget/providers/period_providers.dart';
+import 'package:heisenbudget/providers/quick_add_providers.dart';
 import 'package:heisenbudget/providers/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Stands in for the phone's launcher shortcuts.
+class FakeShortcutService extends ShortcutService {
+  FakeShortcutService();
+
+  void Function(String type)? handler;
+  List<AppShortcut> items = const [];
+  int starts = 0;
+
+  @override
+  Future<void> start(void Function(String type) onAction) async {
+    starts++;
+    handler = onAction;
+  }
+
+  @override
+  Future<void> setShortcuts(List<AppShortcut> items) async {
+    this.items = items;
+  }
+
+  /// Pretends the person chose a shortcut on the launcher.
+  void choose(String type) => handler?.call(type);
+}
 
 /// Everything a widget test needs: an in-memory database, preferences and a
 /// fixed "today".
@@ -23,6 +48,7 @@ class TestEnv {
   final AppDatabase db;
   final SharedPreferences prefs;
   DateTime now;
+  final shortcuts = FakeShortcutService();
 
   TransactionRepository get txs => TransactionRepository(db);
   CategoryRepository get cats => CategoryRepository(db);
@@ -31,6 +57,7 @@ class TestEnv {
     appDatabaseProvider.overrideWithValue(db),
     sharedPreferencesProvider.overrideWithValue(prefs),
     nowProvider.overrideWithValue(() => now),
+    shortcutServiceProvider.overrideWithValue(shortcuts),
   ];
 }
 

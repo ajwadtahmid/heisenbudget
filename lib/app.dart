@@ -6,7 +6,11 @@ import 'core/theme.dart';
 import 'features/shared/recurring_catch_up.dart';
 import 'features/shell/app_shell.dart';
 import 'features/welcome/welcome_flow.dart';
+import 'domain/quick_add.dart';
+import 'data/shortcuts/shortcut_service.dart';
+import 'providers/favorite_providers.dart';
 import 'providers/period_providers.dart';
+import 'providers/quick_add_providers.dart';
 import 'providers/recurring_providers.dart';
 import 'providers/settings_providers.dart';
 import 'providers/transaction_providers.dart';
@@ -27,7 +31,32 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
     // Repeating transactions that came due while the app was closed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) runRecurringCatchUp(ref);
+      if (mounted) _startShortcuts();
     });
+  }
+
+  /// Listens for launcher shortcuts and registers them. A chosen shortcut
+  /// becomes a pending request that the shell acts on once the app is ready.
+  Future<void> _startShortcuts() async {
+    final service = ref.read(shortcutServiceProvider);
+    await service.start((type) {
+      final request = requestFromShortcut(type);
+      if (mounted && request != null) {
+        ref.read(quickAddRequestProvider.notifier).request(request);
+      }
+    });
+    if (mounted) _syncShortcuts();
+  }
+
+  /// Add expense, Add income and the first favorite, if any.
+  void _syncShortcuts() {
+    final favorites = ref.read(favoritesProvider).value ?? const [];
+    final top = favorites.isEmpty ? null : favorites.first;
+    ref
+        .read(shortcutServiceProvider)
+        .setShortcuts(
+          buildShortcuts(topFavoriteId: top?.id, topFavoriteLabel: top?.label),
+        );
   }
 
   @override
@@ -46,6 +75,8 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
 
   @override
   Widget build(BuildContext context) {
+    // The favorite shortcut follows the first favorite.
+    ref.listen(favoritesProvider, (_, _) => _syncShortcuts());
     // A new day may bring repeating transactions due.
     ref.listen(clockProvider, (_, _) => runRecurringCatchUp(ref));
     // Only the look-and-feel settings rebuild the whole app.
