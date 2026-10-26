@@ -23,6 +23,7 @@ class AppSettings {
     required this.weekStartDay,
     required this.lastExpenseCategoryId,
     required this.lastIncomeCategoryId,
+    this.lastBackupAt,
   });
 
   final Currency currency;
@@ -52,6 +53,10 @@ class AppSettings {
   final int weekStartDay;
   final int? lastExpenseCategoryId;
   final int? lastIncomeCategoryId;
+
+  /// When a backup file was last handed to the share sheet, or null if
+  /// never. Kept on this phone only: it is not part of a backup file.
+  final DateTime? lastBackupAt;
 
   /// What amounts are written with, e.g. `৳`.
   String get currencySymbol => currency.symbol;
@@ -93,6 +98,7 @@ class SettingsRepository {
   static const _weekStartDayKey = 'week_start_day';
   static const _lastExpenseKey = 'last_category_expense';
   static const _lastIncomeKey = 'last_category_income';
+  static const _lastBackupKey = 'last_backup_at';
 
   AppSettings load() {
     final storedDay = _prefs.getInt(_weekStartDayKey) ?? 1;
@@ -115,6 +121,7 @@ class SettingsRepository {
       weekStartDay: storedDay.clamp(1, 7),
       lastExpenseCategoryId: _prefs.getInt(_lastExpenseKey),
       lastIncomeCategoryId: _prefs.getInt(_lastIncomeKey),
+      lastBackupAt: DateTime.tryParse(_prefs.getString(_lastBackupKey) ?? ''),
     );
   }
 
@@ -149,6 +156,12 @@ class SettingsRepository {
     RangeError.checkValueInInterval(day, 1, 7, 'day');
     return _prefs.setInt(_weekStartDayKey, day);
   }
+
+  Future<void> setLastBackupAt(DateTime when) =>
+      _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());
+
+  /// Forgets every setting (used by "Erase everything").
+  Future<void> clearAll() => _prefs.clear();
 
   Future<void> setLastCategory(TransactionType type, int categoryId) {
     final key = type == TransactionType.expense

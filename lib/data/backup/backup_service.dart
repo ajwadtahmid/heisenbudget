@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show OrderingTerm;
 
 import '../database/app_database.dart';
+import '../database/seed.dart';
 import '../repositories/settings_repository.dart';
 import 'backup_data.dart';
 
@@ -57,5 +58,19 @@ class BackupService {
       });
     });
     await _settings.applyBackup(data.settings);
+  }
+
+  /// Wipes everything: transactions, repeating rules, favorites, every
+  /// category, then puts the default categories back, and forgets all
+  /// settings. The database part is one transaction.
+  Future<void> eraseEverything() async {
+    await _db.transaction(() async {
+      await _db.delete(_db.transactions).go();
+      await _db.delete(_db.favorites).go();
+      await _db.delete(_db.recurringRules).go();
+      await _db.delete(_db.categories).go();
+      await seedDefaultCategories(_db);
+    });
+    await _settings.clearAll();
   }
 }

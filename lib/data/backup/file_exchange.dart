@@ -39,6 +39,17 @@ class FileExchange {
     );
   }
 
+  /// Deletes the temporary copies made for sharing (they hold financial
+  /// data). Best effort: a failure here is not worth showing.
+  Future<void> clearTemporaryFiles() async {
+    try {
+      final dir = Directory(
+        '${(await getTemporaryDirectory()).path}${Platform.pathSeparator}exports',
+      );
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {}
+  }
+
   /// Lets the user choose a file and returns its bytes, or null if they
   /// cancel. Throws [BackupFormatException] when the file is far too large.
   Future<Uint8List?> pickFile() async {
