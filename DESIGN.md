@@ -278,6 +278,14 @@ Top categories (up to five plus a Rest bar in the render) as 24dp amber peaks ov
 ### Transaction row
 Category tile at left, category name (16sp medium), date and note in dim (Home shows the date), amount in 16sp mono at right coloured by channel with explicit sign, closed by a hairline. Archived categories are marked "(archived)" and drawn in faint.
 
+A row made by a repeating rule carries a small 14dp repeat icon (dim, labelled "Repeating") ahead of its date and note.
+
+### Coming up row
+Home shows up to three repeating transactions due in the next 7 days under a COMING UP label, between the chart and Recent. Same layout as a transaction row (category tile, name, date and "in N days" or "tomorrow"), but the amount is **dim, not green or amber**: nothing has happened yet, and Received and Spent colours are reserved for money that has moved. Hidden when there are none. Never part of a total.
+
+### Repeat sheet
+A bottom sheet with wrapping choice chips (Does not repeat, Weekly, Monthly, Yearly, Custom), a number field and unit chips for Custom, a dim plain-language summary ("Monthly on the 1st") and an Ends row. It scrolls, so it holds at 200% text.
+
 ### Category tile and icon picker
 36dp outlined square, 8dp radius, icon at 55% of tile. The icon picker is a grid of icon buttons with 8dp radius; the selected one takes the accent-tinted container.
 

@@ -30,13 +30,20 @@ cloud, no analytics. Everything is stored on the device.
   week mode (calendar weeks or fixed 7-day blocks) and which weekday a week
   starts on.
 
+- Repeating transactions: turn on Repeat in the Add sheet (weekly, monthly,
+  yearly or every N days, optionally ending on a date) for rent, a salary or a
+  subscription. The app adds each one on its due date when it opens, with an
+  Undo, never ahead of time. Pause, skip or edit them under Settings >
+  Repeating transactions; Home shows what is due in the next 7 days. Editing a
+  rule only changes what is added from then on, and deleting one keeps the
+  transactions it already made.
 - Backup (Settings): save everything (transactions, categories, settings) to
   one JSON file, restore it later or on a new phone, or export transactions as
   a CSV for a spreadsheet. The app only creates the file and opens the phone's
   share sheet; where it goes is your choice. Restoring checks the whole file
   first and replaces everything only if it is valid.
 
-Planned for later: budgets, recurring transactions, search, multiple accounts.
+Planned for later: budgets, search, favorites, multiple accounts.
 
 ## Run it
 
@@ -88,9 +95,11 @@ Then turn on airplane mode and check the app still works.
 ```
 lib/
   core/        constants, theme, money parser, formatters
-  data/        drift database, repositories (transactions, categories, settings),
+  data/        drift database, repositories (transactions, categories, settings,
+               repeating rules), the recurring catch-up service,
                backup (file format, restore, CSV, share sheet and file picker)
-  domain/      pure Dart: DateRange and Period math, summaries, sort options
+  domain/      pure Dart: DateRange and Period math, repeat schedules,
+               summaries, sort options
   providers/   Riverpod providers (no code generation)
   features/    shell, home, history, transaction_form, settings, shared widgets
 test/          mirrors lib/
