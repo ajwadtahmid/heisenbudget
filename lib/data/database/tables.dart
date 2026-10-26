@@ -47,7 +47,7 @@ class Transactions extends Table {
   IntColumn get categoryId => integer().references(Categories, #id)();
   TextColumn get note => text().nullable()();
 
-  /// An optional short name shown before the category ("In & Out · Food").
+  /// An optional short name shown before the category ("Corner Cafe · Food").
   TextColumn get title => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();

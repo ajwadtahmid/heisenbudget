@@ -616,7 +616,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
                       labelText: 'Title (optional)',
-                      hintText: 'A shop or a name, such as In & Out',
+                      hintText: 'A shop or a short name',
                       counterText: '',
                     ),
                   ),

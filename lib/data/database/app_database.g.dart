@@ -1571,7 +1571,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
   final int categoryId;
   final String? note;
 
-  /// An optional short name shown before the category ("In & Out · Food").
+  /// An optional short name shown before the category ("Corner Cafe · Food").
   final String? title;
   final DateTime createdAt;
   final DateTime updatedAt;

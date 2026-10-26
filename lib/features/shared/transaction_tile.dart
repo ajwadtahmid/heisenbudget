@@ -52,7 +52,7 @@ class TransactionTile extends StatelessWidget {
     final signed = isIncome ? tx.amountCents : -tx.amountCents;
     final amount = formatMoney(signed, currencySymbol, showPlus: true);
 
-    // "In & Out · Food": the title, when there is one, then the category.
+    // "Corner Cafe · Food": the title, when there is one, then the category.
     final categoryText = category.isArchived
         ? '${category.name} (archived)'
         : category.name;

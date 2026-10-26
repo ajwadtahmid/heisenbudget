@@ -30,8 +30,8 @@ cloud, no analytics. Everything is stored on the device.
   week mode (calendar weeks or fixed 7-day blocks) and which weekday a week
   starts on.
 
-- Optional titles: give a transaction a short name such as "In & Out" and its
-  row reads "In & Out · Food" over the date, or just "Food" when there is no
+- Optional titles: give a transaction a short name, such as a shop, and its
+  row reads "Corner Cafe · Food" over the date, or just "Food" when there is no
   title. Titles are kept by Duplicate, favorites and repeating transactions,
   searched by History search, and included in backups and the CSV.
 - Search in History: a search box finds transactions by title, note,
