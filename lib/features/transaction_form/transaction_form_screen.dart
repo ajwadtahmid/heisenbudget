@@ -23,30 +23,42 @@ import '../../providers/transaction_providers.dart';
 import '../../data/repositories/recurring_repository.dart';
 import '../settings/recurring_editor_screen.dart';
 import '../shared/recurring_catch_up.dart';
+import '../favorites/favorite_editor.dart';
 import 'new_category_dialog.dart';
+import 'transaction_draft.dart';
 import 'repeat_sheet.dart';
 
-/// Opens the Add form, or the Edit form when [editId] is given.
-Future<void> showTransactionForm(BuildContext context, {int? editId}) {
-  return showModalBottomSheet<void>(
+/// Opens the Add form, or the Edit form when [editId] is given. A [draft]
+/// starts the Add form with those values filled in.
+Future<void> showTransactionForm(
+  BuildContext context, {
+  int? editId,
+  TransactionDraft? draft,
+}) async {
+  final duplicate = await showModalBottomSheet<TransactionDraft>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (_) => TransactionFormSheet(editId: editId),
+    builder: (_) => TransactionFormSheet(editId: editId, draft: draft),
   );
+  // "Duplicate" closes the Edit sheet and opens a new one with its values.
+  if (duplicate != null && context.mounted) {
+    await showTransactionForm(context, draft: duplicate);
+  }
 }
 
 /// The content of the add/edit bottom sheet.
 class TransactionFormSheet extends ConsumerWidget {
-  const TransactionFormSheet({super.key, this.editId});
+  const TransactionFormSheet({super.key, this.editId, this.draft});
 
   final int? editId;
+  final TransactionDraft? draft;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = editId;
-    if (id == null) return const _TransactionForm();
+    if (id == null) return _TransactionForm(draft: draft);
 
     Widget message(Widget child) => Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 48),
@@ -67,9 +79,10 @@ class TransactionFormSheet extends ConsumerWidget {
 }
 
 class _TransactionForm extends ConsumerStatefulWidget {
-  const _TransactionForm({this.existing});
+  const _TransactionForm({this.existing, this.draft});
 
   final TransactionWithCategory? existing;
+  final TransactionDraft? draft;
 
   @override
   ConsumerState<_TransactionForm> createState() => _TransactionFormState();
@@ -96,13 +109,15 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   void initState() {
     super.initState();
     final tx = widget.existing?.transaction;
-    _type = tx?.type ?? TransactionType.expense;
+    final draft = widget.draft;
+    _type = tx?.type ?? draft?.type ?? TransactionType.expense;
     _date = tx != null ? fromIsoDate(tx.date) : ref.read(clockProvider);
-    _categoryId = tx?.categoryId;
+    _categoryId = tx?.categoryId ?? draft?.categoryId;
+    final cents = tx?.amountCents ?? draft?.amountCents;
     _amount = TextEditingController(
-      text: tx != null ? centsToInputText(tx.amountCents) : '',
+      text: cents != null ? centsToInputText(cents) : '',
     );
-    _note = TextEditingController(text: tx?.note ?? '');
+    _note = TextEditingController(text: tx?.note ?? draft?.note ?? '');
   }
 
   @override
@@ -265,6 +280,17 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  void _onAction(_FormAction action) {
+    final existing = widget.existing!;
+    final draft = TransactionDraft.fromTransaction(existing);
+    switch (action) {
+      case _FormAction.duplicate:
+        Navigator.of(context).pop(draft);
+      case _FormAction.favorite:
+        showFavoriteEditor(context, from: draft);
+    }
+  }
+
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -399,6 +425,23 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
+                if (_isEdit)
+                  PopupMenuButton<_FormAction>(
+                    key: const ValueKey('form-menu'),
+                    tooltip: 'More',
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: _onAction,
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: _FormAction.duplicate,
+                        child: Text('Duplicate'),
+                      ),
+                      PopupMenuItem(
+                        value: _FormAction.favorite,
+                        child: Text('Save as favorite'),
+                      ),
+                    ],
+                  ),
                 if (_isEdit)
                   IconButton(
                     tooltip: 'Delete',
@@ -564,3 +607,6 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     );
   }
 }
+
+/// Actions in the Edit sheet's header menu.
+enum _FormAction { duplicate, favorite }

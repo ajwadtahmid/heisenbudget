@@ -30,6 +30,16 @@ cloud, no analytics. Everything is stored on the device.
   week mode (calendar weeks or fixed 7-day blocks) and which weekday a week
   starts on.
 
+- Search in History: a search box finds transactions by note, category or
+  amount (a number matches by prefix, so `4` finds 4.00 to 4.99; several words
+  must all match). Matches are highlighted, a results line shows the count and
+  net, and it works together with the filters.
+- Duplicate and favorites: press and hold a transaction for Edit, Duplicate
+  (opens the Add sheet filled in, dated today), Save as favorite and Delete.
+  Favorites appear as one-tap buttons under Quick add on Home: tap to log
+  one dated today (with Undo), or press and hold to open or edit it. A
+  favorite can leave the amount empty to be asked each time. Manage and
+  reorder them under Settings > Quick add.
 - Repeating transactions: turn on Repeat in the Add sheet (weekly, monthly,
   yearly or every N days, optionally ending on a date) for rent, a salary or a
   subscription. The app adds each one on its due date when it opens, with an
@@ -43,7 +53,7 @@ cloud, no analytics. Everything is stored on the device.
   share sheet; where it goes is your choice. Restoring checks the whole file
   first and replaces everything only if it is valid.
 
-Planned for later: budgets, search, favorites, multiple accounts.
+Planned for later: "vs last month", a home-screen shortcut, budgets, multiple accounts.
 
 ## Run it
 
@@ -96,10 +106,10 @@ Then turn on airplane mode and check the app still works.
 lib/
   core/        constants, theme, money parser, formatters
   data/        drift database, repositories (transactions, categories, settings,
-               repeating rules), the recurring catch-up service,
+               repeating rules, favorites), the recurring catch-up service,
                backup (file format, restore, CSV, share sheet and file picker)
   domain/      pure Dart: DateRange and Period math, repeat schedules,
-               summaries, sort options
+               search matching, summaries, sort options
   providers/   Riverpod providers (no code generation)
   features/    shell, home, history, transaction_form, settings, shared widgets
 test/          mirrors lib/

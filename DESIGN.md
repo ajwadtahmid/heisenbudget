@@ -283,6 +283,12 @@ A row made by a repeating rule carries a small 14dp repeat icon (dim, labelled "
 ### Coming up row
 Home shows up to three repeating transactions due in the next 7 days under a COMING UP label, between the chart and Recent. Same layout as a transaction row (category tile, name, date and "in N days" or "tomorrow"), but the amount is **dim, not green or amber**: nothing has happened yet, and Received and Spent colours are reserved for money that has moved. Hidden when there are none. Never part of a total.
 
+### Search field and highlight
+A search icon in the History app bar reveals a text field above Filter and Sort (hint "Search notes, categories, amounts", clear button). Matches in the category name and note are bold on a soft accent tint (22% accent), never colour alone. A dim line under the controls reads "12 results · net -$84.20". The control block scrolls when it needs more than half the screen.
+
+### Row menu and Quick add
+Pressing and holding a transaction opens a full-height-capable bottom sheet of 48dp rows: Edit, Duplicate, Save as favorite, Delete (error colour). Favorites are chips on Home under a QUICK ADD label: panel fill, hairline border, 8dp radius, 48dp tall, category icon, name in 14sp medium and the amount in 13sp dim mono. They wrap onto new lines at large text. Hidden when there are none. Tap logs, long-press opens options.
+
 ### Repeat sheet
 A bottom sheet with wrapping choice chips (Does not repeat, Weekly, Monthly, Yearly, Custom), a number field and unit chips for Custom, a dim plain-language summary ("Monthly on the 1st") and an Ends row. It scrolls, so it holds at 200% text.
 

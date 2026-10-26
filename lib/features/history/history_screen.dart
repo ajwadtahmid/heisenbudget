@@ -18,6 +18,7 @@ import '../../providers/period_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/add_key.dart';
 import '../shared/empty_state.dart';
+import '../shared/transaction_menu.dart';
 import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
 import 'filter_sheet.dart';
@@ -317,6 +318,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         currencySymbol: symbol,
         highlight: ref.watch(searchQueryProvider),
         onTap: () => showTransactionForm(context, editId: item.transaction.id),
+        onLongPress: () => showTransactionMenu(context, ref, item),
       ),
     );
 

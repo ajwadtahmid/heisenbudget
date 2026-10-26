@@ -19,7 +19,9 @@ import '../shared/empty_state.dart';
 import '../shared/period_selector.dart';
 import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
+import '../shared/transaction_menu.dart';
 import 'coming_up_tile.dart';
+import 'quick_add_strip.dart';
 import 'spectrum_chart.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -146,6 +148,7 @@ class HomeScreen extends ConsumerWidget {
                   today: ref.watch(clockProvider),
                 ),
             ],
+            const QuickAddStrip(),
             const SizedBox(height: Gap.xl),
             SectionLabel(
               'Recent',
@@ -174,6 +177,7 @@ class HomeScreen extends ConsumerWidget {
                   contentPadding: EdgeInsets.zero,
                   onTap: () =>
                       showTransactionForm(context, editId: item.transaction.id),
+                  onLongPress: () => showTransactionMenu(context, ref, item),
                 ),
           ],
         ),

@@ -6,12 +6,14 @@ import '../../core/design/section_label.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../domain/week_mode.dart';
+import '../../providers/favorite_providers.dart';
 import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/appearance_pickers.dart';
 import '../shared/opening_balance_dialog.dart';
 import 'backup_section.dart';
 import 'category_manager_screen.dart';
+import 'favorites_screen.dart';
 import 'recurring_screen.dart';
 
 const _weekdayNames = [
@@ -28,6 +30,12 @@ String _ruleCount(int n) => switch (n) {
   0 => 'Rent, salary, subscriptions',
   1 => '1 repeating transaction',
   _ => '$n repeating transactions',
+};
+
+String _favoriteCount(int n) => switch (n) {
+  0 => 'One tap to log what you buy often',
+  1 => '1 favorite',
+  _ => '$n favorites',
 };
 
 class SettingsScreen extends ConsumerWidget {
@@ -193,6 +201,21 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const RecurringScreen()),
+            ),
+          ),
+          const SizedBox(height: Gap.l),
+          const SectionLabel('Quick add'),
+          ListTile(
+            key: const ValueKey('manage-favorites'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.bolt_outlined),
+            title: const Text('Favorites'),
+            subtitle: Text(
+              _favoriteCount(ref.watch(favoritesProvider).value?.length ?? 0),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const FavoritesScreen()),
             ),
           ),
           const SizedBox(height: Gap.l),
