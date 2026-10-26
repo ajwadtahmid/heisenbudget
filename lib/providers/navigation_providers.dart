@@ -1,8 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 const homeTab = 0;
-const historyTab = 1;
-const settingsTab = 2;
+const budgetsTab = 1;
+const historyTab = 2;
+const settingsTab = 3;
 
 /// Which bottom-navigation tab is showing. Lets "See all" on Home jump to
 /// History.

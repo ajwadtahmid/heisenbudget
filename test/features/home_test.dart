@@ -271,7 +271,7 @@ void main() {
     await tester.tap(find.text('See all'));
     await settle(tester);
     final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(bar.selectedIndex, 1);
+    expect(bar.selectedIndex, 2);
     await disposeEnv(tester, env);
   });
 

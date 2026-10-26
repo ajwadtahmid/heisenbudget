@@ -25,6 +25,7 @@ import '../../data/repositories/recurring_repository.dart';
 import '../settings/recurring_editor_screen.dart';
 import '../shared/recurring_catch_up.dart';
 import '../../providers/favorite_providers.dart';
+import '../budgets/budget_nudge.dart';
 import '../favorites/favorite_chip.dart';
 import '../favorites/favorite_editor.dart';
 import '../favorites/quick_log.dart';
@@ -296,6 +297,20 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     HapticFeedback.lightImpact();
     // A rule that starts in the past fills in the days since.
     if (repeat != null) await runRecurringCatchUp(ref);
+    // A new expense that took a budget over its limit says so.
+    if (existing == null && _type == TransactionType.expense && mounted) {
+      // Read before waiting: the sheet may be gone by the time it is done.
+      final messenger = ref.read(rootMessengerKeyProvider);
+      final message = await overBudgetMessage(
+        ref,
+        categoryId: categoryId,
+        date: _date,
+        amountCents: input.amountCents,
+      );
+      if (message != null) {
+        messenger.currentState?.showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
     if (mounted) Navigator.of(context).pop();
   }
 

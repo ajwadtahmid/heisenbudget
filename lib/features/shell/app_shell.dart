@@ -5,6 +5,7 @@ import '../../providers/favorite_providers.dart';
 import '../../providers/navigation_providers.dart';
 import '../../providers/quick_add_providers.dart';
 import '../favorites/quick_log.dart';
+import '../budgets/budgets_screen.dart';
 import '../history/history_screen.dart';
 import '../home/home_screen.dart';
 import '../settings/settings_screen.dart';
@@ -68,7 +69,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     return Scaffold(
       body: IndexedStack(
         index: index,
-        children: const [HomeScreen(), HistoryScreen(), SettingsScreen()],
+        children: const [
+          HomeScreen(),
+          BudgetsScreen(),
+          HistoryScreen(),
+          SettingsScreen(),
+        ],
       ),
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
@@ -83,6 +89,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home),
                 label: 'Home',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+
+                selectedIcon: Icon(Icons.account_balance_wallet),
+
+                label: 'Budgets',
               ),
               NavigationDestination(
                 icon: Icon(Icons.receipt_long_outlined),

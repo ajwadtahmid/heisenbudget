@@ -21,6 +21,7 @@ import '../shared/period_selector.dart';
 import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
+import 'budget_line.dart';
 import 'coming_up_tile.dart';
 import 'delta_line.dart';
 import 'spectrum_chart.dart';
@@ -147,6 +148,7 @@ class HomeScreen extends ConsumerWidget {
               value: formatMoney(summary.netCents, symbol, showPlus: true),
               valueColor: summary.netCents < 0 ? c.spent : c.text,
             ),
+            const HomeBudgetLine(),
             const SizedBox(height: Gap.xl),
             SectionLabel(copy.chartTitle),
             const SizedBox(height: Gap.m),

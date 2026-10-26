@@ -113,8 +113,44 @@ class MoneyDatesScreen extends ConsumerWidget {
                   }
                 : null,
           ),
+          const SizedBox(height: Gap.l),
+          const SectionLabel('Budgets'),
+          const SizedBox(height: Gap.m),
+          DropdownButtonFormField<int>(
+            key: ValueKey('month-start-${settings.monthStartDay}'),
+            isExpanded: true,
+            initialValue: settings.monthStartDay,
+            decoration: const InputDecoration(
+              labelText: 'Budget month starts on',
+              helperText:
+                  'Budgets count from this day each month, for pay days. '
+                  'Changing it moves where past budget months begin.',
+              helperMaxLines: 3,
+            ),
+            items: [
+              for (var day = 1; day <= 28; day++)
+                DropdownMenuItem(value: day, child: Text(_ordinal(day))),
+            ],
+            onChanged: (day) {
+              if (day != null) notifier.setMonthStartDay(day);
+            },
+          ),
         ],
       ),
     );
   }
+}
+
+/// 1 -> "1st", 22 -> "22nd".
+String _ordinal(int n) {
+  final teen = n % 100 >= 11 && n % 100 <= 13;
+  final suffix = teen
+      ? 'th'
+      : switch (n % 10) {
+          1 => 'st',
+          2 => 'nd',
+          3 => 'rd',
+          _ => 'th',
+        };
+  return '$n$suffix';
 }

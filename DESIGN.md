@@ -313,8 +313,11 @@ Theme mode: three-segment control (10dp, outlined, selected tinted), chips at la
 ### Sheets, dialogs, menus
 Sheet: Panel, 20dp top radius, hairline, drag handle in faint. Dialog: Panel, 16dp radius, hairline. Menus and snackbars: Panel High, 10dp, hairline, floating snackbar with accent action. Inputs: 10dp outline, accent 1.5dp when focused, error colour on error, 14dp padding.
 
+### Budgets
+The second tab (Home, Budgets, History, Settings). A month button (the same outlined control as the other pickers) with a short menu of months and a sideways swipe. Each budget is a panel gauge: category tile and name, the amounts in 18sp mono ("$120.00 of $200.00"), a 10dp bar, then the words: what is left, "Almost: …" from 80 percent (warning icon, semibold), or "Over by …" (error icon, error colour, error border). The bar is the Spent amber; over the limit it turns the error colour **and** gets diagonal stripes, so colour is never the only signal. Repeating expenses still due show as a lighter segment after the spent part and a dim "Planned" line. Under it, dim: days left and about how much a day. Gauges read as one sentence for screen readers. Past months are read-only, with a note. Home carries a single line (an icon, "2 over budget" or "All within budget", a chevron) that opens the tab; the error icon and bold words show trouble.
+
 ### Navigation bar
-Ground background, 68dp, hairline above, 24dp icons, 12sp labels. Selected: accent icon and label on an accent-tinted 10dp indicator; unselected: dim.
+Four destinations. Ground background, 68dp, hairline above, 24dp icons, 12sp labels. Selected: accent icon and label on an accent-tinted 10dp indicator; unselected: dim.
 
 ### Empty state
 56dp outlined 12dp square with a faint 26dp icon, message in body-medium dim, optional outlined button. Lab wording: "Flat line." leads each empty message.

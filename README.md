@@ -49,6 +49,17 @@ cloud, no analytics. Everything is stored on the device.
   log it dated today and close the sheet (with Undo), or press and hold to fill
   the form with it and change it first. A favorite can leave the amount empty
   to be asked each time. Manage and reorder them under Settings > Quick add.
+- Budgets (its own tab): a monthly limit for any expense category and, if you
+  like, one for all spending. Each shows a bar, what is left (or "Over by"),
+  and for the current month the days left and about how much a day. A bar
+  becomes striped and red when over, and "Almost" shows from 80 percent, so it
+  never relies on colour. Changing a limit starts this month or next and never
+  rewrites earlier months; a limit can be removed from a month on. "Use the
+  average of the last 3 months" suggests an amount. Repeating transactions
+  still due this month show as a lighter "planned" part. Saving an expense that
+  takes a budget over its limit says so, and Home has one line ("2 over
+  budget", "All within budget"). The budget month can start on any day 1 to 28
+  (Settings > Money & dates), for pay days.
 - "vs last month": under Spent and Received on Home, a quiet line such as
   `▼ 12% vs Sep 1–25`. While a period is still going it compares the same days
   (Oct 1–25 with Sep 1–25, not all of September); a finished one compares
@@ -76,7 +87,7 @@ cloud, no analytics. Everything is stored on the device.
   everything asks twice (and offers a backup first), then clears all data and
   starts the welcome tour again.
 
-Planned for later: budgets, multiple accounts.
+Planned for later: multiple accounts.
 
 ## Run it
 

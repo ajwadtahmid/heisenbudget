@@ -9,6 +9,7 @@ import 'features/shell/app_shell.dart';
 import 'features/welcome/welcome_flow.dart';
 import 'domain/quick_add.dart';
 import 'data/shortcuts/shortcut_service.dart';
+import 'providers/budget_providers.dart';
 import 'providers/comparison_providers.dart';
 import 'providers/favorite_providers.dart';
 import 'providers/history_providers.dart';
@@ -32,6 +33,8 @@ final _keptFresh = <ProviderListenable<Object?>>[
   comparisonViewProvider,
   comingUpProvider,
   historyResultsProvider,
+  currentBudgetOverviewProvider,
+  selectedBudgetOverviewProvider,
   copyProvider,
 ];
 

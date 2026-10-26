@@ -11,12 +11,12 @@ int selectedTab(WidgetTester tester) =>
     tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
 
 void main() {
-  testWidgets('shell shows 3 tabs and switches between them', (tester) async {
+  testWidgets('shell shows 4 tabs and switches between them', (tester) async {
     final env = await createEnv(tester);
     await tester.pumpWidget(wholeApp(env));
     await settle(tester);
 
-    expect(find.byType(NavigationDestination), findsNWidgets(3));
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
     expect(selectedTab(tester), 0);
 
     Future<void> tapTab(String label) async {
@@ -29,10 +29,12 @@ void main() {
       await settle(tester);
     }
 
-    await tapTab('History');
+    await tapTab('Budgets');
     expect(selectedTab(tester), 1);
-    await tapTab('Settings');
+    await tapTab('History');
     expect(selectedTab(tester), 2);
+    await tapTab('Settings');
+    expect(selectedTab(tester), 3);
     await tapTab('Home');
     expect(selectedTab(tester), 0);
     await disposeEnv(tester, env);

@@ -167,7 +167,7 @@ void main() {
 
     await goToTab(tester, 'Settings');
     await openSettingsPage(tester, 'money');
-    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.tap(find.byType(DropdownButtonFormField<int>).first);
     await settle(tester);
     await tester.tap(find.text('Sunday').last);
     await settle(tester);
@@ -180,7 +180,7 @@ void main() {
     await tester.tap(find.text('Fixed 7-day blocks'));
     await settle(tester);
     final dropdown = tester.widget<DropdownButtonFormField<int>>(
-      find.byType(DropdownButtonFormField<int>),
+      find.byType(DropdownButtonFormField<int>).first,
     );
     expect(dropdown.onChanged, isNull);
     expect(find.text('Only used with calendar weeks'), findsOneWidget);

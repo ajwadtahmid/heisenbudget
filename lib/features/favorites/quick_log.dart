@@ -11,6 +11,7 @@ import '../../providers/database_providers.dart';
 import '../../providers/period_providers.dart';
 import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
+import '../budgets/budget_nudge.dart';
 import '../transaction_form/transaction_draft.dart';
 import '../transaction_form/transaction_form_screen.dart';
 
@@ -55,13 +56,22 @@ Future<void> logFavoriteNow(WidgetRef ref, FavoriteRow favorite) async {
     ),
   );
   HapticFeedback.selectionClick();
+  final nudge = favorite.type == TransactionType.expense
+      ? await overBudgetMessage(
+          ref,
+          categoryId: favorite.categoryId,
+          date: ref.read(clockProvider),
+          amountCents: cents,
+        )
+      : null;
   final signed = favorite.type == TransactionType.income ? cents : -cents;
   messenger.currentState
     ?..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         content: Text(
-          'Logged ${favorite.label} ${formatMoney(signed, symbol)}.',
+          'Logged ${favorite.label} ${formatMoney(signed, symbol)}.'
+          '${nudge == null ? '' : ' $nudge'}',
         ),
         action: SnackBarAction(label: 'Undo', onPressed: () => repo.delete(id)),
       ),
