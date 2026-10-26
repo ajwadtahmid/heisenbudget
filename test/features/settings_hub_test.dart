@@ -1,9 +1,9 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/app.dart';
+import 'package:heisenbudget/core/constants.dart';
 import 'package:heisenbudget/data/backup/file_exchange.dart';
 import 'package:heisenbudget/data/repositories/favorite_repository.dart';
 import 'package:heisenbudget/data/repositories/recurring_repository.dart';
@@ -112,9 +112,7 @@ void main() {
         'restore-backup',
         'export-csv',
         'erase-everything',
-        'settings-version',
-        'settings-data-kept',
-        'settings-licences',
+        'settings-about',
       ];
       var last = -1.0;
       for (final key in order) {
@@ -359,39 +357,127 @@ void main() {
   });
 
   group('About', () {
-    testWidgets('shows the version, the disclaimer and the data page', (
+    testWidgets('Settings has one About row, and no licences or data rows', (
       tester,
     ) async {
       final env = await createEnv(tester);
       await openSettings(tester, env);
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('settings-disclaimer')),
-      );
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-about')));
       await tester.pump();
-      expect(find.text('1.0.0'), findsOneWidget);
-      expect(
-        find.textContaining('Not affiliated with or endorsed by'),
-        findsOneWidget,
-      );
-
-      await tapRow(tester, 'settings-data-kept');
-      expect(find.text('How your data is kept'), findsWidgets);
-      expect(find.text('It stays on this phone.'), findsOneWidget);
-      expect(
-        find.textContaining('never connects to the internet'),
-        findsOneWidget,
-      );
+      expect(find.text('About Heisenbudget'), findsOneWidget);
+      expect(summaryOf(tester, 'settings-about'), 'Version 1.0.0');
+      for (final key in [
+        'settings-version',
+        'settings-data-kept',
+        'settings-licences',
+        'settings-disclaimer',
+      ]) {
+        expect(find.byKey(ValueKey(key)), findsNothing, reason: key);
+      }
+      expect(find.text('Licences'), findsNothing);
       await disposeEnv(tester, env);
     });
 
-    testWidgets('Licences opens the licence page for the app', (tester) async {
+    testWidgets(
+      'the About screen shows the name, version and a short description',
+      (tester) async {
+        final env = await createEnv(tester);
+        await openSettings(tester, env);
+        await tapRow(tester, 'settings-about');
+        expect(
+          find.text('About Heisenbudget'),
+          findsOneWidget,
+          reason: 'app bar',
+        );
+        expect(
+          tester.widget<Text>(find.byKey(const ValueKey('about-name'))).data,
+          'Heisenbudget',
+        );
+        expect(find.text('Version 1.0.0'), findsOneWidget);
+        expect(
+          find.textContaining('private expense and income tracker'),
+          findsOneWidget,
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('it gives the privacy policy address and can copy it', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
       await openSettings(tester, env);
-      await tapRow(tester, 'settings-licences');
-      expect(find.byType(LicensePage), findsOneWidget);
-      expect(find.text('Heisenbudget'), findsWidgets);
-      await tester.pageBack();
+      await tapRow(tester, 'settings-about');
+      expect(find.text('Privacy policy'.toUpperCase()), findsOneWidget);
+      expect(
+        find.text(
+          'https://ajwadtahmid.github.io/privacy-policies/Heisenbudget.html',
+        ),
+        findsOneWidget,
+      );
+
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied = (call.arguments as Map)['text'] as String?;
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('about-copy-link')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('about-copy-link')));
       await settle(tester);
+      expect(copied, privacyPolicyUrl);
+      expect(find.text('Link copied.'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets(
+      'it explains how the data is kept and says it is not affiliated',
+      (tester) async {
+        final env = await createEnv(tester);
+        await openSettings(tester, env);
+        await tapRow(tester, 'settings-about');
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('about-disclaimer')),
+          300,
+          scrollable: find.byType(Scrollable).last,
+        );
+        expect(find.text('HOW YOUR DATA IS KEPT'), findsOneWidget);
+        expect(find.text('It stays on this phone.'), findsOneWidget);
+        expect(
+          find.textContaining('never connects to the internet'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Not affiliated with or endorsed by'),
+          findsOneWidget,
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('the app opens no web page and has no browser plugin', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openSettings(tester, env);
+      await tapRow(tester, 'settings-about');
+      // The address is plain, selectable text: nothing here can go online.
+      expect(find.byKey(const ValueKey('about-privacy-url')), findsOneWidget);
+      expect(
+        tester.widget(find.byKey(const ValueKey('about-privacy-url'))),
+        isA<SelectableText>(),
+      );
       await disposeEnv(tester, env);
     });
   });
@@ -525,8 +611,11 @@ void main() {
           await tester.pageBack();
           await settle(tester);
         }
-        await tapRow(tester, 'settings-data-kept');
-        expect(tester.takeException(), isNull, reason: 'data page');
+        await tapRow(tester, 'settings-about');
+        expect(tester.takeException(), isNull, reason: 'about page');
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -3000));
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: 'about page scrolled');
         await disposeEnv(tester, env);
       },
     );

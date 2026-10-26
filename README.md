@@ -32,8 +32,10 @@ cloud, no analytics. Everything is stored on the device.
   weeks or fixed 7-day blocks, and which weekday a week starts on) open their
   own pages and show what is set on the row. Manage holds Categories,
   Repeating transactions and Favorites. Your data holds Back up, Restore,
-  Export to CSV and Erase everything. About has the version, how your data is
-  kept, the licences and the not-affiliated note.
+  Export to CSV and Erase everything. About opens an About screen with the
+  app name, version, a short description, the privacy policy address (with a
+  Copy link button; the app itself never goes online), how your data is kept
+  and the not-affiliated note.
 
 - Optional titles: give a transaction a short name, such as a shop, and its
   row reads "Corner Cafe · Food" over the date, or just "Food" when there is no

@@ -349,7 +349,7 @@ void main() {
     expect(_balance(tester), '£123.45');
 
     await goToTab(tester, 'Settings');
-    expect(find.text('Version'), findsOneWidget);
+    expect(find.text('About Heisenbudget'), findsOneWidget);
     expect(find.textContaining('GBP'), findsOneWidget, reason: 'summary');
     await openSettingsPage(tester, 'money');
     expect(find.text('£ British Pound (GBP)'), findsOneWidget);

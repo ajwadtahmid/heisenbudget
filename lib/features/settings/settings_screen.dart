@@ -2,16 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants.dart';
-import '../../core/theme.dart';
 import '../../domain/week_mode.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/favorite_providers.dart';
 import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
+import 'about_screen.dart';
 import 'appearance_screen.dart';
 import 'backup_section.dart';
 import 'category_manager_screen.dart';
-import 'data_kept_screen.dart';
 import 'favorites_screen.dart';
 import 'money_dates_screen.dart';
 import 'recurring_screen.dart';
@@ -42,8 +41,6 @@ class SettingsScreen extends ConsumerWidget {
     final categories = ref.watch(allCategoriesProvider).value ?? const [];
     final rules = ref.watch(recurringRulesProvider).value ?? const [];
     final favorites = ref.watch(favoritesProvider).value ?? const [];
-    final theme = Theme.of(context);
-    final c = context.appColors;
 
     final mode = settings.themeMode.name;
     final appearance =
@@ -118,40 +115,13 @@ class SettingsScreen extends ConsumerWidget {
           SettingsGroup(
             label: 'About',
             children: [
-              const SettingsRow(
-                key: ValueKey('settings-version'),
+              SettingsRow(
+                key: const ValueKey('settings-about'),
                 icon: Icons.info_outline,
-                title: 'Version',
-                summary: appVersion,
-              ),
-              SettingsRow(
-                key: const ValueKey('settings-data-kept'),
-                icon: Icons.lock_outline,
-                title: 'How your data is kept',
-                summary: 'Stays on this phone',
+                title: 'About $appName',
+                summary: 'Version $appVersion',
                 chevron: true,
-                onTap: () => pushSettingsPage(context, const DataKeptScreen()),
-              ),
-              SettingsRow(
-                key: const ValueKey('settings-licences'),
-                icon: Icons.description_outlined,
-                title: 'Licences',
-                summary: 'Fonts and open-source code',
-                chevron: true,
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: appName,
-                  applicationVersion: appVersion,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: Gap.s),
-                child: Text(
-                  'Not affiliated with or endorsed by any TV show or its '
-                  'owners.',
-                  key: const ValueKey('settings-disclaimer'),
-                  style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
-                ),
+                onTap: () => pushSettingsPage(context, const AboutScreen()),
               ),
             ],
           ),
