@@ -42,3 +42,22 @@ String formatRange(DateRange range) {
   }
   return '${formatDate(start)} – ${formatDate(end)}';
 }
+
+/// A compact date range for comparison labels: `Sep 1–25`, `Sep 28 – Oct 4`,
+/// or with the year when it is not the year [relativeTo] is in
+/// (`Dec 1–25, 2025`).
+String formatShortRange(DateRange range, {required int relativeToYear}) {
+  final md = DateFormat.MMMd();
+  final start = range.start;
+  final end = range.end;
+  final String text;
+  if (start == end) {
+    text = md.format(start);
+  } else if (start.year == end.year && start.month == end.month) {
+    text = '${md.format(start)}–${end.day}';
+  } else {
+    text = '${md.format(start)} – ${md.format(end)}';
+  }
+  final needsYear = start.year != relativeToYear || end.year != relativeToYear;
+  return needsYear ? '$text, ${end.year}' : text;
+}

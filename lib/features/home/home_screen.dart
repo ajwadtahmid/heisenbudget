@@ -9,6 +9,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../domain/category_spend.dart';
 import '../../domain/summary.dart';
+import '../../providers/comparison_providers.dart';
 import '../../providers/navigation_providers.dart';
 import '../../providers/period_providers.dart';
 import '../../providers/recurring_providers.dart';
@@ -21,6 +22,7 @@ import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
 import 'coming_up_tile.dart';
+import 'delta_line.dart';
 import 'quick_add_strip.dart';
 import 'spectrum_chart.dart';
 
@@ -37,6 +39,7 @@ class HomeScreen extends ConsumerWidget {
     final spends = ref.watch(spendByCategoryProvider).value ?? const [];
     final recent = ref.watch(recentTransactionsProvider).value ?? const [];
     final comingUp = ref.watch(comingUpProvider);
+    final comparison = ref.watch(comparisonViewProvider);
     final c = context.appColors;
     final theme = Theme.of(context);
 
@@ -115,6 +118,14 @@ class HomeScreen extends ConsumerWidget {
               value: formatMoney(summary.receivedCents, symbol, showPlus: true),
               valueColor: c.received,
             ),
+            if (comparison?.received case final delta?)
+              DeltaLine(
+                key: const ValueKey('delta-received'),
+                what: 'Received',
+                delta: delta,
+                comparison: comparison!.comparison,
+                symbol: symbol,
+              ),
             LeaderRow(
               key: const ValueKey('row-spent'),
               label: 'SPENT',
@@ -122,6 +133,14 @@ class HomeScreen extends ConsumerWidget {
               value: formatMoney(-summary.spentCents, symbol),
               valueColor: c.spent,
             ),
+            if (comparison?.spent case final delta?)
+              DeltaLine(
+                key: const ValueKey('delta-spent'),
+                what: 'Spent',
+                delta: delta,
+                comparison: comparison!.comparison,
+                symbol: symbol,
+              ),
             LeaderRow(
               key: const ValueKey('row-net'),
               label: 'NET',
