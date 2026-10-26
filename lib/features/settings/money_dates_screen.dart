@@ -98,7 +98,11 @@ class MoneyDatesScreen extends ConsumerWidget {
             initialValue: settings.weekStartDay,
             decoration: InputDecoration(
               labelText: 'Week starts on',
-              helperText: isCalendar ? null : 'Only used with calendar weeks',
+              helperText: isCalendar
+                  ? 'Also where weekly and 2-week budgets start'
+                  : 'Home uses fixed blocks; weekly and 2-week budgets '
+                        'still start on this day',
+              helperMaxLines: 3,
             ),
             items: [
               for (var day = 1; day <= 7; day++)
@@ -107,11 +111,9 @@ class MoneyDatesScreen extends ConsumerWidget {
                   child: Text(weekdayNames[day - 1]),
                 ),
             ],
-            onChanged: isCalendar
-                ? (day) {
-                    if (day != null) notifier.setWeekStartDay(day);
-                  }
-                : null,
+            onChanged: (day) {
+              if (day != null) notifier.setWeekStartDay(day);
+            },
           ),
           const SizedBox(height: Gap.l),
           const SectionLabel('Budgets'),

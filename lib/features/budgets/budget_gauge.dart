@@ -10,12 +10,26 @@ import '../shared/category_tile.dart';
 /// How a gauge reads: the words under the bar, as one place so the screen
 /// reader hears exactly what is shown.
 class GaugeText {
-  GaugeText(this.status, this.range, this.symbol, this.name);
+  GaugeText(
+    this.status,
+    this.range,
+    this.symbol,
+    this.name, {
+    this.finished = false,
+    this.periodLabel,
+  });
 
   final BudgetStatus status;
   final DateRange range;
   final String symbol;
   final String name;
+
+  /// A period that is over (History): no days left, no planned, and the
+  /// result is "Under by", "Over by" or "Used it all".
+  final bool finished;
+
+  /// "Monthly · October 2026", shown under the name.
+  final String? periodLabel;
 
   String money(int cents) => formatMoney(cents, symbol);
 
@@ -24,6 +38,11 @@ class GaugeText {
 
   /// What is left, or by how much it is over.
   String get headline {
+    if (finished) {
+      if (status.isOver) return 'Over by ${money(status.overBy)}';
+      if (status.left == 0) return 'Used it all';
+      return 'Under by ${money(status.left)}';
+    }
     switch (status.level) {
       case BudgetLevel.over:
         return 'Over by ${money(status.overBy)}';
@@ -38,7 +57,8 @@ class GaugeText {
 
   /// "12 days left · about $6.67 a day", "Month ended", or when it starts.
   String get timing {
-    if (status.hasEnded) return 'Month ended';
+    if (finished) return '';
+    if (status.hasEnded) return 'Period ended';
     if (!status.hasStarted) return 'Starts ${formatDate(range.start)}';
     final days = status.daysLeft;
     final left = days == 1 ? '1 day left' : '$days days left';
@@ -58,9 +78,9 @@ class GaugeText {
 
   String get spoken {
     final parts = [
-      '$name: $amounts.',
+      '$name${periodLabel == null ? '' : ', $periodLabel'}: $amounts.',
       '${headline.replaceFirst('Almost: ', 'almost at the limit, ')}.',
-      '$timing.',
+      if (timing.isNotEmpty) '$timing.',
       ?planned,
     ];
     return parts.join(' ');
@@ -81,6 +101,8 @@ class BudgetGauge extends StatelessWidget {
     required this.symbol,
     this.iconKey,
     this.onTap,
+    this.periodLabel,
+    this.finished = false,
   });
 
   final String name;
@@ -91,15 +113,31 @@ class BudgetGauge extends StatelessWidget {
   final DateRange range;
   final String symbol;
 
-  /// Opens the editor; null for months that can no longer be changed.
+  /// Opens the editor; null when it cannot be changed (a finished period).
   final VoidCallback? onTap;
+
+  /// "Monthly · October 2026": how often it repeats and which dates this is.
+  final String? periodLabel;
+
+  /// A finished period (History): shows the result, not what is left.
+  final bool finished;
 
   @override
   Widget build(BuildContext context) {
     final c = context.appColors;
     final theme = Theme.of(context);
-    final text = GaugeText(status, range, symbol, name);
-    final level = status.level;
+    final text = GaugeText(
+      status,
+      range,
+      symbol,
+      name,
+      finished: finished,
+      periodLabel: periodLabel,
+    );
+    // A finished period is either over or it is not: no "almost".
+    final level = finished
+        ? (status.isOver ? BudgetLevel.over : BudgetLevel.ok)
+        : status.level;
     final isOver = level == BudgetLevel.over;
 
     final headlineStyle = theme.textTheme.bodyMedium?.copyWith(
@@ -143,6 +181,14 @@ class BudgetGauge extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (periodLabel != null) ...[
+                  const SizedBox(height: Gap.xs),
+                  Text(
+                    periodLabel!,
+                    key: const ValueKey('gauge-period'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
+                  ),
+                ],
                 const SizedBox(height: Gap.s),
                 ClampedTextScale(
                   child: FittedBox(
@@ -177,11 +223,13 @@ class BudgetGauge extends StatelessWidget {
                     Expanded(child: Text(text.headline, style: headlineStyle)),
                   ],
                 ),
-                const SizedBox(height: Gap.xs),
-                Text(
-                  text.timing,
-                  style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
-                ),
+                if (text.timing.isNotEmpty) ...[
+                  const SizedBox(height: Gap.xs),
+                  Text(
+                    text.timing,
+                    style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
+                  ),
+                ],
                 if (text.planned != null) ...[
                   const SizedBox(height: Gap.xs),
                   Text(
@@ -299,4 +347,16 @@ class _FillPainter extends CustomPainter {
   @override
   bool shouldRepaint(_FillPainter old) =>
       old.color != color || old.striped != striped || old.stripe != stripe;
+}
+
+/// "Monthly · October 2026", "Weekly · Oct 12 – 18, 2026", or for a one-time
+/// budget "Just this month · October 2026".
+String budgetPeriodLabel(LimitEntry entry, DateRange range, int monthStartDay) {
+  final dates = entry.unit == BudgetUnit.month && monthStartDay == 1
+      ? formatMonth(range.start)
+      : formatRange(range);
+  final what = entry.repeats
+      ? entry.unit.label
+      : 'Just this ${entry.unit.noun}';
+  return '$what · $dates';
 }

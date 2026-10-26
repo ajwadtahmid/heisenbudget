@@ -153,39 +153,53 @@ void main() {
     await disposeEnv(tester, env);
   });
 
-  testWidgets('week start day changes Week N dates; disabled in fixed mode', (
-    tester,
-  ) async {
-    final env = await createEnv(tester, now: DateTime(2026, 8, 15));
-    await tester.pumpWidget(wholeApp(env));
-    await settle(tester);
-    await tester.tap(find.byKey(const ValueKey('period-menu')));
-    await settle(tester);
-    await tester.tap(find.byKey(const ValueKey('menu-week-2')));
-    await settle(tester);
-    expect(find.text('Aug 3 – Aug 9, 2026'), findsOneWidget, reason: 'Monday');
+  testWidgets(
+    'week start day changes Week N dates, and stays changeable in fixed mode (weekly budgets use it)',
+    (tester) async {
+      final env = await createEnv(tester, now: DateTime(2026, 8, 15));
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('period-menu')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('menu-week-2')));
+      await settle(tester);
+      expect(
+        find.text('Aug 3 – Aug 9, 2026'),
+        findsOneWidget,
+        reason: 'Monday',
+      );
 
-    await goToTab(tester, 'Settings');
-    await openSettingsPage(tester, 'money');
-    await tester.tap(find.byType(DropdownButtonFormField<int>).first);
-    await settle(tester);
-    await tester.tap(find.text('Sunday').last);
-    await settle(tester);
+      await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'money');
+      await tester.tap(find.byType(DropdownButtonFormField<int>).first);
+      await settle(tester);
+      await tester.tap(find.text('Sunday').last);
+      await settle(tester);
 
-    await goToTab(tester, 'Home');
-    expect(find.text('Aug 2 – Aug 8, 2026'), findsOneWidget, reason: 'Sunday');
+      await goToTab(tester, 'Home');
+      expect(
+        find.text('Aug 2 – Aug 8, 2026'),
+        findsOneWidget,
+        reason: 'Sunday',
+      );
 
-    await goToTab(tester, 'Settings');
-    await openSettingsPage(tester, 'money');
-    await tester.tap(find.text('Fixed 7-day blocks'));
-    await settle(tester);
-    final dropdown = tester.widget<DropdownButtonFormField<int>>(
-      find.byType(DropdownButtonFormField<int>).first,
-    );
-    expect(dropdown.onChanged, isNull);
-    expect(find.text('Only used with calendar weeks'), findsOneWidget);
-    await disposeEnv(tester, env);
-  });
+      await goToTab(tester, 'Settings');
+      await openSettingsPage(tester, 'money');
+      await tester.tap(find.text('Fixed 7-day blocks'));
+      await settle(tester);
+      final dropdown = tester.widget<DropdownButtonFormField<int>>(
+        find.byType(DropdownButtonFormField<int>).first,
+      );
+      expect(dropdown.onChanged, isNotNull);
+      expect(
+        find.textContaining(
+          'weekly and 2-week budgets still start on this day',
+        ),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    },
+  );
 
   testWidgets('category manager: add, rename, archive, restore', (
     tester,

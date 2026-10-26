@@ -13,7 +13,6 @@ import 'package:heisenbudget/domain/transaction_type.dart';
 import 'test_helpers.dart';
 
 DateTime d(int y, int m, int day) => DateTime(y, m, day);
-BudgetMonth bm(int y, int m) => BudgetMonth(y, m);
 
 Future<void> goToTab(WidgetTester tester, String label) async {
   for (var i = 0; i < 3 && find.byType(NavigationBar).evaluate().isEmpty; i++) {
@@ -29,17 +28,25 @@ Future<void> goToTab(WidgetTester tester, String label) async {
 Future<int> catId(WidgetTester tester, TestEnv env, String name) =>
     categoryId(tester, env, name, TransactionType.expense);
 
+/// Adds a limit directly. Defaults: monthly, repeating, starting this
+/// month (today in the tests is Oct 15, 2026, a Thursday).
 Future<void> limit(
   WidgetTester tester,
   TestEnv env,
   String? category,
-  int cents, {
-  BudgetMonth? month,
+  int? cents, {
+  DateTime? start,
+  BudgetUnit unit = BudgetUnit.month,
+  bool repeats = true,
 }) async {
   final id = category == null ? null : await catId(tester, env, category);
   await tester.runAsync(
     () => BudgetRepository(env.db).setLimit(
-      month: month ?? bm(2026, 10),
+      start:
+          start ??
+          (unit == BudgetUnit.month ? d(2026, 10, 1) : d(2026, 10, 12)),
+      unit: unit,
+      repeats: repeats,
       categoryId: id,
       amountCents: cents,
     ),
@@ -69,14 +76,34 @@ Future<void> tapKey(WidgetTester tester, String key) async {
   await settle(tester);
 }
 
+/// Opens the editor for a new limit on a category.
+Future<void> startNewLimit(
+  WidgetTester tester,
+  TestEnv env,
+  String category,
+) async {
+  final id = await catId(tester, env, category);
+  await tester.tap(find.text('Set a limit'));
+  await settle(tester);
+  await tester.tap(find.byKey(ValueKey('budget-pick-$id')));
+  await settle(tester);
+}
+
+Future<void> saveEditor(WidgetTester tester, String amount) async {
+  await tester.enterText(find.byKey(const ValueKey('budget-amount')), amount);
+  await tester.tap(find.byKey(const ValueKey('budget-save')));
+  await settle(tester);
+}
+
 void main() {
   group('the tab', () {
     testWidgets('Budgets is the second tab', (tester) async {
       final env = await createEnv(tester);
       await openBudgets(tester, env);
-      expect(find.text('Budgets'), findsWidgets);
-      final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
-      expect(bar.selectedIndex, 1);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        1,
+      );
       await disposeEnv(tester, env);
     });
 
@@ -85,56 +112,180 @@ void main() {
     ) async {
       final env = await createEnv(tester);
       await openBudgets(tester, env);
-      expect(find.textContaining('No budgets yet.'), findsOneWidget);
+      expect(find.textContaining('No budgets right now.'), findsOneWidget);
       expect(find.text('Set a limit'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('there is no month menu any more', (tester) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 20000);
+      await openBudgets(tester, env);
+      expect(find.byKey(const ValueKey('budget-month-menu')), findsNothing);
       await disposeEnv(tester, env);
     });
   });
 
   group('setting a limit', () {
-    testWidgets('pick a category, enter an amount, and a gauge appears', (
-      tester,
-    ) async {
+    testWidgets('the editor defaults to monthly and repeating', (tester) async {
       final env = await createEnv(tester);
       await openBudgets(tester, env);
-      await tester.tap(find.text('Set a limit'));
-      await settle(tester);
+      await startNewLimit(tester, env, 'Food');
 
-      // All spending first, then expense categories; no income ones.
-      expect(find.byKey(const ValueKey('budget-pick-overall')), findsOneWidget);
-      final food = await catId(tester, env, 'Food');
-      expect(find.byKey(ValueKey('budget-pick-$food')), findsOneWidget);
-      final salary = await categoryId(
-        tester,
-        env,
-        'Salary',
-        TransactionType.income,
-      );
-      expect(find.byKey(ValueKey('budget-pick-$salary')), findsNothing);
-
-      await tester.tap(find.byKey(ValueKey('budget-pick-$food')));
-      await settle(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('budget-amount')),
-        '200',
-      );
-      await tester.tap(find.byKey(const ValueKey('budget-save')));
-      await settle(tester);
-
-      expect(find.byKey(ValueKey('gauge-$food')), findsOneWidget);
-      expect(find.text('\$0.00 of \$200.00'), findsOneWidget);
-      expect(find.text('\$200.00 left'), findsOneWidget);
-      final rows = await limitRows(tester, env);
+      ChoiceChip chip(String key) =>
+          tester.widget<ChoiceChip>(find.byKey(ValueKey(key)));
+      expect(chip('budget-unit-month').selected, isTrue);
+      expect(chip('budget-unit-week').selected, isFalse);
+      expect(chip('budget-unit-fortnight').selected, isFalse);
+      expect(chip('budget-repeats').selected, isTrue);
+      expect(chip('budget-once').selected, isFalse);
+      expect(find.text('Just this month'), findsOneWidget);
       expect(
-        (
-          rows.single.categoryId,
-          rows.single.startMonth,
-          rows.single.amountCents,
-        ),
-        (food, '2026-10', 20000),
+        find.byKey(const ValueKey('budget-from-this')),
+        findsNothing,
+        reason: 'no this/next choice',
       );
+      expect(find.byKey(const ValueKey('budget-from-next')), findsNothing);
       await disposeEnv(tester, env);
     });
+
+    testWidgets(
+      'a monthly limit: pick a category, enter an amount, a gauge appears',
+      (tester) async {
+        final env = await createEnv(tester);
+        await openBudgets(tester, env);
+        await tester.tap(find.text('Set a limit'));
+        await settle(tester);
+
+        expect(
+          find.byKey(const ValueKey('budget-pick-overall')),
+          findsOneWidget,
+        );
+        final food = await catId(tester, env, 'Food');
+        final salary = await categoryId(
+          tester,
+          env,
+          'Salary',
+          TransactionType.income,
+        );
+        expect(find.byKey(ValueKey('budget-pick-$food')), findsOneWidget);
+        expect(find.byKey(ValueKey('budget-pick-$salary')), findsNothing);
+
+        await tester.tap(find.byKey(ValueKey('budget-pick-$food')));
+        await settle(tester);
+        await saveEditor(tester, '200');
+
+        expect(find.byKey(ValueKey('gauge-$food')), findsOneWidget);
+        expect(find.text('\$0.00 of \$200.00'), findsOneWidget);
+        expect(find.text('Monthly · October 2026'), findsOneWidget);
+        final row = (await limitRows(tester, env)).single;
+        expect(
+          (row.categoryId, row.unit, row.repeats, row.start, row.amountCents),
+          (food, BudgetUnit.month, true, '2026-10-01', 20000),
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('a weekly limit starts on the week-start day', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+      await tester.pump();
+      expect(
+        find.textContaining('Applies from this week: Oct 12 – Oct 18, 2026'),
+        findsOneWidget,
+      );
+      await saveEditor(tester, '50');
+
+      final row = (await limitRows(tester, env)).single;
+      expect(
+        (row.unit, row.repeats, row.start),
+        (BudgetUnit.week, true, '2026-10-12'),
+      );
+      expect(find.text('Weekly · Oct 12 – Oct 18, 2026'), findsOneWidget);
+      // Thursday Oct 15 to Sunday Oct 18 is 4 days: 5000 / 4 = 1250.
+      expect(find.text('4 days left · about \$12.50 a day'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a weekly limit follows the Week starts on setting', (
+      tester,
+    ) async {
+      final env = await createEnv(
+        tester,
+        prefs: {'week_start_day': 7},
+      ); // Sunday
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+      await tester.pump();
+      await saveEditor(tester, '50');
+      expect((await limitRows(tester, env)).single.start, '2026-10-11');
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('weekly budgets ignore fixed 7-day blocks mode', (
+      tester,
+    ) async {
+      final env = await createEnv(tester, prefs: {'week_mode': 'fixed'});
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+      await tester.pump();
+      await saveEditor(tester, '50');
+      expect((await limitRows(tester, env)).single.start, '2026-10-12');
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets(
+      'every 2 weeks shows a first-day choice and defaults to this week',
+      (tester) async {
+        final env = await createEnv(tester);
+        await openBudgets(tester, env);
+        await startNewLimit(tester, env, 'Food');
+        expect(find.byKey(const ValueKey('budget-first-day')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('budget-unit-fortnight')));
+        await tester.pump();
+        expect(find.byKey(const ValueKey('budget-first-day')), findsOneWidget);
+        expect(find.text('Oct 12, 2026'), findsOneWidget);
+        await saveEditor(tester, '90');
+
+        final row = (await limitRows(tester, env)).single;
+        expect((row.unit, row.start), (BudgetUnit.fortnight, '2026-10-12'));
+        expect(
+          find.text('Every 2 weeks · Oct 12 – Oct 25, 2026'),
+          findsOneWidget,
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets(
+      'just once: the chip names the period and the limit does not repeat',
+      (tester) async {
+        final env = await createEnv(tester);
+        await openBudgets(tester, env);
+        await startNewLimit(tester, env, 'Food');
+        await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+        await tester.pump();
+        expect(find.text('Just this week'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('budget-unit-fortnight')));
+        await tester.pump();
+        expect(find.text('Just this 2 weeks'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('budget-unit-month')));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('budget-once')));
+        await tester.pump();
+        await saveEditor(tester, '200');
+
+        final row = (await limitRows(tester, env)).single;
+        expect((row.unit, row.repeats), (BudgetUnit.month, false));
+        expect(find.text('Just this month · October 2026'), findsOneWidget);
+        await disposeEnv(tester, env);
+      },
+    );
 
     testWidgets('a limit on all spending', (tester) async {
       final env = await createEnv(tester);
@@ -143,12 +294,7 @@ void main() {
       await settle(tester);
       await tester.tap(find.byKey(const ValueKey('budget-pick-overall')));
       await settle(tester);
-      await tester.enterText(
-        find.byKey(const ValueKey('budget-amount')),
-        '900',
-      );
-      await tester.tap(find.byKey(const ValueKey('budget-save')));
-      await settle(tester);
+      await saveEditor(tester, '900');
       expect(find.byKey(const ValueKey('gauge-overall')), findsOneWidget);
       expect(find.text('All spending'), findsOneWidget);
       expect((await limitRows(tester, env)).single.categoryId, isNull);
@@ -162,9 +308,7 @@ void main() {
       final food = await catId(tester, env, 'Food');
       await tester.tap(find.byKey(ValueKey('gauge-$food')));
       await settle(tester);
-      await tester.enterText(find.byKey(const ValueKey('budget-amount')), '');
-      await tester.tap(find.byKey(const ValueKey('budget-save')));
-      await settle(tester);
+      await saveEditor(tester, '');
       expect(find.text('Enter an amount'), findsOneWidget);
       expect((await limitRows(tester, env)).single.amountCents, 20000);
       await disposeEnv(tester, env);
@@ -189,7 +333,7 @@ void main() {
     testWidgets('amounts, what is left, and days and per-day left', (
       tester,
     ) async {
-      final env = await createEnv(tester); // Oct 15
+      final env = await createEnv(tester);
       await limit(tester, env, 'Food', 20000);
       await addExpense(tester, env, 12000, d(2026, 10, 3));
       await openBudgets(tester, env);
@@ -200,7 +344,20 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('a future-dated expense in the month counts', (tester) async {
+    testWidgets('a weekly gauge counts only its own week', (tester) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 10000, unit: BudgetUnit.week);
+      await addExpense(tester, env, 3000, d(2026, 10, 13)); // this week
+      await addExpense(tester, env, 9000, d(2026, 10, 9)); // last week
+      await addExpense(tester, env, 9000, d(2026, 10, 19)); // next week
+      await openBudgets(tester, env);
+      expect(find.text('\$30.00 of \$100.00'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a future-dated expense inside the period counts', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
       await limit(tester, env, 'Food', 20000);
       await addExpense(tester, env, 5000, d(2026, 10, 28));
@@ -209,7 +366,7 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('spending in other months or categories does not count', (
+    testWidgets('spending in other periods or categories does not count', (
       tester,
     ) async {
       final env = await createEnv(tester);
@@ -247,29 +404,32 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('the screen reader hears one sentence per gauge', (
+    testWidgets(
+      'the screen reader hears one sentence per gauge, with its period',
+      (tester) async {
+        final env = await createEnv(tester);
+        await limit(tester, env, 'Food', 20000);
+        await addExpense(tester, env, 12000, d(2026, 10, 3));
+        await openBudgets(tester, env);
+        expect(
+          find.bySemanticsLabel(
+            'Food, Monthly · October 2026: \$120.00 of \$200.00. \$80.00 left. '
+            '17 days left · about \$4.70 a day.',
+          ),
+          findsOneWidget,
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('the worst budget is listed first, whatever its period', (
       tester,
     ) async {
       final env = await createEnv(tester);
       await limit(tester, env, 'Food', 20000);
-      await addExpense(tester, env, 12000, d(2026, 10, 3));
-      await openBudgets(tester, env);
-      expect(
-        find.bySemanticsLabel(
-          'Food: \$120.00 of \$200.00. \$80.00 left. '
-          '17 days left · about \$4.70 a day.',
-        ),
-        findsOneWidget,
-      );
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('the worst budget is listed first', (tester) async {
-      final env = await createEnv(tester);
-      await limit(tester, env, 'Food', 20000);
-      await limit(tester, env, 'Rent', 20000);
+      await limit(tester, env, 'Rent', 20000, unit: BudgetUnit.week);
       await limit(tester, env, 'Transport', 20000);
-      await addExpense(tester, env, 3000, d(2026, 10, 3), category: 'Rent');
+      await addExpense(tester, env, 3000, d(2026, 10, 14), category: 'Rent');
       await addExpense(
         tester,
         env,
@@ -283,13 +443,35 @@ void main() {
         for (final name in ['Transport', 'Food', 'Rent'])
           tester
               .getTopLeft(
-                find.byKey(
-                  ValueKey('gauge-${(await catId(tester, env, name))}'),
-                ),
+                find.byKey(ValueKey('gauge-${await catId(tester, env, name)}')),
               )
               .dy,
       ];
       expect(order, orderedEquals([...order]..sort()));
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('budgets with different periods sit side by side', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 20000, unit: BudgetUnit.week);
+      await limit(tester, env, 'Rent', 100000);
+      await limit(tester, env, 'Transport', 9000, unit: BudgetUnit.fortnight);
+      await openBudgets(tester, env);
+      expect(find.textContaining('Weekly ·'), findsOneWidget);
+      expect(find.textContaining('Monthly ·'), findsOneWidget);
+      expect(find.textContaining('Every 2 weeks ·'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a one-time budget leaves the list once its period is over', (
+      tester,
+    ) async {
+      final env = await createEnv(tester, now: d(2026, 11, 3));
+      await limit(tester, env, 'Food', 20000, repeats: false); // October only
+      await openBudgets(tester, env);
+      expect(find.textContaining('No budgets right now.'), findsOneWidget);
       await disposeEnv(tester, env);
     });
   });
@@ -308,7 +490,7 @@ void main() {
     });
 
     testWidgets(
-      'a note appears when category limits add up to more than the overall one',
+      'a note when category limits in the same period add up to more',
       (tester) async {
         final env = await createEnv(tester);
         await limit(tester, env, null, 10000);
@@ -317,6 +499,19 @@ void main() {
         await openBudgets(tester, env);
         expect(find.byKey(const ValueKey('budget-note')), findsOneWidget);
         expect(find.textContaining('add up to \$140.00'), findsOneWidget);
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets(
+      'no note when the periods differ (a week and a month cannot be compared)',
+      (tester) async {
+        final env = await createEnv(tester);
+        await limit(tester, env, null, 10000);
+        await limit(tester, env, 'Food', 8000, unit: BudgetUnit.week);
+        await limit(tester, env, 'Transport', 6000, unit: BudgetUnit.week);
+        await openBudgets(tester, env);
+        expect(find.byKey(const ValueKey('budget-note')), findsNothing);
         await disposeEnv(tester, env);
       },
     );
@@ -331,98 +526,148 @@ void main() {
     });
   });
 
-  group('changing and removing limits', () {
-    testWidgets('from this month changes this month, and the past stays', (
+  group('changing and stopping', () {
+    testWidgets(
+      'changing the amount starts with the current period; earlier ones keep theirs',
+      (tester) async {
+        final env = await createEnv(tester);
+        final food = await catId(tester, env, 'Food');
+        await limit(tester, env, 'Food', 20000, start: d(2026, 8, 1));
+        await openBudgets(tester, env);
+        await tester.tap(find.byKey(ValueKey('gauge-$food')));
+        await settle(tester);
+        expect(
+          tester
+              .widget<TextFormField>(
+                find.byKey(const ValueKey('budget-amount')),
+              )
+              .controller!
+              .text,
+          '200.00',
+        );
+        expect(
+          find.textContaining('Applies from this month: Oct 1 – Oct 31, 2026'),
+          findsOneWidget,
+        );
+        await saveEditor(tester, '300');
+
+        expect(find.text('\$0.00 of \$300.00'), findsOneWidget);
+        final rows = await limitRows(tester, env);
+        expect(rows, hasLength(2));
+        final entries = rows.map((r) => r.entry).toList();
+        int? at(DateTime date) =>
+            resolveBudget(entries, food, date, monthStartDay: 1)?.limit;
+        expect(at(d(2026, 9, 15)), 20000, reason: 'September unchanged');
+        expect(at(d(2026, 10, 15)), 30000);
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('editing again in the same period replaces, not stacks', (
       tester,
     ) async {
-      final env = await createEnv(tester);
-      final food = await catId(tester, env, 'Food');
-      await limit(tester, env, 'Food', 20000, month: bm(2026, 8));
-      await openBudgets(tester, env);
-      await tester.tap(find.byKey(ValueKey('gauge-$food')));
-      await settle(tester);
-      expect(
-        tester
-            .widget<TextFormField>(find.byKey(const ValueKey('budget-amount')))
-            .controller!
-            .text,
-        '200.00',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('budget-amount')),
-        '300',
-      );
-      await tester.tap(find.byKey(const ValueKey('budget-save')));
-      await settle(tester);
-
-      expect(find.text('\$0.00 of \$300.00'), findsOneWidget);
-      final entries = (await limitRows(
-        tester,
-        env,
-      )).map((r) => r.entry).toList();
-      expect(
-        resolveLimit(entries, food, bm(2026, 9)),
-        20000,
-        reason: 'before this month',
-      );
-      expect(resolveLimit(entries, food, bm(2026, 10)), 30000);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('from next month leaves this month alone', (tester) async {
       final env = await createEnv(tester);
       final food = await catId(tester, env, 'Food');
       await limit(tester, env, 'Food', 20000);
       await openBudgets(tester, env);
       await tester.tap(find.byKey(ValueKey('gauge-$food')));
       await settle(tester);
-      await tester.tap(find.byKey(const ValueKey('budget-from-next')));
-      await tester.pump();
-      expect(find.textContaining('From Nov 1, 2026'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const ValueKey('budget-amount')),
-        '350',
-      );
-      await tester.tap(find.byKey(const ValueKey('budget-save')));
+      await saveEditor(tester, '250');
+      await tester.tap(find.byKey(ValueKey('gauge-$food')));
       await settle(tester);
-
-      expect(
-        find.text('\$0.00 of \$200.00'),
-        findsOneWidget,
-        reason: 'this month unchanged',
-      );
-      final entries = (await limitRows(
-        tester,
-        env,
-      )).map((r) => r.entry).toList();
-      expect(resolveLimit(entries, food, bm(2026, 10)), 20000);
-      expect(resolveLimit(entries, food, bm(2026, 11)), 35000);
+      await saveEditor(tester, '260');
+      final rows = await limitRows(tester, env);
+      expect(rows, hasLength(1));
+      expect(rows.single.amountCents, 26000);
       await disposeEnv(tester, env);
     });
 
     testWidgets(
-      'removing from this month on ends the limit, and the past keeps it',
+      'changing the period starts the new one now and keeps the old row',
       (tester) async {
         final env = await createEnv(tester);
         final food = await catId(tester, env, 'Food');
-        await limit(tester, env, 'Food', 20000, month: bm(2026, 9));
+        await limit(tester, env, 'Food', 20000, start: d(2026, 9, 1));
         await openBudgets(tester, env);
         await tester.tap(find.byKey(ValueKey('gauge-$food')));
         await settle(tester);
-        await tapKey(tester, 'budget-remove');
+        await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+        await tester.pump();
+        await saveEditor(tester, '60');
 
-        expect(find.byKey(ValueKey('gauge-$food')), findsNothing);
-        final entries = (await limitRows(
-          tester,
-          env,
-        )).map((r) => r.entry).toList();
-        expect(resolveLimit(entries, food, bm(2026, 9)), 20000);
-        expect(resolveLimit(entries, food, bm(2026, 10)), isNull);
+        expect(find.textContaining('Weekly ·'), findsOneWidget);
+        final rows = await limitRows(tester, env);
+        expect(rows, hasLength(2));
+        expect(
+          (rows.last.unit, rows.last.start),
+          (BudgetUnit.week, '2026-10-12'),
+        );
+        expect(
+          (rows.first.unit, rows.first.start),
+          (BudgetUnit.month, '2026-09-01'),
+        );
         await disposeEnv(tester, env);
       },
     );
 
-    testWidgets('the remove button only shows when there is a limit', (
+    testWidgets(
+      'a fortnight keeps its alignment when only the amount changes',
+      (tester) async {
+        final env = await createEnv(tester);
+        final food = await catId(tester, env, 'Food');
+        // A cycle starting Oct 2: the current block is Oct 2 - Oct 15.
+        await limit(
+          tester,
+          env,
+          'Food',
+          9000,
+          unit: BudgetUnit.fortnight,
+          start: d(2026, 10, 2),
+        );
+        await openBudgets(tester, env);
+        await tester.tap(find.byKey(ValueKey('gauge-$food')));
+        await settle(tester);
+        expect(
+          find.byKey(const ValueKey('budget-first-day')),
+          findsNothing,
+          reason: 'unchanged period',
+        );
+        await saveEditor(tester, '100');
+        final rows = await limitRows(tester, env);
+        expect(rows.single.start, '2026-10-02');
+        expect(rows.single.amountCents, 10000);
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('stopping ends the budget from now; earlier periods are kept', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      final food = await catId(tester, env, 'Food');
+      await limit(tester, env, 'Food', 20000, start: d(2026, 9, 1));
+      await openBudgets(tester, env);
+      await tester.tap(find.byKey(ValueKey('gauge-$food')));
+      await settle(tester);
+      await tapKey(tester, 'budget-remove');
+
+      expect(find.byKey(ValueKey('gauge-$food')), findsNothing);
+      final entries = (await limitRows(
+        tester,
+        env,
+      )).map((r) => r.entry).toList();
+      expect(
+        resolveBudget(entries, food, d(2026, 9, 15), monthStartDay: 1)!.limit,
+        20000,
+      );
+      expect(
+        resolveBudget(entries, food, d(2026, 10, 15), monthStartDay: 1),
+        isNull,
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the stop button only shows when there is a budget', (
       tester,
     ) async {
       final env = await createEnv(tester);
@@ -437,7 +682,7 @@ void main() {
   });
 
   group('the average suggestion', () {
-    testWidgets('offers the average of the last three months and fills it in', (
+    testWidgets('monthly: the average of the last three months', (
       tester,
     ) async {
       final env = await createEnv(tester);
@@ -466,6 +711,28 @@ void main() {
       await disposeEnv(tester, env);
     });
 
+    testWidgets(
+      'weekly: the average of the last three weeks, and it follows the chosen period',
+      (tester) async {
+        final env = await createEnv(tester);
+        final food = await catId(tester, env, 'Food');
+        await addExpense(tester, env, 30000, d(2026, 10, 6)); // Oct 5 - 11
+        await addExpense(tester, env, 20000, d(2026, 9, 30)); // Sep 28 - Oct 4
+        await addExpense(tester, env, 10000, d(2026, 9, 22)); // Sep 21 - 27
+        await limit(tester, env, 'Food', 5000);
+        await openBudgets(tester, env);
+        await tester.tap(find.byKey(ValueKey('gauge-$food')));
+        await settle(tester);
+        await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+        await settle(tester);
+        expect(
+          find.textContaining('average of the last 3 weeks: \$200.00'),
+          findsOneWidget,
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+
     testWidgets('is not offered when nothing was spent before', (tester) async {
       final env = await createEnv(tester);
       final food = await catId(tester, env, 'Food');
@@ -490,96 +757,17 @@ void main() {
     });
   });
 
-  group('months', () {
-    testWidgets(
-      'the menu moves between months, and past months cannot be changed',
-      (tester) async {
-        final env = await createEnv(tester);
-        final food = await catId(tester, env, 'Food');
-        await limit(tester, env, 'Food', 20000, month: bm(2026, 8));
-        await addExpense(tester, env, 7000, d(2026, 9, 10));
-        await openBudgets(tester, env);
-        expect(find.text('October 2026'), findsOneWidget);
-
-        await tester.tap(find.byKey(const ValueKey('budget-month-menu')));
-        await settle(tester);
-        await tester.tap(find.byKey(const ValueKey('budget-month--1')));
-        await settle(tester);
-        expect(find.text('September 2026'), findsOneWidget);
-        expect(find.text('\$70.00 of \$200.00'), findsOneWidget);
-        expect(find.text('Month ended'), findsOneWidget);
-        expect(find.byKey(const ValueKey('budget-past-note')), findsOneWidget);
-        expect(find.byKey(const ValueKey('budget-add')), findsNothing);
-
-        await tester.tap(find.byKey(ValueKey('gauge-$food')));
-        await settle(tester);
-        expect(
-          find.byKey(const ValueKey('budget-amount')),
-          findsNothing,
-          reason: 'no editor',
-        );
-        await disposeEnv(tester, env);
-      },
-    );
-
-    testWidgets('next month shows what carries over, with nothing spent', (
-      tester,
-    ) async {
-      final env = await createEnv(tester);
-      await limit(tester, env, 'Food', 20000);
-      await openBudgets(tester, env);
-      await tester.tap(find.byKey(const ValueKey('budget-month-menu')));
-      await settle(tester);
-      await tester.tap(find.byKey(const ValueKey('budget-month-1')));
-      await settle(tester);
-      expect(find.text('November 2026'), findsOneWidget);
-      expect(find.text('\$0.00 of \$200.00'), findsOneWidget);
-      expect(find.text('Starts Nov 1, 2026'), findsOneWidget);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('swiping sideways changes the month', (tester) async {
-      final env = await createEnv(tester);
-      await limit(tester, env, 'Food', 20000);
-      await openBudgets(tester, env);
-      await tester.fling(
-        find.byKey(const ValueKey('gauge-overall')).evaluate().isEmpty
-            ? find.byType(ListView).last
-            : find.byKey(const ValueKey('gauge-overall')),
-        const Offset(300, 0),
-        1500,
-      );
-      await settle(tester);
-      expect(find.text('September 2026'), findsOneWidget);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('a month with no limits set says so', (tester) async {
-      final env = await createEnv(tester);
-      await limit(tester, env, 'Food', 20000);
-      await openBudgets(tester, env);
-      await tester.tap(find.byKey(const ValueKey('budget-month-menu')));
-      await settle(tester);
-      await tester.tap(find.byKey(const ValueKey('budget-month--2')));
-      await settle(tester);
-      // The limit started in October, so August has none.
-      expect(find.text('No limits were set for this month.'), findsOneWidget);
-      await disposeEnv(tester, env);
-    });
-  });
-
   group('the month start day', () {
     testWidgets('a start day of 25 shifts which month today is in', (
       tester,
     ) async {
       final env = await createEnv(tester, prefs: {'month_start_day': 25});
-      // Oct 15 with start day 25 is still in September (Sep 25 - Oct 24).
-      await limit(tester, env, 'Food', 20000, month: bm(2026, 9));
+      await limit(tester, env, 'Food', 20000, start: d(2026, 9, 25));
       await addExpense(tester, env, 4000, d(2026, 10, 1));
-      await addExpense(tester, env, 9000, d(2026, 9, 20)); // before the month
+      await addExpense(tester, env, 9000, d(2026, 9, 20)); // before the period
       await addExpense(tester, env, 9000, d(2026, 10, 25)); // after it
       await openBudgets(tester, env);
-      expect(find.text('Sep 25 – Oct 24, 2026'), findsOneWidget);
+      expect(find.text('Monthly · Sep 25 – Oct 24, 2026'), findsOneWidget);
       expect(find.text('\$40.00 of \$200.00'), findsOneWidget);
       await disposeEnv(tester, env);
     });
@@ -606,46 +794,12 @@ void main() {
   });
 
   group('planned repeating expenses', () {
-    testWidgets('are shown, and flagged when they would break the limit', (
-      tester,
-    ) async {
-      final env = await createEnv(tester);
+    Future<void> rentRule(
+      WidgetTester tester,
+      TestEnv env, {
+      bool paused = false,
+    }) async {
       final rent = await catId(tester, env, 'Rent');
-      await limit(tester, env, 'Rent', 150000);
-      await addExpense(tester, env, 50000, d(2026, 10, 2), category: 'Rent');
-      await tester.runAsync(
-        () => RecurringRepository(env.db).addWithRule(
-          TransactionInput(
-            amountCents: 120000,
-            type: TransactionType.expense,
-            date: d(2026, 9, 28),
-            categoryId: rent,
-          ),
-          RecurringInput(
-            amountCents: 120000,
-            type: TransactionType.expense,
-            categoryId: rent,
-            unit: RecurrenceUnit.month,
-            interval: 1,
-            start: d(2026, 9, 28),
-          ),
-        ),
-      );
-      await openBudgets(tester, env);
-      // Spent: the Sep 28 one is last month, so only the 500.00 counts now.
-      expect(find.text('\$500.00 of \$1,500.00'), findsOneWidget);
-      expect(
-        find.textContaining('Planned: \$1,200.00 from repeating transactions'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('over by \$200.00'), findsOneWidget);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('a paused rule is not planned', (tester) async {
-      final env = await createEnv(tester);
-      final rent = await catId(tester, env, 'Rent');
-      await limit(tester, env, 'Rent', 150000);
       await tester.runAsync(() async {
         await RecurringRepository(env.db).addWithRule(
           TransactionInput(
@@ -663,13 +817,93 @@ void main() {
             start: d(2026, 9, 28),
           ),
         );
-        final rule = await env.db.select(env.db.recurringRules).getSingle();
-        await RecurringRepository(env.db).setActive(rule.id, false);
+        if (paused) {
+          final rule = await env.db.select(env.db.recurringRules).getSingle();
+          await RecurringRepository(env.db).setActive(rule.id, false);
+        }
       });
+    }
+
+    testWidgets('are shown, and flagged when they would break the limit', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Rent', 150000);
+      await addExpense(tester, env, 50000, d(2026, 10, 2), category: 'Rent');
+      await rentRule(tester, env);
+      await openBudgets(tester, env);
+      expect(find.text('\$500.00 of \$1,500.00'), findsOneWidget);
+      expect(
+        find.textContaining('Planned: \$1,200.00 from repeating transactions'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('over by \$200.00'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a rule due next week is not planned inside this week', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Rent', 150000, unit: BudgetUnit.week);
+      await rentRule(tester, env); // next due Oct 28: outside Oct 12 - 18
       await openBudgets(tester, env);
       expect(find.byKey(const ValueKey('gauge-planned')), findsNothing);
       await disposeEnv(tester, env);
     });
+
+    testWidgets('a paused rule is not planned', (tester) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Rent', 150000);
+      await rentRule(tester, env, paused: true);
+      await openBudgets(tester, env);
+      expect(find.byKey(const ValueKey('gauge-planned')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('past budgets', () {
+    testWidgets(
+      'the app bar button and the link open History on its Budgets side',
+      (tester) async {
+        final env = await createEnv(tester);
+        await limit(tester, env, 'Food', 20000);
+        await openBudgets(tester, env);
+        await tester.tap(find.byKey(const ValueKey('budgets-past')));
+        await settle(tester);
+        expect(
+          tester
+              .widget<NavigationBar>(find.byType(NavigationBar))
+              .selectedIndex,
+          2,
+        );
+        expect(
+          find.byKey(const ValueKey('budget-filter-button')),
+          findsOneWidget,
+        );
+
+        await goToTab(tester, 'Budgets');
+        // Back on Transactions first, so the link has something to change.
+        await goToTab(tester, 'History');
+        await tester.tap(
+          find.byKey(const ValueKey('history-mode-transactions')),
+        );
+        await settle(tester);
+        await goToTab(tester, 'Budgets');
+        await tapKey(tester, 'budgets-past-link');
+        expect(
+          tester
+              .widget<NavigationBar>(find.byType(NavigationBar))
+              .selectedIndex,
+          2,
+        );
+        expect(
+          find.byKey(const ValueKey('budget-filter-button')),
+          findsOneWidget,
+        );
+        await disposeEnv(tester, env);
+      },
+    );
   });
 
   group('Home', () {
@@ -696,22 +930,22 @@ void main() {
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
       expect(await line(tester), 'All within budget');
-
       await addExpense(tester, env, 17000, d(2026, 10, 3));
       await settle(tester);
       expect(await line(tester), '1 almost at its limit');
-
       await addExpense(tester, env, 9000, d(2026, 10, 4));
       await settle(tester);
       expect(await line(tester), '1 over budget');
       await disposeEnv(tester, env);
     });
 
-    testWidgets('counts the overall limit and each category', (tester) async {
+    testWidgets('counts budgets of every period, and the overall limit', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
       await limit(tester, env, null, 10000);
-      await limit(tester, env, 'Food', 5000);
-      await addExpense(tester, env, 12000, d(2026, 10, 3));
+      await limit(tester, env, 'Food', 5000, unit: BudgetUnit.week);
+      await addExpense(tester, env, 12000, d(2026, 10, 14));
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
       expect(await line(tester), '2 over budget');
@@ -732,15 +966,11 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('looks at the current budget month only', (tester) async {
+    testWidgets('a budget that starts next month is not counted yet', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
-      await limit(
-        tester,
-        env,
-        'Food',
-        20000,
-        month: bm(2026, 11),
-      ); // starts next month
+      await limit(tester, env, 'Food', 20000, start: d(2026, 11, 1));
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
       expect(find.byKey(const ValueKey('home-budget-line')), findsNothing);
@@ -776,15 +1006,28 @@ void main() {
       await addExpense(tester, env, 8000, d(2026, 10, 3));
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
-
-      await saveExpense(tester, env, '50'); // 80 + 50 > 100
+      await saveExpense(tester, env, '50');
       expect(find.text('Food is now over budget.'), findsOneWidget);
-
       ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
           .clearSnackBars();
       await settle(tester);
-      await saveExpense(tester, env, '10'); // already over: stay quiet
+      await saveExpense(tester, env, '10');
       expect(find.textContaining('now over budget'), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('works for a weekly budget, judged over that week', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 10000, unit: BudgetUnit.week);
+      await addExpense(tester, env, 8000, d(2026, 10, 13));
+      // Last week's spending must not count towards this week.
+      await addExpense(tester, env, 50000, d(2026, 10, 8));
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await saveExpense(tester, env, '50');
+      expect(find.text('Food is now over budget.'), findsOneWidget);
       await disposeEnv(tester, env);
     });
 
@@ -843,19 +1086,29 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets(
-      'an expense dated in another month is judged against that month',
-      (tester) async {
-        final env = await createEnv(tester);
-        await limit(tester, env, 'Food', 5000, month: bm(2026, 11));
-        await tester.pumpWidget(wholeApp(env));
-        await settle(tester);
-        // Saved today (October): November's limit is not involved.
-        await saveExpense(tester, env, '90');
-        expect(find.textContaining('now over budget'), findsNothing);
-        await disposeEnv(tester, env);
-      },
-    );
+    testWidgets('a budget that has not started is not involved', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 5000, start: d(2026, 11, 1));
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await saveExpense(tester, env, '90');
+      expect(find.textContaining('now over budget'), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a one-time budget that has ended is not involved', (
+      tester,
+    ) async {
+      final env = await createEnv(tester, now: d(2026, 11, 5));
+      await limit(tester, env, 'Food', 5000, repeats: false); // October only
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await saveExpense(tester, env, '90');
+      expect(find.textContaining('now over budget'), findsNothing);
+      await disposeEnv(tester, env);
+    });
 
     testWidgets('a favorite that crosses the limit says so in its own line', (
       tester,
@@ -888,14 +1141,14 @@ void main() {
   });
 
   group('large text', () {
-    testWidgets('four tabs and the Budgets screen fit at 200% text', (
+    testWidgets('four tabs, the gauges and the editor fit at 200% text', (
       tester,
     ) async {
       final env = await createEnv(tester);
       await limit(tester, env, null, 90000);
-      await limit(tester, env, 'Food', 20000);
-      await limit(tester, env, 'Transport', 15000);
-      await addExpense(tester, env, 25000, d(2026, 10, 3));
+      await limit(tester, env, 'Food', 20000, unit: BudgetUnit.week);
+      await limit(tester, env, 'Transport', 15000, unit: BudgetUnit.fortnight);
+      await addExpense(tester, env, 25000, d(2026, 10, 14));
       tester.view.physicalSize = const Size(360, 640);
       tester.platformDispatcher.textScaleFactorTestValue = 2.0;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -917,6 +1170,13 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('gauge-overall')));
       await settle(tester);
       expect(tester.takeException(), isNull, reason: 'the editor');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-fortnight')));
+      await settle(tester);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'the editor with a fortnight',
+      );
       await disposeEnv(tester, env);
     });
   });

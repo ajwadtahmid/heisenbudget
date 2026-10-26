@@ -33,8 +33,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   comparisonViewProvider,
   comingUpProvider,
   historyResultsProvider,
-  currentBudgetOverviewProvider,
-  selectedBudgetOverviewProvider,
+  budgetOverviewProvider,
   copyProvider,
 ];
 

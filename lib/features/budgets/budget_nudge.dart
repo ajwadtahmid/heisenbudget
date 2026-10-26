@@ -19,18 +19,25 @@ Future<String?> overBudgetMessage(
   required int amountCents,
 }) async {
   final startDay = ref.read(monthStartDayProvider);
-  final month = BudgetMonth.containing(date, startDay);
-  final range = month.range(startDay);
   final limits = await ref.read(budgetRepositoryProvider).getAll();
   final entries = [for (final row in limits) row.entry];
   final transactions = ref.read(transactionRepositoryProvider);
 
-  /// Whether this expense is the one that crossed the limit.
+  /// Whether this expense is the one that crossed the limit of the budget
+  /// that covers its date.
   Future<bool> crossed(int? category) async {
-    final limit = resolveLimit(entries, category, month);
-    if (limit == null) return false;
-    final after = await transactions.spentInRange(range, categoryId: category);
-    return after > limit && after - amountCents <= limit;
+    final budget = resolveBudget(
+      entries,
+      category,
+      date,
+      monthStartDay: startDay,
+    );
+    if (budget == null) return false;
+    final after = await transactions.spentInRange(
+      budget.range,
+      categoryId: category,
+    );
+    return after > budget.limit && after - amountCents <= budget.limit;
   }
 
   final messages = <String>[];
