@@ -283,6 +283,12 @@ A row made by a repeating rule carries a small 14dp repeat icon (dim, labelled "
 ### Coming up row
 Home shows up to three repeating transactions due in the next 7 days under a COMING UP label, between the chart and Recent. Same layout as a transaction row (category tile, name, date and "in N days" or "tomorrow"), but the amount is **dim, not green or amber**: nothing has happened yet, and Received and Spent colours are reserved for money that has moved. Hidden when there are none. Never part of a total.
 
+### Delta line ("vs last month")
+One line of 12sp mono, dim, directly under the Received and Spent ledger rows: a triangle (▲ ▼, or = for "about the same"), the change (whole percent, or the amount when the earlier total was zero, capped at 999%+) and "vs" with the compared dates ("vs Sep" for a whole month, otherwise "vs Sep 1–25"). Dim text, never the green or amber channels, and not the arrows used by the ledger rows; the meaning is in the glyph and the words. Scales down to fit at large text. Spoken as a full sentence.
+
+### Launcher shortcut icons
+Three 192px icons for the long-press menu: an amber up arrow (Add expense), a green down arrow (Add income) and a teal bolt (the favorite), each on a dark disc on Android; black template silhouettes on iOS, which tints them. They echo the ledger arrows and the accent.
+
 ### Search field and highlight
 A search icon in the History app bar reveals a text field above Filter and Sort (hint "Search notes, categories, amounts", clear button). Matches in the category name and note are bold on a soft accent tint (22% accent), never colour alone. A dim line under the controls reads "12 results · net -$84.20". The control block scrolls when it needs more than half the screen.
 

@@ -40,6 +40,17 @@ cloud, no analytics. Everything is stored on the device.
   one dated today (with Undo), or press and hold to open or edit it. A
   favorite can leave the amount empty to be asked each time. Manage and
   reorder them under Settings > Quick add.
+- "vs last month": under Spent and Received on Home, a quiet line such as
+  `▼ 12% vs Sep 1–25`. While a period is still going it compares the same days
+  (Oct 1–25 with Sep 1–25, not all of September); a finished one compares
+  whole against whole. Weeks, week N of a month and custom ranges work too. It
+  is hidden when the earlier window had no transactions. It never uses the
+  green or amber of the money rows.
+- Home-screen shortcuts: press and hold the app icon for Add expense or Add
+  income (and one for your first favorite), which open the Add sheet straight
+  away. A shortcut chosen while you are typing in an Add sheet is ignored, so
+  nothing is lost, and one chosen before the welcome tour is finished waits
+  for it.
 - Repeating transactions: turn on Repeat in the Add sheet (weekly, monthly,
   yearly or every N days, optionally ending on a date) for rent, a salary or a
   subscription. The app adds each one on its due date when it opens, with an
@@ -53,7 +64,7 @@ cloud, no analytics. Everything is stored on the device.
   share sheet; where it goes is your choice. Restoring checks the whole file
   first and replaces everything only if it is valid.
 
-Planned for later: "vs last month", a home-screen shortcut, budgets, multiple accounts.
+Planned for later: budgets, multiple accounts.
 
 ## Run it
 
