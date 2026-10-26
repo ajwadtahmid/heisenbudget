@@ -17,6 +17,9 @@ class BackupService {
       final categories = await (_db.select(
         _db.categories,
       )..orderBy([(c) => OrderingTerm.asc(c.id)])).get();
+      final rules = await (_db.select(
+        _db.recurringRules,
+      )..orderBy([(r) => OrderingTerm.asc(r.id)])).get();
       final transactions = await (_db.select(
         _db.transactions,
       )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
@@ -24,6 +27,7 @@ class BackupService {
         exportedAt: now,
         settings: _settings.toBackup(),
         categories: categories,
+        recurringRules: rules,
         transactions: transactions,
       );
     });
@@ -34,11 +38,15 @@ class BackupService {
   /// existing data is left exactly as it was.
   Future<void> restore(BackupData data) async {
     await _db.transaction(() async {
-      // Transactions first: they reference categories.
+      // Out in the order that respects references: transactions, then the
+      // rules they point at, then the categories both point at. In is the
+      // reverse.
       await _db.delete(_db.transactions).go();
+      await _db.delete(_db.recurringRules).go();
       await _db.delete(_db.categories).go();
       await _db.batch((batch) {
         batch.insertAll(_db.categories, data.categories);
+        batch.insertAll(_db.recurringRules, data.recurringRules);
         batch.insertAll(_db.transactions, data.transactions);
       });
     });

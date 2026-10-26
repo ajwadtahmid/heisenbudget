@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
+import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 // ignore: depend_on_referenced_packages
 import 'package:sqlite3/sqlite3.dart' as sqlite;
@@ -129,4 +130,70 @@ void main() {
     expect(rows, hasLength(5));
     expect(rows.firstWhere((c) => c.name == 'Food').icon, 'restaurant');
   });
+
+  test(
+    'the upgrade also creates repeating rules, linked to transactions',
+    () async {
+      final db = AppDatabase(NativeDatabase(file));
+      addTearDown(db.close);
+
+      final rule = await db
+          .into(db.recurringRules)
+          .insert(
+            RecurringRulesCompanion.insert(
+              amountCents: 120000,
+              type: TransactionType.expense,
+              categoryId: 1,
+              unit: RecurrenceUnit.month,
+              startDate: '2026-11-01',
+              createdAt: DateTime(2026, 10, 25),
+            ),
+          );
+      // The old transaction is untouched and has no rule.
+      final old = await db.select(db.transactions).getSingle();
+      expect(old.recurringRuleId, isNull);
+
+      Future<void> addLinked(String date) => db
+          .into(db.transactions)
+          .insert(
+            TransactionsCompanion.insert(
+              amountCents: 100,
+              type: TransactionType.expense,
+              date: date,
+              categoryId: 1,
+              createdAt: DateTime(2026, 10, 25),
+              updatedAt: DateTime(2026, 10, 25),
+              recurringRuleId: Value(rule),
+            ),
+          );
+      await addLinked('2026-11-01');
+      // The same rule cannot make two transactions on one day.
+      expect(() => addLinked('2026-11-01'), throwsA(isA<Exception>()));
+      // Plain transactions are not limited by that index.
+      for (var i = 0; i < 2; i++) {
+        await db
+            .into(db.transactions)
+            .insert(
+              TransactionsCompanion.insert(
+                amountCents: 100,
+                type: TransactionType.expense,
+                date: '2026-11-01',
+                categoryId: 1,
+                createdAt: DateTime(2026, 10, 25),
+                updatedAt: DateTime(2026, 10, 25),
+              ),
+            );
+      }
+
+      // Deleting the rule keeps its transactions and clears the link.
+      await (db.delete(
+        db.recurringRules,
+      )..where((r) => r.id.equals(rule))).go();
+      final linked = await (db.select(
+        db.transactions,
+      )..where((t) => t.date.equals('2026-11-01'))).get();
+      expect(linked, hasLength(3));
+      expect(linked.every((t) => t.recurringRuleId == null), isTrue);
+    },
+  );
 }

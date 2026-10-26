@@ -78,7 +78,13 @@ class TransactionRepository {
         );
   }
 
-  Future<void> update(int id, TransactionInput input) async {
+  /// Saves edits. [unlinkRule] detaches the transaction from its repeating
+  /// rule (used when its date is changed, so it no longer fills that slot).
+  Future<void> update(
+    int id,
+    TransactionInput input, {
+    bool unlinkRule = false,
+  }) async {
     input.validate();
     await (_db.update(_t)..where((t) => t.id.equals(id))).write(
       TransactionsCompanion(
@@ -88,12 +94,18 @@ class TransactionRepository {
         categoryId: Value(input.categoryId),
         note: Value(_cleanNote(input.note)),
         updatedAt: Value(DateTime.now()),
+        recurringRuleId: unlinkRule ? const Value(null) : const Value.absent(),
       ),
     );
   }
 
   Future<void> delete(int id) async {
     await (_db.delete(_t)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// Deletes several transactions at once (Undo of a recurring catch-up).
+  Future<void> deleteMany(Iterable<int> ids) async {
+    await (_db.delete(_t)..where((t) => t.id.isIn(ids))).go();
   }
 
   Future<TransactionWithCategory?> getById(int id) async {

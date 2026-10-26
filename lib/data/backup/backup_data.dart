@@ -9,6 +9,7 @@ import '../../core/currencies.dart';
 import '../../core/design/app_colors.dart' show AccentColor;
 import '../../core/design/app_font.dart' show AppFont;
 import '../../domain/iso_date.dart';
+import '../../domain/recurrence.dart';
 import '../../domain/transaction_type.dart';
 import '../../domain/week_mode.dart';
 import '../database/app_database.dart';
@@ -109,12 +110,14 @@ class BackupData {
     required this.exportedAt,
     required this.settings,
     required this.categories,
+    required this.recurringRules,
     required this.transactions,
   });
 
   final DateTime exportedAt;
   final BackupSettings settings;
   final List<CategoryRow> categories;
+  final List<RecurringRuleRow> recurringRules;
   final List<TransactionRow> transactions;
 
   /// The file's text. Pretty-printed so it can be inspected in any editor.
@@ -137,6 +140,23 @@ class BackupData {
             'sortOrder': c.sortOrder,
           },
       ],
+      'recurringRules': [
+        for (final r in recurringRules)
+          {
+            'id': r.id,
+            'amountCents': r.amountCents,
+            'type': r.type.name,
+            'categoryId': r.categoryId,
+            'note': r.note,
+            'unit': r.unit.name,
+            'interval': r.interval,
+            'startDate': r.startDate,
+            'endDate': r.endDate,
+            'isActive': r.isActive,
+            'nextIndex': r.nextIndex,
+            'createdAt': r.createdAt.toUtc().toIso8601String(),
+          },
+      ],
       'transactions': [
         for (final t in transactions)
           {
@@ -148,6 +168,7 @@ class BackupData {
             'note': t.note,
             'createdAt': t.createdAt.toUtc().toIso8601String(),
             'updatedAt': t.updatedAt.toUtc().toIso8601String(),
+            'recurringRuleId': t.recurringRuleId,
           },
       ],
     });
@@ -186,7 +207,10 @@ class BackupData {
 
     final categories = _parseCategories(root['categories']);
     final byId = {for (final c in categories) c.id: c};
-    final transactions = _parseTransactions(root['transactions'], byId);
+    final rules = _parseRules(root['recurringRules'], byId);
+    final transactions = _parseTransactions(root['transactions'], byId, {
+      for (final r in rules) r.id,
+    });
 
     final exported = root['exportedAt'];
     return BackupData(
@@ -195,6 +219,7 @@ class BackupData {
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       settings: BackupSettings.fromJson(root['settings']),
       categories: categories,
+      recurringRules: rules,
       transactions: transactions,
     );
   }
@@ -244,13 +269,92 @@ List<CategoryRow> _parseCategories(Object? json) {
   return rows;
 }
 
+/// Backups made before repeating transactions existed have no
+/// `recurringRules`; that restores as "no rules".
+List<RecurringRuleRow> _parseRules(
+  Object? json,
+  Map<int, CategoryRow> categories,
+) {
+  if (json == null) return const [];
+  if (json is! List) throw _damaged('recurring rules', 'not a list');
+  final rows = <RecurringRuleRow>[];
+  final ids = <int>{};
+  for (final item in json) {
+    if (item is! Map<String, Object?>) {
+      throw _damaged('recurring rule', 'not an object');
+    }
+    final id = item['id'];
+    if (id is! int || id < 1 || !ids.add(id)) {
+      throw _damaged('recurring rule', 'bad or repeated id');
+    }
+    final where = 'recurring rule $id';
+    final amount = item['amountCents'];
+    if (amount is! int || amount < 1 || amount > maxAmountCents) {
+      throw _damaged(where, 'amount out of range');
+    }
+    final type = _type(item['type']);
+    if (type == null) throw _damaged(where, 'unknown type');
+    final category = categories[item['categoryId']];
+    if (category == null) throw _damaged(where, 'unknown category');
+    if (category.type != type) throw _damaged(where, 'category type differs');
+    final unit = item['unit'] is String
+        ? RecurrenceUnit.values.asNameMap()[item['unit']]
+        : null;
+    if (unit == null) throw _damaged(where, 'unknown repeat unit');
+    final interval = item['interval'];
+    if (interval is! int || interval < 1 || interval > maxRecurrenceInterval) {
+      throw _damaged(where, 'repeat interval out of range');
+    }
+    final start = item['startDate'];
+    if (start is! String || !_isRealDate(start)) {
+      throw _damaged(where, 'start date is not a real date');
+    }
+    final end = item['endDate'];
+    if (end != null &&
+        (end is! String || !_isRealDate(end) || end.compareTo(start) < 0)) {
+      throw _damaged(where, 'end date is not valid');
+    }
+    final next = item['nextIndex'];
+    if (next is! int || next < 0 || next > 100000000) {
+      throw _damaged(where, 'bad schedule position');
+    }
+    final note = item['note'];
+    if (note != null && (note is! String || note.length > maxNoteLength)) {
+      throw _damaged(where, 'bad note');
+    }
+    final created = _time(item['createdAt']);
+    if (created == null) throw _damaged(where, 'bad timestamp');
+    final clean = (note as String?)?.trim();
+    rows.add(
+      RecurringRuleRow(
+        id: id,
+        amountCents: amount,
+        type: type,
+        categoryId: category.id,
+        note: clean == null || clean.isEmpty ? null : clean,
+        unit: unit,
+        interval: interval,
+        startDate: start,
+        endDate: end as String?,
+        isActive: item['isActive'] != false,
+        nextIndex: next,
+        createdAt: created,
+      ),
+    );
+  }
+  return rows;
+}
+
 List<TransactionRow> _parseTransactions(
   Object? json,
   Map<int, CategoryRow> categories,
+  Set<int> ruleIds,
 ) {
   if (json is! List) throw _damaged('transactions', 'missing');
   final rows = <TransactionRow>[];
   final ids = <int>{};
+  // A rule makes at most one transaction per day.
+  final ruleDays = <String>{};
   for (final item in json) {
     if (item is! Map<String, Object?>) {
       throw _damaged('transaction', 'not an object');
@@ -282,6 +386,15 @@ List<TransactionRow> _parseTransactions(
     if (created == null || updated == null) {
       throw _damaged(where, 'bad timestamp');
     }
+    final ruleId = item['recurringRuleId'];
+    if (ruleId != null) {
+      if (ruleId is! int || !ruleIds.contains(ruleId)) {
+        throw _damaged(where, 'unknown repeating rule');
+      }
+      if (!ruleDays.add('$ruleId:$date')) {
+        throw _damaged(where, 'repeating rule has two on one day');
+      }
+    }
     final clean = (note as String?)?.trim();
     rows.add(
       TransactionRow(
@@ -293,6 +406,7 @@ List<TransactionRow> _parseTransactions(
         note: clean == null || clean.isEmpty ? null : clean,
         createdAt: created,
         updatedAt: updated,
+        recurringRuleId: ruleId as int?,
       ),
     );
   }

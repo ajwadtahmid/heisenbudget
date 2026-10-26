@@ -8,8 +8,11 @@ import 'package:heisenbudget/data/backup/backup_data.dart';
 import 'package:heisenbudget/data/backup/backup_service.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
+import 'package:heisenbudget/data/recurring/recurring_service.dart';
+import 'package:heisenbudget/data/repositories/recurring_repository.dart';
 import 'package:heisenbudget/data/repositories/settings_repository.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
+import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -358,6 +361,7 @@ void main() {
         exportedAt: DateTime.utc(2026, 10, 25),
         settings: const BackupSettings(currency: 'EUR'),
         categories: [before.categories.first],
+        recurringRules: const [],
         transactions: [
           TransactionRow(
             id: 1,
@@ -392,6 +396,229 @@ void main() {
       expect(
         json.keys,
         containsAll(['settings', 'categories', 'transactions']),
+      );
+    });
+  });
+
+  group('repeating rules in backups', () {
+    Map<String, Object?> withRule() {
+      final b = validBackup();
+      b['recurringRules'] = <Object?>[
+        {
+          'id': 4,
+          'amountCents': 1250,
+          'type': 'expense',
+          'categoryId': 1,
+          'note': 'Lunch club',
+          'unit': 'week',
+          'interval': 2,
+          'startDate': '2026-10-05',
+          'endDate': '2027-01-01',
+          'isActive': false,
+          'nextIndex': 3,
+          'createdAt': '2026-10-05T08:00:00Z',
+        },
+      ];
+      txOf(b)['recurringRuleId'] = 4;
+      return b;
+    }
+
+    Map<String, Object?> ruleOf(Map<String, Object?> b) =>
+        (b['recurringRules']! as List).first as Map<String, Object?>;
+
+    test('reads a rule and the transaction linked to it', () {
+      final data = BackupData.parse(bytesOf(withRule()));
+      final rule = data.recurringRules.single;
+      expect(rule.unit, RecurrenceUnit.week);
+      expect(rule.interval, 2);
+      expect(rule.isActive, isFalse);
+      expect(rule.nextIndex, 3);
+      expect(rule.endDate, '2027-01-01');
+      expect(data.transactions.single.recurringRuleId, 4);
+    });
+
+    test('a backup from before repeating rules still restores, with none', () {
+      final data = BackupData.parse(bytesOf(validBackup()));
+      expect(data.recurringRules, isEmpty);
+      expect(data.transactions.single.recurringRuleId, isNull);
+    });
+
+    void rejects(String why, void Function(Map<String, Object?> b) break_) {
+      test('rejects: $why', () {
+        final b = withRule();
+        break_(b);
+        expect(
+          () => BackupData.parse(bytesOf(b)),
+          throwsA(isA<BackupFormatException>()),
+        );
+      });
+    }
+
+    rejects('rules that are not a list', (b) => b['recurringRules'] = 5);
+    rejects('a repeated rule id', (b) {
+      (b['recurringRules']! as List).add(Map.of(ruleOf(b)));
+    });
+    rejects(
+      'a rule with an unknown category',
+      (b) => ruleOf(b)['categoryId'] = 99,
+    );
+    rejects(
+      'a rule whose category is the other type',
+      (b) => ruleOf(b)['categoryId'] = 2,
+    );
+    rejects('a zero amount', (b) => ruleOf(b)['amountCents'] = 0);
+    rejects('an unknown unit', (b) => ruleOf(b)['unit'] = 'fortnight');
+    rejects('interval 0', (b) => ruleOf(b)['interval'] = 0);
+    rejects('interval 366', (b) => ruleOf(b)['interval'] = 366);
+    rejects(
+      'a start date that is not real',
+      (b) => ruleOf(b)['startDate'] = '2026-02-30',
+    );
+    rejects(
+      'an end date before the start',
+      (b) => ruleOf(b)['endDate'] = '2026-10-04',
+    );
+    rejects('a negative position', (b) => ruleOf(b)['nextIndex'] = -1);
+    rejects(
+      'a transaction pointing at a missing rule',
+      (b) => txOf(b)['recurringRuleId'] = 9,
+    );
+    rejects('two transactions of one rule on one day', (b) {
+      final second = Map<String, Object?>.of(txOf(b))..['id'] = 2;
+      (b['transactions']! as List).add(second);
+    });
+
+    test('a rule can have several transactions on different days', () {
+      final b = withRule();
+      final second = Map<String, Object?>.of(txOf(b))
+        ..['id'] = 2
+        ..['date'] = '2026-10-19';
+      (b['transactions']! as List).add(second);
+      expect(BackupData.parse(bytesOf(b)).transactions, hasLength(2));
+    });
+
+    group('with a database', () {
+      late AppDatabase db;
+      late SettingsRepository settings;
+      late BackupService service;
+
+      setUp(() async {
+        SharedPreferences.setMockInitialValues({});
+        db = AppDatabase.memory();
+        settings = SettingsRepository(
+          await SharedPreferences.getInstance(),
+          defaultCurrency: 'USD',
+        );
+        service = BackupService(db, settings);
+      });
+      tearDown(() => db.close());
+
+      Future<void> addRule() async {
+        final all = await CategoryRepository(db).watchAll().first;
+        final rent = all.firstWhere((c) => c.name == 'Rent');
+        await RecurringRepository(db).addWithRule(
+          TransactionInput(
+            amountCents: 120000,
+            type: TransactionType.expense,
+            date: DateTime(2026, 9, 1),
+            categoryId: rent.id,
+            note: 'Flat',
+          ),
+          RecurringInput(
+            amountCents: 120000,
+            type: TransactionType.expense,
+            categoryId: rent.id,
+            note: 'Flat',
+            unit: RecurrenceUnit.month,
+            interval: 1,
+            start: DateTime(2026, 9, 1),
+          ),
+        );
+        await RecurringService(db).catchUp(DateTime(2026, 10, 15));
+      }
+
+      test('rules and their links survive a backup and restore', () async {
+        await addRule();
+        final before = await service.snapshot(now: DateTime.utc(2026, 10, 25));
+        final text = before.encode();
+
+        final other = AppDatabase.memory();
+        addTearDown(other.close);
+        SharedPreferences.setMockInitialValues({});
+        final target = BackupService(
+          other,
+          SettingsRepository(
+            await SharedPreferences.getInstance(),
+            defaultCurrency: 'USD',
+          ),
+        );
+        await target.restore(
+          BackupData.parse(Uint8List.fromList(utf8.encode(text))),
+        );
+        final after = await target.snapshot(now: DateTime.utc(2026, 10, 25));
+
+        expect(after.recurringRules.length, 1);
+        final a = after.recurringRules.single;
+        final b = before.recurringRules.single;
+        expect(
+          (
+            a.id,
+            a.amountCents,
+            a.unit,
+            a.interval,
+            a.startDate,
+            a.nextIndex,
+            a.isActive,
+          ),
+          (
+            b.id,
+            b.amountCents,
+            b.unit,
+            b.interval,
+            b.startDate,
+            b.nextIndex,
+            b.isActive,
+          ),
+        );
+        expect(
+          after.transactions.map((t) => t.recurringRuleId),
+          before.transactions.map((t) => t.recurringRuleId),
+        );
+        expect(after.transactions.map((t) => t.recurringRuleId).toSet(), {
+          a.id,
+        });
+      });
+
+      test('restoring replaces the rules that were there', () async {
+        await addRule();
+        final withRules = await service.snapshot(
+          now: DateTime.utc(2026, 10, 25),
+        );
+        // A backup with no rules wipes the existing one.
+        await service.restore(BackupData.parse(bytesOf(validBackup())));
+        expect(await db.select(db.recurringRules).get(), isEmpty);
+        // And a backup with the rule brings it back, links included.
+        await service.restore(withRules);
+        expect(await db.select(db.recurringRules).get(), hasLength(1));
+        final linked = (await db.select(db.transactions).get()).where(
+          (t) => t.recurringRuleId != null,
+        );
+        expect(linked, hasLength(withRules.transactions.length));
+      });
+
+      test(
+        'after a restore the next catch-up continues without duplicates',
+        () async {
+          await addRule();
+          final snap = await service.snapshot(now: DateTime.utc(2026, 10, 25));
+          await service.restore(snap);
+          final result = await RecurringService(db)
+              .catchUp(DateTime(2026, 10, 15));
+          expect(result.isEmpty, isTrue);
+          final next = await RecurringService(db)
+              .catchUp(DateTime(2026, 11, 2));
+          expect(next.count, 1);
+        },
       );
     });
   });
