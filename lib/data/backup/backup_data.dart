@@ -8,6 +8,7 @@ import '../../core/constants.dart';
 import '../../core/currencies.dart';
 import '../../core/design/app_colors.dart' show AccentColor;
 import '../../core/design/app_font.dart' show AppFont;
+import '../../domain/budget.dart';
 import '../../domain/iso_date.dart';
 import '../../domain/recurrence.dart';
 import '../../domain/transaction_type.dart';
@@ -188,7 +189,9 @@ class BackupData {
           {
             'id': b.id,
             'categoryId': b.categoryId,
-            'startMonth': b.startMonth,
+            'unit': b.unit.name,
+            'repeats': b.repeats,
+            'start': b.start,
             'amountCents': b.amountCents,
             'createdAt': b.createdAt.toUtc().toIso8601String(),
           },
@@ -246,7 +249,12 @@ class BackupData {
     final byId = {for (final c in categories) c.id: c};
     final rules = _parseRules(root['recurringRules'], byId);
     final favorites = _parseFavorites(root['favorites'], byId);
-    final limits = _parseBudgetLimits(root['budgetLimits'], byId);
+    final settings = BackupSettings.fromJson(root['settings']);
+    final limits = _parseBudgetLimits(
+      root['budgetLimits'],
+      byId,
+      monthStartDay: settings.monthStartDay ?? 1,
+    );
     final transactions = _parseTransactions(root['transactions'], byId, {
       for (final r in rules) r.id,
     });
@@ -256,7 +264,7 @@ class BackupData {
       exportedAt:
           (exported is String ? DateTime.tryParse(exported) : null) ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
-      settings: BackupSettings.fromJson(root['settings']),
+      settings: settings,
       categories: categories,
       recurringRules: rules,
       favorites: favorites,
@@ -389,11 +397,14 @@ List<RecurringRuleRow> _parseRules(
 }
 
 /// Backups made before budgets existed have no `budgetLimits`; that restores
-/// as "no limits".
+/// as "no limits". Limits written when budgets were monthly only have a
+/// `startMonth` (`2026-10`) and no `unit`: they read as repeating monthly
+/// limits starting on that budget month's first day.
 List<BudgetLimitRow> _parseBudgetLimits(
   Object? json,
-  Map<int, CategoryRow> categories,
-) {
+  Map<int, CategoryRow> categories, {
+  required int monthStartDay,
+}) {
   if (json == null) return const [];
   if (json is! List) throw _damaged('budget limits', 'not a list');
   if (json.length > 10000) throw _damaged('budget limits', 'far too many');
@@ -417,14 +428,38 @@ List<BudgetLimitRow> _parseBudgetLimits(
         throw _damaged(where, 'not an expense category');
       }
     }
-    final start = item['startMonth'];
-    if (start is! String ||
-        !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(start)) {
-      throw _damaged(where, 'bad month');
+
+    // The older monthly form: only `startMonth`.
+    final legacyMonth = item['startMonth'];
+    final BudgetUnit unit;
+    final String start;
+    if (item['unit'] == null && legacyMonth != null) {
+      if (legacyMonth is! String ||
+          !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(legacyMonth)) {
+        throw _damaged(where, 'bad month');
+      }
+      unit = BudgetUnit.month;
+      start = '$legacyMonth-${monthStartDay.toString().padLeft(2, '0')}';
+    } else {
+      final name = item['unit'];
+      final parsed = name is String
+          ? BudgetUnit.values.asNameMap()[name]
+          : null;
+      if (parsed == null) throw _damaged(where, 'unknown period');
+      unit = parsed;
+      final date = item['start'];
+      if (date is! String || !_isRealDate(date)) {
+        throw _damaged(where, 'start is not a real date');
+      }
+      start = date;
     }
-    // One row per category and month; the database enforces it too.
+    final repeats = item['repeats'];
+    if (repeats != null && repeats is! bool) {
+      throw _damaged(where, 'bad repeat setting');
+    }
+    // One row per category and first day; the database enforces it too.
     if (!seen.add('$categoryId:$start')) {
-      throw _damaged(where, 'two limits for one month');
+      throw _damaged(where, 'two limits for one start');
     }
     final amount = item['amountCents'];
     if (amount != null &&
@@ -437,7 +472,9 @@ List<BudgetLimitRow> _parseBudgetLimits(
       BudgetLimitRow(
         id: id,
         categoryId: categoryId as int?,
-        startMonth: start,
+        unit: unit,
+        repeats: repeats as bool? ?? true,
+        start: start,
         amountCents: amount as int?,
         createdAt: created,
       ),

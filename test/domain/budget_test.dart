@@ -119,61 +119,377 @@ void main() {
     });
   });
 
-  group('resolveLimit', () {
-    LimitEntry e(int? cat, BudgetMonth start, int? cents) =>
-        LimitEntry(categoryId: cat, start: start, amountCents: cents);
-
-    test('no entries means no limit', () {
-      expect(resolveLimit(const [], 1, bm(2026, 10)), isNull);
+  group('weekStartOf', () {
+    test('Monday weeks', () {
+      expect(weekStartOf(d(2026, 10, 15), 1), d(2026, 10, 12)); // Thursday
+      expect(weekStartOf(d(2026, 10, 12), 1), d(2026, 10, 12));
+      expect(weekStartOf(d(2026, 10, 18), 1), d(2026, 10, 12)); // Sunday
+      expect(weekStartOf(d(2026, 10, 19), 1), d(2026, 10, 19));
     });
 
-    test('a limit applies from its month onward', () {
-      final entries = [e(1, bm(2026, 9), 20000)];
-      expect(resolveLimit(entries, 1, bm(2026, 8)), isNull);
-      expect(resolveLimit(entries, 1, bm(2026, 9)), 20000);
-      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
-      expect(resolveLimit(entries, 1, bm(2030, 1)), 20000);
+    test('Sunday and Saturday weeks, across month ends', () {
+      expect(weekStartOf(d(2026, 10, 15), 7), d(2026, 10, 11));
+      expect(weekStartOf(d(2026, 10, 15), 6), d(2026, 10, 10));
+      expect(weekStartOf(d(2026, 11, 1), 1), d(2026, 10, 26));
+    });
+  });
+
+  group('currentRangeFor', () {
+    DateRange range(
+      BudgetUnit u,
+      DateTime date, {
+      int month = 1,
+      int week = 1,
+      DateTime? anchor,
+    }) => currentRangeFor(
+      u,
+      date,
+      monthStartDay: month,
+      weekStartDay: week,
+      anchor: anchor,
+    );
+
+    test('a week starts on the chosen weekday', () {
+      expect(
+        range(BudgetUnit.week, d(2026, 10, 15)),
+        DateRange(d(2026, 10, 12), d(2026, 10, 18)),
+      );
+      expect(
+        range(BudgetUnit.week, d(2026, 10, 15), week: 7),
+        DateRange(d(2026, 10, 11), d(2026, 10, 17)),
+      );
     });
 
-    test('a later entry replaces it from then on, and not before', () {
-      final entries = [e(1, bm(2026, 9), 20000), e(1, bm(2026, 11), 30000)];
-      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
-      expect(resolveLimit(entries, 1, bm(2026, 11)), 30000);
-      expect(resolveLimit(entries, 1, bm(2027, 5)), 30000);
+    test('a fortnight without an anchor is this week and the next', () {
+      expect(
+        range(BudgetUnit.fortnight, d(2026, 10, 15)),
+        DateRange(d(2026, 10, 12), d(2026, 10, 25)),
+      );
+    });
+
+    test('a fortnight with an anchor counts 14-day blocks from it', () {
+      final anchor = d(2026, 10, 2);
+      expect(
+        range(BudgetUnit.fortnight, d(2026, 10, 15), anchor: anchor),
+        DateRange(d(2026, 10, 2), d(2026, 10, 15)),
+      );
+      expect(
+        range(BudgetUnit.fortnight, d(2026, 10, 16), anchor: anchor),
+        DateRange(d(2026, 10, 16), d(2026, 10, 29)),
+      );
+      expect(
+        range(BudgetUnit.fortnight, d(2026, 10, 1), anchor: anchor),
+        DateRange(d(2026, 9, 18), d(2026, 10, 1)),
+      );
+    });
+
+    test('a month follows the budget-month start day', () {
+      expect(
+        range(BudgetUnit.month, d(2026, 10, 15)),
+        DateRange(d(2026, 10, 1), d(2026, 10, 31)),
+      );
+      expect(
+        range(BudgetUnit.month, d(2026, 10, 15), month: 25),
+        DateRange(d(2026, 9, 25), d(2026, 10, 24)),
+      );
+    });
+
+    test('neighbouring periods are exactly adjacent', () {
+      for (final unit in BudgetUnit.values) {
+        var r = range(unit, d(2026, 10, 15), month: 25);
+        for (var i = 0; i < 30; i++) {
+          final next = nextRange(r, unit, 25);
+          expect(
+            next.start,
+            DateTime(r.end.year, r.end.month, r.end.day + 1),
+            reason: '$unit $i',
+          );
+          expect(previousRange(next, unit, 25), r, reason: '$unit back $i');
+          r = next;
+        }
+      }
+    });
+
+    test('a daylight-saving change never shifts a week or fortnight', () {
+      var r = range(BudgetUnit.week, d(2026, 3, 1));
+      for (var i = 0; i < 20; i++) {
+        expect(r.lengthInDays, 7);
+        r = nextRange(r, BudgetUnit.week, 1);
+      }
+      var f = range(BudgetUnit.fortnight, d(2026, 10, 15));
+      for (var i = 0; i < 20; i++) {
+        expect(f.lengthInDays, 14);
+        f = nextRange(f, BudgetUnit.fortnight, 1);
+      }
+    });
+  });
+
+  group('resolveBudget', () {
+    LimitEntry e(
+      int? cat,
+      DateTime start,
+      int? cents, {
+      BudgetUnit unit = BudgetUnit.month,
+      bool repeats = true,
+    }) => LimitEntry(
+      categoryId: cat,
+      unit: unit,
+      repeats: repeats,
+      start: start,
+      amountCents: cents,
+    );
+
+    ResolvedBudget? at(
+      List<LimitEntry> entries,
+      int? cat,
+      DateTime date, {
+      int month = 1,
+    }) => resolveBudget(entries, cat, date, monthStartDay: month);
+
+    test('no entries means no budget', () {
+      expect(at(const [], 1, d(2026, 10, 15)), isNull);
+    });
+
+    test('a repeating monthly limit applies from its start onward', () {
+      final entries = [e(1, d(2026, 9, 1), 20000)];
+      expect(at(entries, 1, d(2026, 8, 31)), isNull);
+      final sep = at(entries, 1, d(2026, 9, 10))!;
+      expect(sep.limit, 20000);
+      expect(sep.range, DateRange(d(2026, 9, 1), d(2026, 9, 30)));
+      expect(
+        at(entries, 1, d(2026, 10, 15))!.range,
+        DateRange(d(2026, 10, 1), d(2026, 10, 31)),
+      );
+      expect(at(entries, 1, d(2030, 1, 5))!.limit, 20000);
+    });
+
+    test('a weekly limit repeats in 7-day blocks from its first day', () {
+      final entries = [e(1, d(2026, 10, 12), 5000, unit: BudgetUnit.week)];
+      expect(
+        at(entries, 1, d(2026, 10, 15))!.range,
+        DateRange(d(2026, 10, 12), d(2026, 10, 18)),
+      );
+      expect(
+        at(entries, 1, d(2026, 10, 19))!.range,
+        DateRange(d(2026, 10, 19), d(2026, 10, 25)),
+      );
+      expect(at(entries, 1, d(2026, 12, 25))!.range.lengthInDays, 7);
+      expect(
+        at(entries, 1, d(2026, 10, 11)),
+        isNull,
+        reason: 'before it starts',
+      );
+    });
+
+    test('a fortnightly limit repeats in 14-day blocks', () {
+      final entries = [e(1, d(2026, 10, 2), 9000, unit: BudgetUnit.fortnight)];
+      expect(
+        at(entries, 1, d(2026, 10, 15))!.range,
+        DateRange(d(2026, 10, 2), d(2026, 10, 15)),
+      );
+      expect(
+        at(entries, 1, d(2026, 10, 16))!.range,
+        DateRange(d(2026, 10, 16), d(2026, 10, 29)),
+      );
+    });
+
+    test('a one-time limit applies to its first period only', () {
+      for (final unit in BudgetUnit.values) {
+        final start = unit == BudgetUnit.month
+            ? d(2026, 10, 1)
+            : d(2026, 10, 12);
+        final entries = [e(1, start, 5000, unit: unit, repeats: false)];
+        final first = at(entries, 1, start)!.range;
+        expect(
+          at(entries, 1, first.end)!.limit,
+          5000,
+          reason: '$unit last day',
+        );
+        expect(
+          at(
+            entries,
+            1,
+            DateTime(first.end.year, first.end.month, first.end.day + 1),
+          ),
+          isNull,
+          reason: '$unit after it ends',
+        );
+        expect(
+          at(entries, 1, d(2027, 6, 1)),
+          isNull,
+          reason: '$unit much later',
+        );
+      }
+    });
+
+    test('a later entry replaces it from its own start and not before', () {
+      final entries = [e(1, d(2026, 9, 1), 20000), e(1, d(2026, 11, 1), 30000)];
+      expect(at(entries, 1, d(2026, 10, 15))!.limit, 20000);
+      expect(at(entries, 1, d(2026, 11, 1))!.limit, 30000);
+      expect(at(entries, 1, d(2027, 5, 1))!.limit, 30000);
     });
 
     test('the order of the entries does not matter', () {
-      final entries = [e(1, bm(2026, 11), 30000), e(1, bm(2026, 9), 20000)];
-      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
+      final entries = [e(1, d(2026, 11, 1), 30000), e(1, d(2026, 9, 1), 20000)];
+      expect(at(entries, 1, d(2026, 10, 15))!.limit, 20000);
     });
 
-    test('a "no limit" entry ends the limit from that month on', () {
-      final entries = [e(1, bm(2026, 9), 20000), e(1, bm(2026, 11), null)];
-      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
-      expect(resolveLimit(entries, 1, bm(2026, 11)), isNull);
-      expect(resolveLimit(entries, 1, bm(2027, 1)), isNull);
+    test('"no budget" ends it from that day on', () {
+      final entries = [e(1, d(2026, 9, 1), 20000), e(1, d(2026, 11, 1), null)];
+      expect(at(entries, 1, d(2026, 10, 15))!.limit, 20000);
+      expect(at(entries, 1, d(2026, 11, 1)), isNull);
+      expect(at(entries, 1, d(2027, 3, 1)), isNull);
     });
 
-    test('a limit can be set again after being removed', () {
+    test('changing the period replaces the old one from the new start', () {
       final entries = [
-        e(1, bm(2026, 9), 20000),
-        e(1, bm(2026, 10), null),
-        e(1, bm(2027, 1), 25000),
+        e(1, d(2026, 9, 1), 20000),
+        e(1, d(2026, 10, 12), 6000, unit: BudgetUnit.week),
       ];
-      expect(resolveLimit(entries, 1, bm(2026, 12)), isNull);
-      expect(resolveLimit(entries, 1, bm(2027, 1)), 25000);
+      expect(at(entries, 1, d(2026, 10, 5))!.entry.unit, BudgetUnit.month);
+      final now = at(entries, 1, d(2026, 10, 15))!;
+      expect(now.entry.unit, BudgetUnit.week);
+      expect(now.limit, 6000);
     });
 
-    test('categories and the overall limit are separate', () {
+    test('a new budget after a one-time one ended replaces it', () {
       final entries = [
-        e(1, bm(2026, 9), 20000),
-        e(2, bm(2026, 9), 5000),
-        e(null, bm(2026, 9), 90000),
+        e(1, d(2026, 9, 1), 20000, repeats: false),
+        e(1, d(2026, 11, 1), 30000),
       ];
-      expect(resolveLimit(entries, 1, bm(2026, 10)), 20000);
-      expect(resolveLimit(entries, 2, bm(2026, 10)), 5000);
-      expect(resolveLimit(entries, null, bm(2026, 10)), 90000);
-      expect(resolveLimit(entries, 3, bm(2026, 10)), isNull);
+      expect(at(entries, 1, d(2026, 9, 20))!.limit, 20000);
+      expect(at(entries, 1, d(2026, 10, 15)), isNull);
+      expect(at(entries, 1, d(2026, 11, 20))!.limit, 30000);
+    });
+
+    test('categories and all spending are separate', () {
+      final entries = [
+        e(1, d(2026, 9, 1), 20000),
+        e(2, d(2026, 9, 1), 5000),
+        e(null, d(2026, 9, 1), 90000),
+      ];
+      expect(at(entries, 1, d(2026, 10, 1))!.limit, 20000);
+      expect(at(entries, 2, d(2026, 10, 1))!.limit, 5000);
+      expect(at(entries, null, d(2026, 10, 1))!.limit, 90000);
+      expect(at(entries, 3, d(2026, 10, 1)), isNull);
+    });
+
+    test('a monthly limit follows the start day setting', () {
+      final entries = [e(1, d(2026, 9, 25), 20000)];
+      final r = at(entries, 1, d(2026, 10, 10), month: 25)!;
+      expect(r.range, DateRange(d(2026, 9, 25), d(2026, 10, 24)));
+    });
+  });
+
+  group('pastPeriods', () {
+    LimitEntry e(
+      DateTime start,
+      int? cents, {
+      BudgetUnit unit = BudgetUnit.month,
+      bool repeats = true,
+      int? cat = 1,
+    }) => LimitEntry(
+      categoryId: cat,
+      unit: unit,
+      repeats: repeats,
+      start: start,
+      amountCents: cents,
+    );
+
+    List<PastPeriod> past(
+      List<LimitEntry> entries,
+      DateTime today, {
+      int limit = 12,
+    }) => pastPeriods(entries, today, monthStartDay: 1, limit: limit);
+
+    test(
+      'lists finished monthly periods, newest first, not the current one',
+      () {
+        final p = past([e(d(2026, 7, 1), 20000)], d(2026, 10, 15));
+        expect(p.map((x) => x.range.start), [
+          d(2026, 9, 1),
+          d(2026, 8, 1),
+          d(2026, 7, 1),
+        ]);
+        expect(p.every((x) => x.limit == 20000), isTrue);
+      },
+    );
+
+    test('nothing before the budget started', () {
+      expect(past([e(d(2026, 10, 1), 20000)], d(2026, 10, 15)), isEmpty);
+    });
+
+    test('weekly periods are 7-day blocks', () {
+      final p = past([
+        e(d(2026, 10, 5), 5000, unit: BudgetUnit.week),
+      ], d(2026, 10, 20));
+      expect(p.map((x) => x.range.start), [d(2026, 10, 12), d(2026, 10, 5)]);
+      expect(p.every((x) => x.range.lengthInDays == 7), isTrue);
+    });
+
+    test('a one-time budget gives one past period once it is over', () {
+      final entries = [e(d(2026, 8, 1), 20000, repeats: false)];
+      expect(past(entries, d(2026, 8, 20)), isEmpty, reason: 'still running');
+      final p = past(entries, d(2026, 10, 15));
+      expect(p, hasLength(1));
+      expect(p.single.range, DateRange(d(2026, 8, 1), d(2026, 8, 31)));
+    });
+
+    test('each period shows the amount in force then', () {
+      final p = past([
+        e(d(2026, 6, 1), 20000),
+        e(d(2026, 9, 1), 30000),
+      ], d(2026, 10, 15));
+      final byStart = {for (final x in p) x.range.start: x.limit};
+      expect(byStart[d(2026, 6, 1)], 20000);
+      expect(byStart[d(2026, 8, 1)], 20000);
+      expect(byStart[d(2026, 9, 1)], 30000);
+    });
+
+    test('a stopped budget keeps its history up to the day it stopped', () {
+      final p = past([
+        e(d(2026, 6, 1), 20000),
+        e(d(2026, 9, 1), null),
+      ], d(2026, 10, 15));
+      expect(p.map((x) => x.range.start), [
+        d(2026, 8, 1),
+        d(2026, 7, 1),
+        d(2026, 6, 1),
+      ]);
+    });
+
+    test(
+      'changing the period: the old periods end where the new one begins',
+      () {
+        final p = past([
+          e(d(2026, 7, 1), 20000),
+          e(d(2026, 10, 1), 6000, unit: BudgetUnit.week),
+        ], d(2026, 10, 20));
+        final months = p
+            .where((x) => x.entry.unit == BudgetUnit.month)
+            .map((x) => x.range.start)
+            .toList();
+        expect(months, [d(2026, 9, 1), d(2026, 8, 1), d(2026, 7, 1)]);
+        final weeks = p
+            .where((x) => x.entry.unit == BudgetUnit.week)
+            .map((x) => x.range.start)
+            .toList();
+        expect(weeks, [d(2026, 10, 8), d(2026, 10, 1)]);
+      },
+    );
+
+    test('the limit caps how many are returned, newest kept', () {
+      final p = past([e(d(2025, 1, 1), 100)], d(2026, 10, 15), limit: 5);
+      expect(p, hasLength(5));
+      expect(p.first.range.start, d(2026, 9, 1));
+    });
+
+    test('a period ending yesterday is finished; one ending today is not', () {
+      final entries = [e(d(2026, 9, 1), 100)];
+      expect(past(entries, d(2026, 10, 1)).map((x) => x.range.start), [
+        d(2026, 9, 1),
+      ]);
+      expect(past(entries, d(2026, 9, 30)), isEmpty);
     });
   });
 

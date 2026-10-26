@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../core/constants.dart';
 import '../../domain/budget.dart';
+import '../../domain/iso_date.dart';
 import '../../domain/transaction_type.dart';
 import '../database/app_database.dart';
 
@@ -9,7 +10,9 @@ import '../database/app_database.dart';
 extension BudgetLimitEntry on BudgetLimitRow {
   LimitEntry get entry => LimitEntry(
     categoryId: categoryId,
-    start: BudgetMonth.parse(startMonth),
+    unit: unit,
+    repeats: repeats,
+    start: fromIsoDate(start),
     amountCents: amountCents,
   );
 }
@@ -21,10 +24,10 @@ class BudgetRepository {
 
   $BudgetLimitsTable get _t => _db.budgetLimits;
 
-  /// Every limit row, oldest start month first.
+  /// Every limit row, oldest start first.
   Stream<List<BudgetLimitRow>> watchAll() {
     return (_db.select(_t)..orderBy([
-          (l) => OrderingTerm.asc(l.startMonth),
+          (l) => OrderingTerm.asc(l.start),
           (l) => OrderingTerm.asc(l.id),
         ]))
         .watch();
@@ -33,20 +36,24 @@ class BudgetRepository {
   /// Every limit row once, without watching for changes.
   Future<List<BudgetLimitRow>> getAll() {
     return (_db.select(_t)..orderBy([
-          (l) => OrderingTerm.asc(l.startMonth),
+          (l) => OrderingTerm.asc(l.start),
           (l) => OrderingTerm.asc(l.id),
         ]))
         .get();
   }
 
-  /// From [month] onward the limit for [categoryId] (null = all spending) is
-  /// [amountCents]; a null amount means "no limit from this month on".
+  /// From [start] (the first day of a period) the budget for [categoryId]
+  /// (null = all spending) is [amountCents], repeating every [unit] or, when
+  /// [repeats] is false, for that one period only. A null amount means "no
+  /// budget from this period on".
   ///
-  /// This adds a row, or replaces the row that already starts in [month] for
-  /// the same category. Rows for other months are left alone, so changing a
-  /// limit never rewrites a month before [month].
+  /// This adds a row, or replaces the row that already starts on [start] for
+  /// the same category. Rows for other days are left alone, so a change never
+  /// rewrites an earlier period.
   Future<void> setLimit({
-    required BudgetMonth month,
+    required DateTime start,
+    required BudgetUnit unit,
+    bool repeats = true,
     int? categoryId,
     int? amountCents,
   }) {
@@ -54,6 +61,7 @@ class BudgetRepository {
         (amountCents < 1 || amountCents > maxAmountCents)) {
       throw RangeError.range(amountCents, 1, maxAmountCents, 'amountCents');
     }
+    final day = toIsoDate(dateOnly(start));
     return _db.transaction(() async {
       if (categoryId != null) {
         final category = await (_db.select(
@@ -70,7 +78,7 @@ class BudgetRepository {
       final existing =
           await (_db.select(_t)..where(
                 (l) =>
-                    l.startMonth.equals(month.key) &
+                    l.start.equals(day) &
                     (categoryId == null
                         ? l.categoryId.isNull()
                         : l.categoryId.equals(categoryId)),
@@ -82,14 +90,20 @@ class BudgetRepository {
             .insert(
               BudgetLimitsCompanion.insert(
                 categoryId: Value(categoryId),
-                startMonth: month.key,
+                unit: unit,
+                repeats: Value(repeats),
+                start: day,
                 amountCents: Value(amountCents),
                 createdAt: DateTime.now(),
               ),
             );
       } else {
         await (_db.update(_t)..where((l) => l.id.equals(existing.id))).write(
-          BudgetLimitsCompanion(amountCents: Value(amountCents)),
+          BudgetLimitsCompanion(
+            unit: Value(unit),
+            repeats: Value(repeats),
+            amountCents: Value(amountCents),
+          ),
         );
       }
     });

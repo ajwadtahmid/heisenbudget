@@ -2,6 +2,7 @@
 import 'package:drift/drift.dart';
 
 import '../../core/category_icons.dart';
+import '../../domain/budget.dart';
 import '../../domain/recurrence.dart';
 import '../../domain/transaction_type.dart';
 
@@ -61,13 +62,15 @@ class Transactions extends Table {
   )();
 }
 
-/// A monthly spending limit. From [startMonth] onward the limit for a
-/// category (or, with no category, for all spending) is [amountCents], until a
-/// later row replaces it. A null amount means "no limit from this month on".
-/// Rows are never rewritten for past months: a change adds a row.
+/// A spending limit. From [start] (the first day of its first period) the
+/// limit for a category (or, with no category, for all spending) is
+/// [amountCents], repeating every [unit] or, when [repeats] is false, for that
+/// one period only. A later row replaces it; a null amount means "no budget
+/// from here". Rows are never rewritten for earlier periods: a change adds a
+/// row that starts with the current period.
 ///
-/// Unique per category and month; the database also keeps one overall row
-/// per month (see the partial indexes in `AppDatabase`).
+/// Unique per category and start day; the database also keeps one overall row
+/// per start day (see the partial indexes in `AppDatabase`).
 @DataClassName('BudgetLimitRow')
 class BudgetLimits extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -76,10 +79,16 @@ class BudgetLimits extends Table {
   IntColumn get categoryId =>
       integer().nullable().references(Categories, #id)();
 
-  /// `yyyy-MM`: the budget month this row starts in.
-  TextColumn get startMonth => text()();
+  /// Week, fortnight (every 2 weeks) or month.
+  TextColumn get unit => textEnum<BudgetUnit>()();
 
-  /// In cents, or null for "no limit from here".
+  /// False for a one-time budget (just its first period).
+  BoolColumn get repeats => boolean().withDefault(const Constant(true))();
+
+  /// `yyyy-MM-dd`: the first day of this row's first period.
+  TextColumn get start => text()();
+
+  /// In cents, or null for "no budget from here".
   IntColumn get amountCents =>
       integer().nullable().check(amountCents.isBiggerThanValue(0))();
   DateTimeColumn get createdAt => dateTime()();

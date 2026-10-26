@@ -79,34 +79,210 @@ void _checkStartDay(int startDay) {
   RangeError.checkValueInInterval(startDay, 1, maxBudgetStartDay, 'startDay');
 }
 
-/// One stored limit: from [start] onward the limit for [categoryId] (null =
-/// all spending) is [amountCents]; a null amount means "no limit from here".
+/// How long one budget period is.
+enum BudgetUnit {
+  week('Weekly', 7),
+  fortnight('Every 2 weeks', 14),
+  month('Monthly', 0);
+
+  const BudgetUnit(this.label, this.days);
+
+  /// "Weekly", "Every 2 weeks", "Monthly".
+  final String label;
+
+  /// Days in a period; 0 for months (they vary).
+  final int days;
+
+  /// "week", "2 weeks", "month": for sentences like "just this month".
+  String get noun => switch (this) {
+    BudgetUnit.week => 'week',
+    BudgetUnit.fortnight => '2 weeks',
+    BudgetUnit.month => 'month',
+  };
+}
+
+/// The first day of the week (starting on [weekStartDay], 1 = Monday to 7 =
+/// Sunday) that contains [date].
+DateTime weekStartOf(DateTime date, int weekStartDay) {
+  final day = dateOnly(date);
+  final back = (day.weekday - weekStartDay + 7) % 7;
+  return DateTime(day.year, day.month, day.day - back);
+}
+
+DateTime _addDays(DateTime d, int n) => DateTime(d.year, d.month, d.day + n);
+
+int _daysBetween(DateTime a, DateTime b) => DateTime.utc(
+  b.year,
+  b.month,
+  b.day,
+).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
+
+/// The period of [unit] that contains [date], for a budget that has not
+/// been created yet (or has no anchor): weeks start on [weekStartDay], a
+/// fortnight is the week plus the next one (or counts from [anchor]), and a
+/// month is the budget month for [monthStartDay].
+DateRange currentRangeFor(
+  BudgetUnit unit,
+  DateTime date, {
+  required int monthStartDay,
+  required int weekStartDay,
+  DateTime? anchor,
+}) {
+  switch (unit) {
+    case BudgetUnit.week:
+      final start = weekStartOf(date, weekStartDay);
+      return DateRange(start, _addDays(start, 6));
+    case BudgetUnit.fortnight:
+      final from = anchor == null
+          ? weekStartOf(date, weekStartDay)
+          : dateOnly(anchor);
+      final n = _floorDiv(_daysBetween(from, dateOnly(date)), 14);
+      final start = _addDays(from, n * 14);
+      return DateRange(start, _addDays(start, 13));
+    case BudgetUnit.month:
+      return BudgetMonth.containing(date, monthStartDay).range(monthStartDay);
+  }
+}
+
+int _floorDiv(int a, int b) => (a / b).floor();
+
+/// The period just before [range].
+DateRange previousRange(DateRange range, BudgetUnit unit, int monthStartDay) {
+  if (unit == BudgetUnit.month) {
+    return BudgetMonth.containing(
+      range.start,
+      monthStartDay,
+    ).shift(-1).range(monthStartDay);
+  }
+  final start = _addDays(range.start, -unit.days);
+  return DateRange(start, _addDays(start, unit.days - 1));
+}
+
+/// The period just after [range].
+DateRange nextRange(DateRange range, BudgetUnit unit, int monthStartDay) {
+  if (unit == BudgetUnit.month) {
+    return BudgetMonth.containing(
+      range.start,
+      monthStartDay,
+    ).shift(1).range(monthStartDay);
+  }
+  final start = _addDays(range.start, unit.days);
+  return DateRange(start, _addDays(start, unit.days - 1));
+}
+
+/// One stored limit. From [start] (the first day of its first period) the
+/// limit for [categoryId] (null = all spending) is [amountCents], repeating
+/// every [unit] or, when [repeats] is false, for that one period only. A
+/// null amount means "no budget from here". A later entry replaces it.
 class LimitEntry {
   const LimitEntry({
     required this.categoryId,
+    required this.unit,
+    required this.repeats,
     required this.start,
     required this.amountCents,
   });
 
   final int? categoryId;
-  final BudgetMonth start;
+  final BudgetUnit unit;
+  final bool repeats;
+  final DateTime start;
   final int? amountCents;
+
+  /// The period of this entry that contains [date]. Weeks and fortnights
+  /// count from [start]; months follow the budget-month start day.
+  DateRange rangeAt(DateTime date, int monthStartDay) {
+    switch (unit) {
+      case BudgetUnit.week:
+      case BudgetUnit.fortnight:
+        final n = _floorDiv(_daysBetween(start, dateOnly(date)), unit.days);
+        final first = _addDays(start, n * unit.days);
+        return DateRange(first, _addDays(first, unit.days - 1));
+      case BudgetUnit.month:
+        return BudgetMonth.containing(date, monthStartDay).range(monthStartDay);
+    }
+  }
+
+  /// This entry's first period.
+  DateRange firstRange(int monthStartDay) => rangeAt(start, monthStartDay);
 }
 
-/// The limit in force for [categoryId] (null = all spending) in [month]: the
-/// latest entry that starts in or before it. Null when there is none, or when
-/// the latest entry says "no limit".
-int? resolveLimit(
+/// A budget in force on some date: the entry, the period it is in, and the limit.
+class ResolvedBudget {
+  const ResolvedBudget({
+    required this.entry,
+    required this.range,
+    required this.limit,
+  });
+
+  final LimitEntry entry;
+  final DateRange range;
+  final int limit;
+}
+
+/// The budget for [categoryId] (null = all spending) in force on [date]: the
+/// latest entry that starts on or before it. Null when there is none, when
+/// that entry says "no budget", or when it was one-time and its period is over.
+ResolvedBudget? resolveBudget(
   Iterable<LimitEntry> entries,
   int? categoryId,
-  BudgetMonth month,
-) {
+  DateTime date, {
+  required int monthStartDay,
+}) {
+  final day = dateOnly(date);
   LimitEntry? best;
   for (final entry in entries) {
-    if (entry.categoryId != categoryId || entry.start > month) continue;
-    if (best == null || entry.start > best.start) best = entry;
+    if (entry.categoryId != categoryId || entry.start.isAfter(day)) continue;
+    if (best == null || !entry.start.isBefore(best.start)) best = entry;
   }
-  return best?.amountCents;
+  final amount = best?.amountCents;
+  if (best == null || amount == null) return null;
+  final range = best.rangeAt(day, monthStartDay);
+  if (!best.repeats && range != best.firstRange(monthStartDay)) return null;
+  return ResolvedBudget(entry: best, range: range, limit: amount);
+}
+
+/// A finished budget period.
+class PastPeriod {
+  const PastPeriod({
+    required this.entry,
+    required this.range,
+    required this.limit,
+  });
+
+  final LimitEntry entry;
+  final DateRange range;
+  final int limit;
+}
+
+/// The finished periods of one budget's [entries] (all for the same
+/// category, or all for all spending), newest first, at most [limit].
+/// Each period shows the amount in force then: a later change never rewrites it.
+List<PastPeriod> pastPeriods(
+  Iterable<LimitEntry> entries,
+  DateTime today, {
+  required int monthStartDay,
+  int limit = 12,
+}) {
+  final day = dateOnly(today);
+  final rows = entries.toList()..sort((a, b) => a.start.compareTo(b.start));
+  final out = <PastPeriod>[];
+  for (var i = 0; i < rows.length; i++) {
+    final row = rows[i];
+    final amount = row.amountCents;
+    if (amount == null) continue; // stopped
+    final nextStart = i + 1 < rows.length ? rows[i + 1].start : null;
+    var range = row.firstRange(monthStartDay);
+    // A period belongs to this row if it starts before the next row does.
+    while (range.end.isBefore(day) &&
+        (nextStart == null || range.start.isBefore(nextStart))) {
+      out.add(PastPeriod(entry: row, range: range, limit: amount));
+      if (!row.repeats) break;
+      range = nextRange(range, row.unit, monthStartDay);
+    }
+  }
+  out.sort((a, b) => b.range.start.compareTo(a.range.start));
+  return out.length > limit ? out.sublist(0, limit) : out;
 }
 
 enum BudgetLevel { ok, almost, over }

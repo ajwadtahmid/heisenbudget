@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../../core/category_icons.dart';
+import '../../domain/budget.dart';
 import '../../domain/recurrence.dart';
 import '../../domain/transaction_type.dart';
 import 'seed.dart';
@@ -62,17 +63,17 @@ class AppDatabase extends _$AppDatabase {
   );
 
   /// Drift's table DSL cannot express partial indexes, so these are by hand:
-  /// one limit per category and month, and one overall limit per month (a
+  /// one limit per category and first day, and one overall limit per first day (a
   /// plain unique index would let two null-category rows through).
   Future<void> _createBudgetIndexes() async {
     await customStatement(
-      'CREATE UNIQUE INDEX budget_limits_category_month '
-      'ON budget_limits (category_id, start_month) '
+      'CREATE UNIQUE INDEX budget_limits_category_start '
+      'ON budget_limits (category_id, start) '
       'WHERE category_id IS NOT NULL',
     );
     await customStatement(
-      'CREATE UNIQUE INDEX budget_limits_overall_month '
-      'ON budget_limits (start_month) WHERE category_id IS NULL',
+      'CREATE UNIQUE INDEX budget_limits_overall_start '
+      'ON budget_limits (start) WHERE category_id IS NULL',
     );
   }
 }

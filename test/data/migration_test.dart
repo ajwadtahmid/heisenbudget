@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
+import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 // ignore: depend_on_referenced_packages
@@ -224,15 +225,16 @@ void main() {
         .insert(
           BudgetLimitsCompanion.insert(
             categoryId: Value(cat),
-            startMonth: month,
+            unit: BudgetUnit.month,
+            start: month,
             amountCents: const Value(5000),
             createdAt: DateTime(2026, 10, 25),
           ),
         );
-    await add(1, '2026-10');
-    await add(null, '2026-10');
-    expect(() => add(1, '2026-10'), throwsA(isA<Exception>()));
-    expect(() => add(null, '2026-10'), throwsA(isA<Exception>()));
-    await add(1, '2026-11');
+    await add(1, '2026-10-01');
+    await add(null, '2026-10-01');
+    expect(() => add(1, '2026-10-01'), throwsA(isA<Exception>()));
+    expect(() => add(null, '2026-10-01'), throwsA(isA<Exception>()));
+    await add(1, '2026-11-01');
   });
 }

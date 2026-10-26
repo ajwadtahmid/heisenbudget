@@ -5,9 +5,7 @@ import '../data/repositories/budget_repository.dart';
 import '../data/repositories/recurring_repository.dart';
 import '../data/repositories/transaction_repository.dart';
 import '../domain/budget.dart';
-import '../domain/category_spend.dart';
 import '../domain/date_range.dart';
-import '../domain/summary.dart';
 import '../domain/transaction_type.dart';
 import 'category_providers.dart';
 import 'database_providers.dart';
@@ -29,53 +27,17 @@ final monthStartDayProvider = Provider<int>(
   (ref) => ref.watch(settingsProvider.select((s) => s.monthStartDay)),
 );
 
-/// The budget month that today falls in.
-final currentBudgetMonthProvider = Provider<BudgetMonth>(
-  (ref) => BudgetMonth.containing(
-    ref.watch(clockProvider),
-    ref.watch(monthStartDayProvider),
-  ),
+/// The weekday weeks start on (1 = Monday to 7 = Sunday). Weekly and
+/// every-two-weeks budgets use it whatever the Home period menu is set to.
+final weekStartDayProvider = Provider<int>(
+  (ref) => ref.watch(settingsProvider.select((s) => s.weekStartDay)),
 );
 
-/// How far from the current budget month the Budgets screen is looking:
-/// 0 = this month, -1 = last month, 1 = next month.
-final budgetMonthOffsetProvider = NotifierProvider<BudgetMonthOffset, int>(
-  BudgetMonthOffset.new,
-);
-
-class BudgetMonthOffset extends Notifier<int> {
-  /// How far ahead may be looked at.
-  static const maxAhead = 12;
-
-  /// How far back (about four years).
-  static const maxBack = -48;
-
-  @override
-  int build() => 0;
-
-  void set(int offset) => state = offset.clamp(maxBack, maxAhead);
-
-  void step(int delta) => set(state + delta);
-}
-
-/// The month the Budgets screen shows.
-final selectedBudgetMonthProvider = Provider<BudgetMonth>(
-  (ref) => ref
-      .watch(currentBudgetMonthProvider)
-      .shift(ref.watch(budgetMonthOffsetProvider)),
-);
-
-/// Expense totals per category inside [range] (all of them, not just the top
-/// few).
-final _budgetSpendProvider =
-    StreamProvider.family<List<CategorySpend>, DateRange>(
-      (ref, range) =>
-          ref.watch(transactionRepositoryProvider).watchSpendByCategory(range),
-    );
-
-/// Total spending inside [range].
-final _budgetTotalProvider = StreamProvider.family<Summary, DateRange>(
-  (ref, range) => ref.watch(transactionRepositoryProvider).watchSummary(range),
+/// Expenses inside a range for one category (or, with null, all of them).
+final _spentProvider = StreamProvider.family<int, (DateRange, int?)>(
+  (ref, key) => ref
+      .watch(transactionRepositoryProvider)
+      .watchSpentInRange(key.$1, categoryId: key.$2),
 );
 
 /// One budget on screen: a category's, or all spending's (no category).
@@ -83,47 +45,51 @@ class BudgetLine {
   const BudgetLine({
     required this.categoryId,
     required this.category,
+    required this.entry,
+    required this.range,
     required this.status,
   });
 
   final int? categoryId;
   final CategoryRow? category;
+
+  /// The row in force: its period and whether it repeats.
+  final LimitEntry entry;
+
+  /// The current period.
+  final DateRange range;
   final BudgetStatus status;
 
   bool get isOverall => categoryId == null;
+  BudgetUnit get unit => entry.unit;
 }
 
-/// Everything the Budgets screen and Home need for one budget month.
+/// Every budget in force today.
 class BudgetOverview {
   const BudgetOverview({
-    required this.month,
-    required this.range,
     required this.overall,
     required this.lines,
     required this.withoutLimit,
-    required this.categoryLimitTotal,
+    required this.sameUnitCategoryTotal,
   });
-
-  final BudgetMonth month;
-  final DateRange range;
 
   /// The limit on all spending, if there is one.
   final BudgetLine? overall;
 
-  /// Categories that have a limit, the ones in trouble first.
+  /// Categories that have a budget, the ones in trouble first.
   final List<BudgetLine> lines;
 
-  /// Expense categories that have no limit this month.
+  /// Expense categories with no budget now.
   final List<CategoryRow> withoutLimit;
 
-  /// The category limits added up.
-  final int categoryLimitTotal;
+  /// The category limits that use the same period as the overall one, added up
+  /// (comparing a week with a month would mean nothing).
+  final int sameUnitCategoryTotal;
 
   bool get hasAny => overall != null || lines.isNotEmpty;
 
-  /// The category limits together are more than the overall limit.
   bool get categoriesExceedOverall =>
-      overall != null && categoryLimitTotal > overall!.status.limit;
+      overall != null && sameUnitCategoryTotal > overall!.status.limit;
 
   Iterable<BudgetLine> get all => [?overall, ...lines];
 
@@ -134,113 +100,97 @@ class BudgetOverview {
       all.where((l) => l.status.level == BudgetLevel.almost).length;
 }
 
-/// The budgets for [month]. Null until what it needs has loaded.
-final budgetOverviewProvider = Provider.family<BudgetOverview?, BudgetMonth>((
-  ref,
-  month,
-) {
-  final startDay = ref.watch(monthStartDayProvider);
-  final range = month.range(startDay);
+/// The budgets in force today, with how each is doing. Null until the
+/// spending for each has loaded.
+final budgetOverviewProvider = Provider<BudgetOverview?>((ref) {
   final limits = ref.watch(budgetLimitsProvider).value;
-  final spend = ref.watch(_budgetSpendProvider(range)).value;
-  final total = ref.watch(_budgetTotalProvider(range)).value;
   final categories = ref.watch(allCategoriesProvider).value;
   final rules = ref.watch(recurringRulesProvider).value ?? const [];
   final today = ref.watch(clockProvider);
-  if (limits == null || spend == null || total == null || categories == null) {
-    return null;
-  }
+  final startDay = ref.watch(monthStartDayProvider);
+  if (limits == null || categories == null) return null;
 
   final entries = [for (final row in limits) row.entry];
-  final spentBy = {for (final s in spend) s.categoryId: s.cents};
-  final planned = plannedByCategory(
-    [
-      for (final rule in rules)
-        if (rule.isActive && rule.type == TransactionType.expense)
-          PlannedRule(
-            categoryId: rule.categoryId,
-            amountCents: rule.amountCents,
-            recurrence: rule.recurrence,
-            nextIndex: rule.nextIndex,
-          ),
-    ],
-    range,
-    today,
-  );
+  final plannedRules = [
+    for (final rule in rules)
+      if (rule.isActive && rule.type == TransactionType.expense)
+        PlannedRule(
+          categoryId: rule.categoryId,
+          amountCents: rule.amountCents,
+          recurrence: rule.recurrence,
+          nextIndex: rule.nextIndex,
+        ),
+  ];
 
-  BudgetStatus status(int limit, int spent, int plannedCents) =>
-      buildBudgetStatus(
-        limit: limit,
+  // Null means a spending figure is still loading.
+  BudgetLine? line(int? categoryId, CategoryRow? category) {
+    final resolved = resolveBudget(
+      entries,
+      categoryId,
+      today,
+      monthStartDay: startDay,
+    );
+    if (resolved == null) return null;
+    final spent = ref.watch(_spentProvider((resolved.range, categoryId))).value;
+    if (spent == null) throw _Loading();
+    final planned = plannedByCategory(plannedRules, resolved.range, today);
+    final plannedCents = categoryId == null
+        ? planned.values.fold<int>(0, (a, b) => a + b)
+        : planned[categoryId] ?? 0;
+    return BudgetLine(
+      categoryId: categoryId,
+      category: category,
+      entry: resolved.entry,
+      range: resolved.range,
+      status: buildBudgetStatus(
+        limit: resolved.limit,
         spent: spent,
         planned: plannedCents,
-        range: range,
+        range: resolved.range,
         today: today,
-      );
-
-  final expense = categories
-      .where((c) => c.type == TransactionType.expense)
-      .toList();
-  final lines = <BudgetLine>[];
-  final withoutLimit = <CategoryRow>[];
-  var categoryTotal = 0;
-  for (final category in expense) {
-    final limit = resolveLimit(entries, category.id, month);
-    if (limit == null) {
-      if (!category.isArchived) withoutLimit.add(category);
-      continue;
-    }
-    categoryTotal += limit;
-    lines.add(
-      BudgetLine(
-        categoryId: category.id,
-        category: category,
-        status: status(
-          limit,
-          spentBy[category.id] ?? 0,
-          planned[category.id] ?? 0,
-        ),
       ),
     );
   }
-  // Worst first: over, then almost, then by how much of the limit is used.
-  lines.sort((a, b) {
-    final byLevel = b.status.level.index.compareTo(a.status.level.index);
-    if (byLevel != 0) return byLevel;
-    final byShare = b.status.permille.compareTo(a.status.permille);
-    return byShare != 0
-        ? byShare
-        : a.category!.name.compareTo(b.category!.name);
-  });
 
-  final overallLimit = resolveLimit(entries, null, month);
-  final plannedTotal = planned.values.fold<int>(0, (a, b) => a + b);
-  return BudgetOverview(
-    month: month,
-    range: range,
-    overall: overallLimit == null
-        ? null
-        : BudgetLine(
-            categoryId: null,
-            category: null,
-            status: status(overallLimit, total.spentCents, plannedTotal),
-          ),
-    lines: lines,
-    withoutLimit: withoutLimit,
-    categoryLimitTotal: categoryTotal,
-  );
+  try {
+    final overall = line(null, null);
+    final lines = <BudgetLine>[];
+    final withoutLimit = <CategoryRow>[];
+    for (final category in categories) {
+      if (category.type != TransactionType.expense) continue;
+      final l = line(category.id, category);
+      if (l == null) {
+        if (!category.isArchived) withoutLimit.add(category);
+      } else {
+        lines.add(l);
+      }
+    }
+    // Worst first: over, then almost, then by how much of the limit is used.
+    lines.sort((a, b) {
+      final byLevel = b.status.level.index.compareTo(a.status.level.index);
+      if (byLevel != 0) return byLevel;
+      final byShare = b.status.permille.compareTo(a.status.permille);
+      return byShare != 0
+          ? byShare
+          : a.category!.name.compareTo(b.category!.name);
+    });
+    final sameUnit = overall == null
+        ? 0
+        : lines
+              .where((l) => l.unit == overall.unit)
+              .fold<int>(0, (a, l) => a + l.status.limit);
+    return BudgetOverview(
+      overall: overall,
+      lines: lines,
+      withoutLimit: withoutLimit,
+      sameUnitCategoryTotal: sameUnit,
+    );
+  } on _Loading {
+    return null;
+  }
 });
 
-/// The budgets for the month the Budgets screen is showing.
-final selectedBudgetOverviewProvider = Provider<BudgetOverview?>(
-  (ref) =>
-      ref.watch(budgetOverviewProvider(ref.watch(selectedBudgetMonthProvider))),
-);
-
-/// The budgets for this month, for Home's one line.
-final currentBudgetOverviewProvider = Provider<BudgetOverview?>(
-  (ref) =>
-      ref.watch(budgetOverviewProvider(ref.watch(currentBudgetMonthProvider))),
-);
+class _Loading implements Exception {}
 
 /// What Home says about budgets.
 class BudgetSummary {
@@ -250,30 +200,114 @@ class BudgetSummary {
   final int almost;
 }
 
-/// Null when there is no budget this month (Home then shows nothing).
+/// Null when no budget is in force (Home then shows nothing).
 final budgetSummaryProvider = Provider<BudgetSummary?>((ref) {
-  final overview = ref.watch(currentBudgetOverviewProvider);
+  final overview = ref.watch(budgetOverviewProvider);
   if (overview == null || !overview.hasAny) return null;
   return BudgetSummary(over: overview.overCount, almost: overview.almostCount);
 });
 
-/// A suggested limit: the average of what was spent in the three budget
-/// months before [month], for one category or (null) all spending. Null when
-/// nothing was spent in them.
+/// A suggested limit: the average of what was spent in the three periods
+/// before [current] (of [unit]), for one category or (null) all spending.
+/// Null when nothing was spent in them.
 Future<int?> suggestedLimit({
   required TransactionRepository repo,
-  required int startDay,
-  required BudgetMonth month,
+  required BudgetUnit unit,
+  required DateRange current,
+  required int monthStartDay,
   int? categoryId,
 }) async {
   final spends = <int>[];
+  var range = current;
   for (var back = 1; back <= 3; back++) {
-    spends.add(
-      await repo.spentInRange(
-        month.shift(-back).range(startDay),
-        categoryId: categoryId,
-      ),
-    );
+    range = previousRange(range, unit, monthStartDay);
+    spends.add(await repo.spentInRange(range, categoryId: categoryId));
   }
   return suggestLimit(spends);
 }
+
+/// How a finished budget period ended.
+enum BudgetResult { within, usedAll, over }
+
+/// One finished period of one budget, with what was spent.
+class PastBudget {
+  const PastBudget({
+    required this.categoryId,
+    required this.category,
+    required this.entry,
+    required this.range,
+    required this.limit,
+    required this.spent,
+  });
+
+  final int? categoryId;
+  final CategoryRow? category;
+  final LimitEntry entry;
+  final DateRange range;
+  final int limit;
+  final int spent;
+
+  BudgetUnit get unit => entry.unit;
+  bool get isOneTime => !entry.repeats;
+
+  BudgetResult get result => spent > limit
+      ? BudgetResult.over
+      : spent == limit
+      ? BudgetResult.usedAll
+      : BudgetResult.within;
+
+  /// How far under (positive) or over (negative) the limit it ended.
+  int get left => limit - spent;
+}
+
+/// Changes whenever any transaction changes, so finished periods can be
+/// recounted.
+final _transactionsRevisionProvider = StreamProvider<int>((ref) {
+  return ref
+      .watch(transactionRepositoryProvider)
+      .watchSpentInRange(DateRange(DateTime(2000), DateTime(2100, 12, 31)));
+});
+
+/// Finished periods of every budget, [perBudget] of each at most.
+final pastBudgetsProvider = FutureProvider.autoDispose
+    .family<List<PastBudget>, int>((ref, perBudget) async {
+      final limits = await ref.watch(budgetLimitsProvider.future);
+      final categories = await ref.watch(allCategoriesProvider.future);
+      ref.watch(_transactionsRevisionProvider);
+      final today = ref.watch(clockProvider);
+      final startDay = ref.watch(monthStartDayProvider);
+      final repo = ref.read(transactionRepositoryProvider);
+
+      final byTarget = <int?, List<LimitEntry>>{};
+      for (final row in limits) {
+        byTarget.putIfAbsent(row.categoryId, () => []).add(row.entry);
+      }
+      final out = <PastBudget>[];
+      for (final MapEntry(key: categoryId, value: entries)
+          in byTarget.entries) {
+        final category = categoryId == null
+            ? null
+            : categories.where((c) => c.id == categoryId).firstOrNull;
+        for (final period in pastPeriods(
+          entries,
+          today,
+          monthStartDay: startDay,
+          limit: perBudget,
+        )) {
+          out.add(
+            PastBudget(
+              categoryId: categoryId,
+              category: category,
+              entry: period.entry,
+              range: period.range,
+              limit: period.limit,
+              spent: await repo.spentInRange(
+                period.range,
+                categoryId: categoryId,
+              ),
+            ),
+          );
+        }
+      }
+      return out;
+    });

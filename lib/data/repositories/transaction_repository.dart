@@ -222,6 +222,21 @@ class TransactionRepository {
     return row.read(total) ?? 0;
   }
 
+  /// [spentInRange], kept up to date as transactions change.
+  Stream<int> watchSpentInRange(DateRange range, {int? categoryId}) {
+    final total = _t.amountCents.sum();
+    final query = _db.selectOnly(_t)
+      ..addColumns([total])
+      ..where(
+        _t.type.equalsValue(TransactionType.expense) &
+            _inRange(range) &
+            (categoryId == null
+                ? const Constant(true)
+                : _t.categoryId.equals(categoryId)),
+      );
+    return query.watchSingle().map((row) => row.read(total) ?? 0);
+  }
+
   /// Totals for everything dated on or before [date]; feeds the balance.
   Stream<Summary> watchTotalsUpTo(DateTime date) {
     return _watchSums(_t.date.isSmallerOrEqualValue(toIsoDate(date)));
