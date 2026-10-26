@@ -58,6 +58,25 @@ class Transactions extends Table {
   )();
 }
 
+/// A saved transaction to log again with one tap ("Coffee  $4.00").
+@DataClassName('FavoriteRow')
+class Favorites extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// What the chip says, e.g. "Coffee".
+  TextColumn get label => text()();
+  TextColumn get type => textEnum<TransactionType>()();
+
+  /// In cents. Null means "ask me each time" (a variable amount).
+  IntColumn get amountCents => integer().nullable()();
+  IntColumn get categoryId => integer().references(Categories, #id)();
+  TextColumn get note => text().nullable()();
+
+  /// Position in the Quick add strip, lowest first.
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
 /// A transaction that repeats (rent, salary, a subscription). The app adds
 /// its transactions itself when they fall due; see `RecurringService`.
 @DataClassName('RecurringRuleRow')

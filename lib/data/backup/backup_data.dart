@@ -111,6 +111,7 @@ class BackupData {
     required this.settings,
     required this.categories,
     required this.recurringRules,
+    required this.favorites,
     required this.transactions,
   });
 
@@ -118,6 +119,7 @@ class BackupData {
   final BackupSettings settings;
   final List<CategoryRow> categories;
   final List<RecurringRuleRow> recurringRules;
+  final List<FavoriteRow> favorites;
   final List<TransactionRow> transactions;
 
   /// The file's text. Pretty-printed so it can be inspected in any editor.
@@ -155,6 +157,19 @@ class BackupData {
             'isActive': r.isActive,
             'nextIndex': r.nextIndex,
             'createdAt': r.createdAt.toUtc().toIso8601String(),
+          },
+      ],
+      'favorites': [
+        for (final f in favorites)
+          {
+            'id': f.id,
+            'label': f.label,
+            'type': f.type.name,
+            'amountCents': f.amountCents,
+            'categoryId': f.categoryId,
+            'note': f.note,
+            'sortOrder': f.sortOrder,
+            'createdAt': f.createdAt.toUtc().toIso8601String(),
           },
       ],
       'transactions': [
@@ -208,6 +223,7 @@ class BackupData {
     final categories = _parseCategories(root['categories']);
     final byId = {for (final c in categories) c.id: c};
     final rules = _parseRules(root['recurringRules'], byId);
+    final favorites = _parseFavorites(root['favorites'], byId);
     final transactions = _parseTransactions(root['transactions'], byId, {
       for (final r in rules) r.id,
     });
@@ -220,6 +236,7 @@ class BackupData {
       settings: BackupSettings.fromJson(root['settings']),
       categories: categories,
       recurringRules: rules,
+      favorites: favorites,
       transactions: transactions,
     );
   }
@@ -338,6 +355,66 @@ List<RecurringRuleRow> _parseRules(
         endDate: end as String?,
         isActive: item['isActive'] != false,
         nextIndex: next,
+        createdAt: created,
+      ),
+    );
+  }
+  return rows;
+}
+
+/// Backups made before favorites existed have no `favorites`; that restores
+/// as "no favorites".
+List<FavoriteRow> _parseFavorites(
+  Object? json,
+  Map<int, CategoryRow> categories,
+) {
+  if (json == null) return const [];
+  if (json is! List) throw _damaged('favorites', 'not a list');
+  if (json.length > 100) throw _damaged('favorites', 'far too many');
+  final rows = <FavoriteRow>[];
+  final ids = <int>{};
+  for (final item in json) {
+    if (item is! Map<String, Object?>) {
+      throw _damaged('favorite', 'not an object');
+    }
+    final id = item['id'];
+    if (id is! int || id < 1 || !ids.add(id)) {
+      throw _damaged('favorite', 'bad or repeated id');
+    }
+    final where = 'favorite $id';
+    final label = item['label'];
+    if (label is! String ||
+        label.trim().isEmpty ||
+        label.trim().length > maxFavoriteLabelLength) {
+      throw _damaged(where, 'bad name');
+    }
+    final type = _type(item['type']);
+    if (type == null) throw _damaged(where, 'unknown type');
+    final amount = item['amountCents'];
+    if (amount != null &&
+        (amount is! int || amount < 1 || amount > maxAmountCents)) {
+      throw _damaged(where, 'amount out of range');
+    }
+    final category = categories[item['categoryId']];
+    if (category == null) throw _damaged(where, 'unknown category');
+    if (category.type != type) throw _damaged(where, 'category type differs');
+    final note = item['note'];
+    if (note != null && (note is! String || note.length > maxNoteLength)) {
+      throw _damaged(where, 'bad note');
+    }
+    final sort = item['sortOrder'];
+    final created = _time(item['createdAt']);
+    if (created == null) throw _damaged(where, 'bad timestamp');
+    final clean = (note as String?)?.trim();
+    rows.add(
+      FavoriteRow(
+        id: id,
+        label: label.trim(),
+        type: type,
+        amountCents: amount as int?,
+        categoryId: category.id,
+        note: clean == null || clean.isEmpty ? null : clean,
+        sortOrder: sort is int ? sort : 0,
         createdAt: created,
       ),
     );

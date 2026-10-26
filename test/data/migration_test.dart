@@ -196,4 +196,23 @@ void main() {
       expect(linked.every((t) => t.recurringRuleId == null), isTrue);
     },
   );
+
+  test('the upgrade also creates favorites', () async {
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+    final id = await db
+        .into(db.favorites)
+        .insert(
+          FavoritesCompanion.insert(
+            label: 'Coffee',
+            type: TransactionType.expense,
+            categoryId: 1,
+            createdAt: DateTime(2026, 10, 25),
+          ),
+        );
+    final row = await (db.select(
+      db.favorites,
+    )..where((f) => f.id.equals(id))).getSingle();
+    expect(row.amountCents, isNull, reason: 'a favorite may have no amount');
+  });
 }

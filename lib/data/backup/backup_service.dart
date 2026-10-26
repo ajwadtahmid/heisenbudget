@@ -20,6 +20,9 @@ class BackupService {
       final rules = await (_db.select(
         _db.recurringRules,
       )..orderBy([(r) => OrderingTerm.asc(r.id)])).get();
+      final favorites = await (_db.select(
+        _db.favorites,
+      )..orderBy([(f) => OrderingTerm.asc(f.id)])).get();
       final transactions = await (_db.select(
         _db.transactions,
       )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
@@ -28,6 +31,7 @@ class BackupService {
         settings: _settings.toBackup(),
         categories: categories,
         recurringRules: rules,
+        favorites: favorites,
         transactions: transactions,
       );
     });
@@ -39,14 +43,16 @@ class BackupService {
   Future<void> restore(BackupData data) async {
     await _db.transaction(() async {
       // Out in the order that respects references: transactions, then the
-      // rules they point at, then the categories both point at. In is the
-      // reverse.
+      // rules and favorites that point at categories, then the categories.
+      // In is the reverse.
       await _db.delete(_db.transactions).go();
+      await _db.delete(_db.favorites).go();
       await _db.delete(_db.recurringRules).go();
       await _db.delete(_db.categories).go();
       await _db.batch((batch) {
         batch.insertAll(_db.categories, data.categories);
         batch.insertAll(_db.recurringRules, data.recurringRules);
+        batch.insertAll(_db.favorites, data.favorites);
         batch.insertAll(_db.transactions, data.transactions);
       });
     });

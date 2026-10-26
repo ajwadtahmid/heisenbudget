@@ -9,6 +9,7 @@ import 'package:heisenbudget/data/backup/backup_service.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
 import 'package:heisenbudget/data/recurring/recurring_service.dart';
+import 'package:heisenbudget/data/repositories/favorite_repository.dart';
 import 'package:heisenbudget/data/repositories/recurring_repository.dart';
 import 'package:heisenbudget/data/repositories/settings_repository.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
@@ -362,6 +363,7 @@ void main() {
         settings: const BackupSettings(currency: 'EUR'),
         categories: [before.categories.first],
         recurringRules: const [],
+        favorites: const [],
         transactions: [
           TransactionRow(
             id: 1,
@@ -620,6 +622,118 @@ void main() {
           expect(next.count, 1);
         },
       );
+    });
+  });
+
+  group('favorites in backups', () {
+    Map<String, Object?> withFavorite() {
+      final b = validBackup();
+      b['favorites'] = <Object?>[
+        {
+          'id': 3,
+          'label': 'Coffee',
+          'type': 'expense',
+          'amountCents': 400,
+          'categoryId': 1,
+          'note': 'Flat white',
+          'sortOrder': 0,
+          'createdAt': '2026-10-05T08:00:00Z',
+        },
+        {
+          'id': 5,
+          'label': 'Pay',
+          'type': 'income',
+          'amountCents': null,
+          'categoryId': 2,
+          'note': null,
+          'sortOrder': 1,
+          'createdAt': '2026-10-05T08:00:00Z',
+        },
+      ];
+      return b;
+    }
+
+    Map<String, Object?> favOf(Map<String, Object?> b, [int i = 0]) =>
+        (b['favorites']! as List)[i] as Map<String, Object?>;
+
+    test('reads favorites, including one with no fixed amount', () {
+      final data = BackupData.parse(bytesOf(withFavorite()));
+      expect(data.favorites.map((f) => f.label), ['Coffee', 'Pay']);
+      expect(data.favorites.last.amountCents, isNull);
+    });
+
+    test('a backup from before favorites still restores, with none', () {
+      expect(BackupData.parse(bytesOf(validBackup())).favorites, isEmpty);
+    });
+
+    void rejects(String why, void Function(Map<String, Object?> b) break_) {
+      test('rejects: $why', () {
+        final b = withFavorite();
+        break_(b);
+        expect(
+          () => BackupData.parse(bytesOf(b)),
+          throwsA(isA<BackupFormatException>()),
+        );
+      });
+    }
+
+    rejects('favorites that are not a list', (b) => b['favorites'] = 5);
+    rejects('a repeated id', (b) => favOf(b, 1)['id'] = 3);
+    rejects('a blank label', (b) => favOf(b)['label'] = '  ');
+    rejects('a too long label', (b) => favOf(b)['label'] = 'x' * 31);
+    rejects('an unknown type', (b) => favOf(b)['type'] = 'loan');
+    rejects('a zero amount', (b) => favOf(b)['amountCents'] = 0);
+    rejects('a decimal amount', (b) => favOf(b)['amountCents'] = 4.5);
+    rejects('an unknown category', (b) => favOf(b)['categoryId'] = 99);
+    rejects('the other type\'s category', (b) => favOf(b)['categoryId'] = 2);
+    rejects('a bad timestamp', (b) => favOf(b)['createdAt'] = 'later');
+    rejects('far too many', (b) {
+      b['favorites'] = [
+        for (var i = 1; i <= 101; i++) {...favOf(b), 'id': i},
+      ];
+    });
+
+    test('favorites survive a backup and restore, in order', () async {
+      SharedPreferences.setMockInitialValues({});
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final settings = SettingsRepository(
+        await SharedPreferences.getInstance(),
+        defaultCurrency: 'USD',
+      );
+      final service = BackupService(db, settings);
+      final cats = await CategoryRepository(db).watchAll().first;
+      final food = cats.firstWhere((c) => c.name == 'Food');
+      final favs = FavoriteRepository(db);
+      final a = await favs.add(
+        FavoriteInput(
+          label: 'A',
+          type: TransactionType.expense,
+          categoryId: food.id,
+          amountCents: 100,
+        ),
+      );
+      final b = await favs.add(
+        FavoriteInput(
+          label: 'B',
+          type: TransactionType.expense,
+          categoryId: food.id,
+        ),
+      );
+      await favs.reorder([b, a]);
+
+      final snap = await service.snapshot(now: DateTime.utc(2026, 10, 25));
+      final text = snap.encode();
+      // Wipe, then bring it back from the file's text.
+      await service.restore(BackupData.parse(bytesOf(validBackup())));
+      expect(await db.select(db.favorites).get(), isEmpty);
+      await service.restore(
+        BackupData.parse(Uint8List.fromList(utf8.encode(text))),
+      );
+      final back = await favs.watchAll().first;
+      expect(back.map((f) => f.label), ['B', 'A']);
+      expect(back.last.amountCents, 100);
+      expect(back.first.amountCents, isNull);
     });
   });
 }

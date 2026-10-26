@@ -10,5 +10,11 @@ const maxAmountCents = 99999999999;
 /// Maximum characters in a transaction note.
 const maxNoteLength = 200;
 
+/// Most favorites (one-tap quick adds) a person can keep.
+const maxFavorites = 12;
+
+/// Longest favorite name.
+const maxFavoriteLabelLength = 30;
+
 /// Name of the catch-all category that exists once per type.
 const otherCategoryName = 'Other';

@@ -10,7 +10,7 @@ import 'tables.dart';
 
 part 'app_database.g.dart';
 
-@DriftDatabase(tables: [Categories, Transactions, RecurringRules])
+@DriftDatabase(tables: [Categories, Transactions, RecurringRules, Favorites])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
@@ -41,11 +41,13 @@ class AppDatabase extends _$AppDatabase {
         // Schema 2: categories got an icon.
         await m.addColumn(categories, categories.icon);
         await applyDefaultIcons(this);
-        // Repeating transactions joined schema 2 before the first release,
-        // so a database upgraded from schema 1 gets them in the same step.
+        // Repeating transactions and favorites joined schema 2 before the
+        // first release, so a database upgraded from schema 1 gets them in
+        // the same step.
         await m.createTable(recurringRules);
         await m.addColumn(transactions, transactions.recurringRuleId);
         await m.createIndex(transactionsRuleDate);
+        await m.createTable(favorites);
       }
     },
     beforeOpen: (details) async {
