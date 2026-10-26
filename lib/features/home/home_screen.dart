@@ -11,6 +11,7 @@ import '../../domain/category_spend.dart';
 import '../../domain/summary.dart';
 import '../../providers/navigation_providers.dart';
 import '../../providers/period_providers.dart';
+import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../shared/add_key.dart';
@@ -18,6 +19,7 @@ import '../shared/empty_state.dart';
 import '../shared/period_selector.dart';
 import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
+import 'coming_up_tile.dart';
 import 'spectrum_chart.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -32,6 +34,7 @@ class HomeScreen extends ConsumerWidget {
     final summary = ref.watch(periodSummaryProvider).value ?? Summary.empty;
     final spends = ref.watch(spendByCategoryProvider).value ?? const [];
     final recent = ref.watch(recentTransactionsProvider).value ?? const [];
+    final comingUp = ref.watch(comingUpProvider);
     final c = context.appColors;
     final theme = Theme.of(context);
 
@@ -132,6 +135,17 @@ class HomeScreen extends ConsumerWidget {
               symbol: symbol,
               emptyText: copy.emptyChart,
             ),
+            if (comingUp.isNotEmpty) ...[
+              const SizedBox(height: Gap.xl),
+              const SectionLabel('Coming up'),
+              for (final item in comingUp)
+                ComingUpTile(
+                  key: ValueKey('coming-up-${item.rule.id}'),
+                  item: item,
+                  currencySymbol: symbol,
+                  today: ref.watch(clockProvider),
+                ),
+            ],
             const SizedBox(height: Gap.xl),
             SectionLabel(
               'Recent',

@@ -12,13 +12,19 @@ import '../../core/money_parser.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../domain/iso_date.dart';
+import '../../domain/recurrence.dart';
 import '../../domain/transaction_type.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/database_providers.dart';
 import '../../providers/period_providers.dart';
+import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../providers/transaction_providers.dart';
+import '../../data/repositories/recurring_repository.dart';
+import '../settings/recurring_editor_screen.dart';
+import '../shared/recurring_catch_up.dart';
 import 'new_category_dialog.dart';
+import 'repeat_sheet.dart';
 
 /// Opens the Add form, or the Edit form when [editId] is given.
 Future<void> showTransactionForm(BuildContext context, {int? editId}) {
@@ -80,6 +86,9 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   int? _categoryId;
   String? _categoryError;
   bool _saving = false;
+
+  /// How this new (or not yet repeating) transaction repeats; null = once.
+  RepeatChoice? _repeat;
 
   bool get _isEdit => widget.existing != null;
 
@@ -146,6 +155,51 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     }
   }
 
+  /// Whether the Repeat row is offered: new transactions and ones that do not
+  /// repeat yet. One made by a rule shows the rule instead.
+  bool get _canSetRepeat =>
+      !_isEdit || widget.existing!.transaction.recurringRuleId == null;
+
+  Recurrence? _recurrence(RepeatChoice? r) => r == null
+      ? null
+      : Recurrence(
+          unit: r.unit,
+          interval: r.interval,
+          start: _date,
+          end: r.end,
+        );
+
+  /// Earlier occurrences that saving with this repeat adds up to today.
+  int _earlierCount(RepeatChoice r) {
+    final today = ref.read(clockProvider);
+    return _recurrence(r)!
+        .dueThrough(today, fromIndex: 1, limit: maxCatchUpPerRule + 1)
+        .length;
+  }
+
+  /// A reason the repeat cannot be saved, or null.
+  String? _repeatError(RepeatChoice? r) {
+    if (r == null) return null;
+    final end = r.end;
+    if (end != null && end.isBefore(dateOnly(_date))) {
+      return 'The end date is before this transaction\'s date.';
+    }
+    if (_earlierCount(r) > maxCatchUpPerRule) {
+      return 'That would add more than $maxCatchUpPerRule earlier '
+          'transactions. Choose a later date.';
+    }
+    return null;
+  }
+
+  Future<void> _pickRepeat() async {
+    final result = await showRepeatSheet(
+      context,
+      start: _date,
+      current: _repeat,
+    );
+    if (result != null && mounted) setState(() => _repeat = result.choice);
+  }
+
   Future<void> _save(List<CategoryRow> active) async {
     if (_saving) return;
     final categoryId = _selectedCategory(active);
@@ -153,6 +207,10 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       () => _categoryError = categoryId == null ? 'Pick a category' : null,
     );
     if (!_formKey.currentState!.validate() || categoryId == null) return;
+    if (_canSetRepeat && _repeatError(_repeat) != null) {
+      setState(() {});
+      return;
+    }
 
     setState(() => _saving = true);
     final repo = ref.read(transactionRepositoryProvider);
@@ -164,15 +222,46 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       note: _note.text,
     );
     final existing = widget.existing;
+    final repeat = _canSetRepeat ? _repeat : null;
+    final rules = ref.read(recurringRepositoryProvider);
     if (existing == null) {
-      await repo.add(input);
+      if (repeat == null) {
+        await repo.add(input);
+      } else {
+        await rules.addWithRule(
+          input,
+          RecurringInput(
+            amountCents: input.amountCents,
+            type: _type,
+            categoryId: categoryId,
+            note: _note.text,
+            unit: repeat.unit,
+            interval: repeat.interval,
+            start: _date,
+            end: repeat.end,
+          ),
+        );
+      }
     } else {
-      await repo.update(existing.transaction.id, input);
+      final tx = existing.transaction;
+      // Moving a rule's transaction to another day takes it out of the rule.
+      final unlink = tx.recurringRuleId != null && tx.date != toIsoDate(_date);
+      await repo.update(tx.id, input, unlinkRule: unlink);
+      if (repeat != null) {
+        await rules.makeRecurring(
+          tx.id,
+          unit: repeat.unit,
+          interval: repeat.interval,
+          end: repeat.end,
+        );
+      }
     }
     await ref
         .read(settingsProvider.notifier)
         .setLastCategory(_type, categoryId);
     HapticFeedback.lightImpact();
+    // A rule that starts in the past fills in the days since.
+    if (repeat != null) await runRecurringCatchUp(ref);
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -199,6 +288,85 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
         .read(transactionRepositoryProvider)
         .delete(widget.existing!.transaction.id);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  List<Widget> _repeatRows(BuildContext context) {
+    final r = _repeat;
+    final c = context.appColors;
+    final theme = Theme.of(context);
+    final error = _repeatError(r);
+    final earlier = r != null && error == null ? _earlierCount(r) : 0;
+    final end = r?.end;
+    final subtitle = r == null
+        ? 'Does not repeat'
+        : '${_recurrence(r)!.scheduleText}'
+              '${end == null ? '' : ' · until ${formatDate(end)}'}';
+    final note =
+        error ??
+        (earlier > 0
+            ? 'Also adds $earlier earlier '
+                  'transaction${earlier == 1 ? '' : 's'} up to today.'
+            : null);
+    return [
+      ListTile(
+        key: const ValueKey('repeat-tile'),
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.repeat),
+        title: const Text('Repeat'),
+        subtitle: Text(subtitle),
+        onTap: _pickRepeat,
+      ),
+      if (note != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            note,
+            key: const ValueKey('repeat-note'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: error != null ? c.error : c.dim,
+            ),
+          ),
+        ),
+    ];
+  }
+
+  /// A transaction made by a repeating rule: say so, and link to the rule.
+  List<Widget> _linkedRuleRows(BuildContext context) {
+    final tx = widget.existing!.transaction;
+    final rules = ref.watch(recurringRulesProvider).value ?? const [];
+    RecurringRuleRow? rule;
+    for (final candidate in rules) {
+      if (candidate.id == tx.recurringRuleId) rule = candidate;
+    }
+    if (rule == null) return const [];
+    final found = rule;
+    return [
+      ListTile(
+        key: const ValueKey('repeat-linked'),
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.repeat),
+        title: const Text('Part of a repeating rule'),
+        subtitle: Text(found.recurrence.scheduleText),
+        trailing: TextButton(
+          key: const ValueKey('edit-rule'),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => RecurringEditorScreen(ruleId: found.id),
+            ),
+          ),
+          child: const Text('Edit rule'),
+        ),
+      ),
+      if (tx.date != toIsoDate(_date))
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            'Changing the date takes this one out of the repeat.',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: context.appColors.dim),
+          ),
+        ),
+    ];
   }
 
   @override
@@ -312,6 +480,11 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                     subtitle: Text(formatDate(_date)),
                     onTap: _pickDate,
                   ),
+
+                  if (_canSetRepeat)
+                    ..._repeatRows(context)
+                  else
+                    ..._linkedRuleRows(context),
                   const SizedBox(height: 8),
                   Text(
                     'Category',

@@ -42,6 +42,8 @@ class TransactionTile extends StatelessWidget {
     final signed = isIncome ? tx.amountCents : -tx.amountCents;
     final amount = formatMoney(signed, currencySymbol, showPlus: true);
 
+    // A small mark when a repeating rule made this one.
+    final repeats = tx.recurringRuleId != null;
     final subtitleParts = [
       if (showDate) formatDate(fromIsoDate(tx.date)),
       if (tx.note != null) tx.note!,
@@ -65,12 +67,28 @@ class TransactionTile extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          subtitle: subtitleParts.isEmpty
+          subtitle: subtitleParts.isEmpty && !repeats
               ? null
-              : Text(
-                  subtitleParts.join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              : Row(
+                  children: [
+                    if (repeats) ...[
+                      Icon(
+                        Icons.repeat,
+                        size: 14,
+                        color: c.dim,
+                        semanticLabel: 'Repeating',
+                      ),
+                      if (subtitleParts.isNotEmpty) const SizedBox(width: 4),
+                    ],
+                    if (subtitleParts.isNotEmpty)
+                      Flexible(
+                        child: Text(
+                          subtitleParts.join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
                 ),
           trailing: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 150),

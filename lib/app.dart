@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/constants.dart';
 import 'core/theme.dart';
+import 'features/shared/recurring_catch_up.dart';
 import 'features/shell/app_shell.dart';
 import 'features/welcome/welcome_flow.dart';
 import 'providers/period_providers.dart';
+import 'providers/recurring_providers.dart';
 import 'providers/settings_providers.dart';
 import 'providers/transaction_providers.dart';
 
@@ -22,6 +24,10 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Repeating transactions that came due while the app was closed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) runRecurringCatchUp(ref);
+    });
   }
 
   @override
@@ -40,11 +46,14 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
 
   @override
   Widget build(BuildContext context) {
+    // A new day may bring repeating transactions due.
+    ref.listen(clockProvider, (_, _) => runRecurringCatchUp(ref));
     // Only the look-and-feel settings rebuild the whole app.
     final look = ref.watch(
       settingsProvider.select((s) => (s.accent, s.textFont, s.themeMode)),
     );
     return MaterialApp(
+      scaffoldMessengerKey: ref.watch(rootMessengerKeyProvider),
       title: appName,
       theme: lightTheme(accent: look.$1, font: look.$2),
       darkTheme: darkTheme(accent: look.$1, font: look.$2),

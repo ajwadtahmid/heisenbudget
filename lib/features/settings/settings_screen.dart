@@ -6,11 +6,13 @@ import '../../core/design/section_label.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../domain/week_mode.dart';
+import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/appearance_pickers.dart';
 import '../shared/opening_balance_dialog.dart';
 import 'backup_section.dart';
 import 'category_manager_screen.dart';
+import 'recurring_screen.dart';
 
 const _weekdayNames = [
   'Monday',
@@ -21,6 +23,12 @@ const _weekdayNames = [
   'Saturday',
   'Sunday',
 ];
+
+String _ruleCount(int n) => switch (n) {
+  0 => 'Rent, salary, subscriptions',
+  1 => '1 repeating transaction',
+  _ => '$n repeating transactions',
+};
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -170,6 +178,21 @@ class SettingsScreen extends ConsumerWidget {
               MaterialPageRoute<void>(
                 builder: (_) => const CategoryManagerScreen(),
               ),
+            ),
+          ),
+          const SizedBox(height: Gap.l),
+          const SectionLabel('Recurring'),
+          ListTile(
+            key: const ValueKey('manage-recurring'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.repeat),
+            title: const Text('Repeating transactions'),
+            subtitle: Text(
+              _ruleCount(ref.watch(recurringRulesProvider).value?.length ?? 0),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const RecurringScreen()),
             ),
           ),
           const SizedBox(height: Gap.l),

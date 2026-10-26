@@ -12,6 +12,7 @@ import '../../providers/backup_providers.dart';
 import '../../providers/history_providers.dart';
 import '../../providers/period_providers.dart';
 import '../../providers/settings_providers.dart';
+import '../shared/recurring_catch_up.dart';
 import '../../providers/database_providers.dart';
 
 /// Back up, restore and export, all through the phone's own share sheet and
@@ -139,6 +140,8 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     ref.invalidate(settingsProvider);
     ref.invalidate(historyFilterProvider);
     _say('Backup restored.');
+    // Repeating transactions that fell due since the backup was made.
+    await runRecurringCatchUp(ref);
   }
 }
 
