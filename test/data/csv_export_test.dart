@@ -36,7 +36,7 @@ void main() {
   test('no transactions gives just the header', () async {
     expect(
       buildTransactionsCsv(await txs.getAll()),
-      '﻿Date,Type,Category,Amount,Note\r\n',
+      '﻿Date,Type,Category,Title,Amount,Note\r\n',
     );
   });
 
@@ -48,10 +48,10 @@ void main() {
     await add(7, '2026-10-05', food);
     expect(
       buildTransactionsCsv(await txs.getAll()),
-      '﻿Date,Type,Category,Amount,Note\r\n'
-      '2026-10-01,Income,Salary,5000.00,\r\n'
-      '2026-10-05,Expense,Food,12.50,Lunch\r\n'
-      '2026-10-05,Expense,Food,0.07,\r\n',
+      '﻿Date,Type,Category,Title,Amount,Note\r\n'
+      '2026-10-01,Income,Salary,,5000.00,\r\n'
+      '2026-10-05,Expense,Food,,12.50,Lunch\r\n'
+      '2026-10-05,Expense,Food,,0.07,\r\n',
     );
   });
 
@@ -59,7 +59,7 @@ void main() {
     final food = await category('Food', TransactionType.expense);
     await add(100, '2026-10-05', food, note: 'a, "b"\nc');
     final csv = buildTransactionsCsv(await txs.getAll());
-    expect(csv, endsWith('2026-10-05,Expense,Food,1.00,"a, ""b""\nc"\r\n'));
+    expect(csv, endsWith('2026-10-05,Expense,Food,,1.00,"a, ""b""\nc"\r\n'));
   });
 
   test(
@@ -83,7 +83,7 @@ void main() {
       final odd = await cats.add('=Evil', TransactionType.expense);
       await add(100, '2026-10-05', odd, note: 'চা ☕');
       final csv = buildTransactionsCsv(await txs.getAll());
-      expect(csv, contains("Expense,'=Evil,1.00,চা ☕"));
+      expect(csv, contains("Expense,'=Evil,,1.00,চা ☕"));
     },
   );
 }

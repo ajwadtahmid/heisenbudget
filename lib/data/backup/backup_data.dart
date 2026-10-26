@@ -150,6 +150,7 @@ class BackupData {
             'type': r.type.name,
             'categoryId': r.categoryId,
             'note': r.note,
+            'title': r.title,
             'unit': r.unit.name,
             'interval': r.interval,
             'startDate': r.startDate,
@@ -168,6 +169,7 @@ class BackupData {
             'amountCents': f.amountCents,
             'categoryId': f.categoryId,
             'note': f.note,
+            'title': f.title,
             'sortOrder': f.sortOrder,
             'createdAt': f.createdAt.toUtc().toIso8601String(),
           },
@@ -181,6 +183,7 @@ class BackupData {
             'date': t.date,
             'categoryId': t.categoryId,
             'note': t.note,
+            'title': t.title,
             'createdAt': t.createdAt.toUtc().toIso8601String(),
             'updatedAt': t.updatedAt.toUtc().toIso8601String(),
             'recurringRuleId': t.recurringRuleId,
@@ -339,6 +342,7 @@ List<RecurringRuleRow> _parseRules(
     if (note != null && (note is! String || note.length > maxNoteLength)) {
       throw _damaged(where, 'bad note');
     }
+    final title = _title(item['title'], where);
     final created = _time(item['createdAt']);
     if (created == null) throw _damaged(where, 'bad timestamp');
     final clean = (note as String?)?.trim();
@@ -349,6 +353,7 @@ List<RecurringRuleRow> _parseRules(
         type: type,
         categoryId: category.id,
         note: clean == null || clean.isEmpty ? null : clean,
+        title: title,
         unit: unit,
         interval: interval,
         startDate: start,
@@ -402,6 +407,7 @@ List<FavoriteRow> _parseFavorites(
     if (note != null && (note is! String || note.length > maxNoteLength)) {
       throw _damaged(where, 'bad note');
     }
+    final title = _title(item['title'], where);
     final sort = item['sortOrder'];
     final created = _time(item['createdAt']);
     if (created == null) throw _damaged(where, 'bad timestamp');
@@ -414,6 +420,7 @@ List<FavoriteRow> _parseFavorites(
         amountCents: amount as int?,
         categoryId: category.id,
         note: clean == null || clean.isEmpty ? null : clean,
+        title: title,
         sortOrder: sort is int ? sort : 0,
         createdAt: created,
       ),
@@ -458,6 +465,7 @@ List<TransactionRow> _parseTransactions(
     if (note != null && (note is! String || note.length > maxNoteLength)) {
       throw _damaged(where, 'bad note');
     }
+    final title = _title(item['title'], where);
     final created = _time(item['createdAt']);
     final updated = _time(item['updatedAt']);
     if (created == null || updated == null) {
@@ -481,6 +489,7 @@ List<TransactionRow> _parseTransactions(
         date: date,
         categoryId: category.id,
         note: clean == null || clean.isEmpty ? null : clean,
+        title: title,
         createdAt: created,
         updatedAt: updated,
         recurringRuleId: ruleId as int?,
@@ -488,6 +497,17 @@ List<TransactionRow> _parseTransactions(
     );
   }
   return rows;
+}
+
+/// A transaction title from a file: absent or blank is none, otherwise it
+/// must be text within the limit.
+String? _title(Object? value, String where) {
+  if (value == null) return null;
+  if (value is! String || value.length > maxTitleLength) {
+    throw _damaged(where, 'bad title');
+  }
+  final clean = value.trim();
+  return clean.isEmpty ? null : clean;
 }
 
 TransactionType? _type(Object? v) =>

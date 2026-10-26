@@ -46,6 +46,7 @@ class AppDatabase extends _$AppDatabase {
         // the same step.
         await m.createTable(recurringRules);
         await m.addColumn(transactions, transactions.recurringRuleId);
+        await m.addColumn(transactions, transactions.title);
         await m.createIndex(transactionsRuleDate);
         await m.createTable(favorites);
       }

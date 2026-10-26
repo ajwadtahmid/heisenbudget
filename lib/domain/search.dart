@@ -37,10 +37,12 @@ class SearchQuery {
     required String category,
     required int amountCents,
     String? note,
+    String? title,
   }) {
     if (isEmpty) return true;
     final categoryText = category.toLowerCase();
     final noteText = note?.toLowerCase() ?? '';
+    final titleText = title?.toLowerCase() ?? '';
     for (var i = 0; i < terms.length; i++) {
       final term = terms[i];
       final range = _amountRanges[i];
@@ -48,7 +50,8 @@ class SearchQuery {
           range != null && amountCents >= range.$1 && amountCents <= range.$2;
       if (!inAmount &&
           !categoryText.contains(term) &&
-          !noteText.contains(term)) {
+          !noteText.contains(term) &&
+          !titleText.contains(term)) {
         return false;
       }
     }

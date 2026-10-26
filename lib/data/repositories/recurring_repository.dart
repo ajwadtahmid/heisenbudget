@@ -18,12 +18,14 @@ class RecurringInput {
     required this.start,
     this.end,
     this.note,
+    this.title,
   });
 
   final int amountCents;
   final TransactionType type;
   final int categoryId;
   final String? note;
+  final String? title;
   final RecurrenceUnit unit;
   final int interval;
   final DateTime start;
@@ -32,6 +34,9 @@ class RecurringInput {
   void validate() {
     if (amountCents < 1 || amountCents > maxAmountCents) {
       throw RangeError.range(amountCents, 1, maxAmountCents, 'amountCents');
+    }
+    if ((title?.length ?? 0) > maxTitleLength) {
+      throw ArgumentError.value(title, 'title', 'longer than $maxTitleLength');
     }
     if ((note?.length ?? 0) > maxNoteLength) {
       throw ArgumentError.value(note, 'note', 'longer than $maxNoteLength');
@@ -100,6 +105,7 @@ class RecurringRepository {
               date: toIsoDate(tx.date),
               categoryId: tx.categoryId,
               note: Value(_cleanNote(tx.note)),
+              title: Value(_cleanNote(tx.title)),
               createdAt: now,
               updatedAt: now,
               recurringRuleId: Value(ruleId),
@@ -125,6 +131,7 @@ class RecurringRepository {
         type: tx.type,
         categoryId: tx.categoryId,
         note: tx.note,
+        title: tx.title,
         unit: unit,
         interval: interval,
         start: fromIsoDate(tx.date),
@@ -167,6 +174,7 @@ class RecurringRepository {
           amountCents: Value(input.amountCents),
           categoryId: Value(input.categoryId),
           note: Value(_cleanNote(input.note)),
+          title: Value(_cleanNote(input.title)),
           endDate: Value(input.end == null ? null : toIsoDate(input.end!)),
           unit: reanchor ? Value(input.unit) : const Value.absent(),
           interval: reanchor ? Value(input.interval) : const Value.absent(),
@@ -212,6 +220,7 @@ class RecurringRepository {
             type: input.type,
             categoryId: input.categoryId,
             note: Value(_cleanNote(input.note)),
+            title: Value(_cleanNote(input.title)),
             unit: input.unit,
             interval: Value(input.interval),
             startDate: toIsoDate(input.start),

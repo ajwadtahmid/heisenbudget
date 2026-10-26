@@ -25,6 +25,7 @@ class TransactionInput {
     required this.date,
     required this.categoryId,
     this.note,
+    this.title,
   });
 
   final int amountCents;
@@ -33,6 +34,9 @@ class TransactionInput {
   final int categoryId;
   final String? note;
 
+  /// An optional short name shown before the category.
+  final String? title;
+
   /// Copies the saved values of an existing row (used by Undo on delete).
   factory TransactionInput.fromRow(TransactionRow row) => TransactionInput(
     amountCents: row.amountCents,
@@ -40,11 +44,15 @@ class TransactionInput {
     date: fromIsoDate(row.date),
     categoryId: row.categoryId,
     note: row.note,
+    title: row.title,
   );
 
   void validate() {
     if (amountCents < 1 || amountCents > maxAmountCents) {
       throw RangeError.range(amountCents, 1, maxAmountCents, 'amountCents');
+    }
+    if ((title?.length ?? 0) > maxTitleLength) {
+      throw ArgumentError.value(title, 'title', 'longer than $maxTitleLength');
     }
     if ((note?.length ?? 0) > maxNoteLength) {
       throw ArgumentError.value(note, 'note', 'longer than $maxNoteLength');
@@ -72,6 +80,7 @@ class TransactionRepository {
             date: toIsoDate(input.date),
             categoryId: input.categoryId,
             note: Value(_cleanNote(input.note)),
+            title: Value(_cleanNote(input.title)),
             createdAt: now,
             updatedAt: now,
           ),
@@ -93,6 +102,7 @@ class TransactionRepository {
         date: Value(toIsoDate(input.date)),
         categoryId: Value(input.categoryId),
         note: Value(_cleanNote(input.note)),
+        title: Value(_cleanNote(input.title)),
         updatedAt: Value(DateTime.now()),
         recurringRuleId: unlinkRule ? const Value(null) : const Value.absent(),
       ),

@@ -21,6 +21,7 @@ class FavoriteInput {
     required this.categoryId,
     this.amountCents,
     this.note,
+    this.title,
   });
 
   final String label;
@@ -28,6 +29,7 @@ class FavoriteInput {
   final int categoryId;
   final int? amountCents;
   final String? note;
+  final String? title;
 
   void validate() {
     final name = label.trim();
@@ -42,6 +44,9 @@ class FavoriteInput {
     final cents = amountCents;
     if (cents != null && (cents < 1 || cents > maxAmountCents)) {
       throw RangeError.range(cents, 1, maxAmountCents, 'amountCents');
+    }
+    if ((title?.length ?? 0) > maxTitleLength) {
+      throw ArgumentError.value(title, 'title', 'longer than $maxTitleLength');
     }
     if ((note?.length ?? 0) > maxNoteLength) {
       throw ArgumentError.value(note, 'note', 'longer than $maxNoteLength');
@@ -91,6 +96,7 @@ class FavoriteRepository {
               amountCents: Value(input.amountCents),
               categoryId: input.categoryId,
               note: Value(_cleanNote(input.note)),
+              title: Value(_cleanNote(input.title)),
               sortOrder: Value((last ?? -1) + 1),
               createdAt: DateTime.now(),
             ),
@@ -117,6 +123,7 @@ class FavoriteRepository {
           amountCents: Value(input.amountCents),
           categoryId: Value(input.categoryId),
           note: Value(_cleanNote(input.note)),
+          title: Value(_cleanNote(input.title)),
         ),
       );
     });

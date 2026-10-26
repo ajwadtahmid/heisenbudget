@@ -46,6 +46,9 @@ class Transactions extends Table {
   TextColumn get date => text()();
   IntColumn get categoryId => integer().references(Categories, #id)();
   TextColumn get note => text().nullable()();
+
+  /// An optional short name shown before the category ("In & Out · Food").
+  TextColumn get title => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -71,6 +74,7 @@ class Favorites extends Table {
   IntColumn get amountCents => integer().nullable()();
   IntColumn get categoryId => integer().references(Categories, #id)();
   TextColumn get note => text().nullable()();
+  TextColumn get title => text().nullable()();
 
   /// Position in the Quick add strip, lowest first.
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
@@ -89,6 +93,7 @@ class RecurringRules extends Table {
   TextColumn get type => textEnum<TransactionType>()();
   IntColumn get categoryId => integer().references(Categories, #id)();
   TextColumn get note => text().nullable()();
+  TextColumn get title => text().nullable()();
 
   /// Repeats every [interval] [unit]s (1 to 365).
   TextColumn get unit => textEnum<RecurrenceUnit>()();

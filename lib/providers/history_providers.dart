@@ -134,6 +134,7 @@ final historyResultsProvider =
             if (query.matches(
               category: row.category.name,
               note: row.transaction.note,
+              title: row.transaction.title,
               amountCents: row.transaction.amountCents,
             ))
               row,

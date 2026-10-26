@@ -102,6 +102,7 @@ class RecurringService {
             date: iso,
             categoryId: rule.categoryId,
             note: Value(rule.note),
+            title: Value(rule.title),
             createdAt: now,
             updatedAt: now,
             recurringRuleId: Value(rule.id),

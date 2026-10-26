@@ -579,6 +579,15 @@ class $RecurringRulesTable extends RecurringRules
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   late final GeneratedColumnWithTypeConverter<RecurrenceUnit, String> unit =
       GeneratedColumn<String>(
@@ -667,6 +676,7 @@ class $RecurringRulesTable extends RecurringRules
     type,
     categoryId,
     note,
+    title,
     unit,
     interval,
     startDate,
@@ -713,6 +723,12 @@ class $RecurringRulesTable extends RecurringRules
       context.handle(
         _noteMeta,
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
       );
     }
     if (data.containsKey('interval')) {
@@ -786,6 +802,10 @@ class $RecurringRulesTable extends RecurringRules
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      ),
       unit: $RecurringRulesTable.$converterunit.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -839,6 +859,7 @@ class RecurringRuleRow extends DataClass
   final TransactionType type;
   final int categoryId;
   final String? note;
+  final String? title;
 
   /// Repeats every [interval] [unit]s (1 to 365).
   final RecurrenceUnit unit;
@@ -864,6 +885,7 @@ class RecurringRuleRow extends DataClass
     required this.type,
     required this.categoryId,
     this.note,
+    this.title,
     required this.unit,
     required this.interval,
     required this.startDate,
@@ -885,6 +907,9 @@ class RecurringRuleRow extends DataClass
     map['category_id'] = Variable<int>(categoryId);
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || title != null) {
+      map['title'] = Variable<String>(title);
     }
     {
       map['unit'] = Variable<String>(
@@ -909,6 +934,9 @@ class RecurringRuleRow extends DataClass
       type: Value(type),
       categoryId: Value(categoryId),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      title: title == null && nullToAbsent
+          ? const Value.absent()
+          : Value(title),
       unit: Value(unit),
       interval: Value(interval),
       startDate: Value(startDate),
@@ -934,6 +962,7 @@ class RecurringRuleRow extends DataClass
       ),
       categoryId: serializer.fromJson<int>(json['categoryId']),
       note: serializer.fromJson<String?>(json['note']),
+      title: serializer.fromJson<String?>(json['title']),
       unit: $RecurringRulesTable.$converterunit.fromJson(
         serializer.fromJson<String>(json['unit']),
       ),
@@ -956,6 +985,7 @@ class RecurringRuleRow extends DataClass
       ),
       'categoryId': serializer.toJson<int>(categoryId),
       'note': serializer.toJson<String?>(note),
+      'title': serializer.toJson<String?>(title),
       'unit': serializer.toJson<String>(
         $RecurringRulesTable.$converterunit.toJson(unit),
       ),
@@ -974,6 +1004,7 @@ class RecurringRuleRow extends DataClass
     TransactionType? type,
     int? categoryId,
     Value<String?> note = const Value.absent(),
+    Value<String?> title = const Value.absent(),
     RecurrenceUnit? unit,
     int? interval,
     String? startDate,
@@ -987,6 +1018,7 @@ class RecurringRuleRow extends DataClass
     type: type ?? this.type,
     categoryId: categoryId ?? this.categoryId,
     note: note.present ? note.value : this.note,
+    title: title.present ? title.value : this.title,
     unit: unit ?? this.unit,
     interval: interval ?? this.interval,
     startDate: startDate ?? this.startDate,
@@ -1006,6 +1038,7 @@ class RecurringRuleRow extends DataClass
           ? data.categoryId.value
           : this.categoryId,
       note: data.note.present ? data.note.value : this.note,
+      title: data.title.present ? data.title.value : this.title,
       unit: data.unit.present ? data.unit.value : this.unit,
       interval: data.interval.present ? data.interval.value : this.interval,
       startDate: data.startDate.present ? data.startDate.value : this.startDate,
@@ -1024,6 +1057,7 @@ class RecurringRuleRow extends DataClass
           ..write('type: $type, ')
           ..write('categoryId: $categoryId, ')
           ..write('note: $note, ')
+          ..write('title: $title, ')
           ..write('unit: $unit, ')
           ..write('interval: $interval, ')
           ..write('startDate: $startDate, ')
@@ -1042,6 +1076,7 @@ class RecurringRuleRow extends DataClass
     type,
     categoryId,
     note,
+    title,
     unit,
     interval,
     startDate,
@@ -1059,6 +1094,7 @@ class RecurringRuleRow extends DataClass
           other.type == this.type &&
           other.categoryId == this.categoryId &&
           other.note == this.note &&
+          other.title == this.title &&
           other.unit == this.unit &&
           other.interval == this.interval &&
           other.startDate == this.startDate &&
@@ -1074,6 +1110,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
   final Value<TransactionType> type;
   final Value<int> categoryId;
   final Value<String?> note;
+  final Value<String?> title;
   final Value<RecurrenceUnit> unit;
   final Value<int> interval;
   final Value<String> startDate;
@@ -1087,6 +1124,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
     this.type = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.note = const Value.absent(),
+    this.title = const Value.absent(),
     this.unit = const Value.absent(),
     this.interval = const Value.absent(),
     this.startDate = const Value.absent(),
@@ -1101,6 +1139,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
     required TransactionType type,
     required int categoryId,
     this.note = const Value.absent(),
+    this.title = const Value.absent(),
     required RecurrenceUnit unit,
     this.interval = const Value.absent(),
     required String startDate,
@@ -1120,6 +1159,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
     Expression<String>? type,
     Expression<int>? categoryId,
     Expression<String>? note,
+    Expression<String>? title,
     Expression<String>? unit,
     Expression<int>? interval,
     Expression<String>? startDate,
@@ -1134,6 +1174,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
       if (type != null) 'type': type,
       if (categoryId != null) 'category_id': categoryId,
       if (note != null) 'note': note,
+      if (title != null) 'title': title,
       if (unit != null) 'unit': unit,
       if (interval != null) 'interval': interval,
       if (startDate != null) 'start_date': startDate,
@@ -1150,6 +1191,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
     Value<TransactionType>? type,
     Value<int>? categoryId,
     Value<String?>? note,
+    Value<String?>? title,
     Value<RecurrenceUnit>? unit,
     Value<int>? interval,
     Value<String>? startDate,
@@ -1164,6 +1206,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
       type: type ?? this.type,
       categoryId: categoryId ?? this.categoryId,
       note: note ?? this.note,
+      title: title ?? this.title,
       unit: unit ?? this.unit,
       interval: interval ?? this.interval,
       startDate: startDate ?? this.startDate,
@@ -1193,6 +1236,9 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
     }
     if (note.present) {
       map['note'] = Variable<String>(note.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
     }
     if (unit.present) {
       map['unit'] = Variable<String>(
@@ -1228,6 +1274,7 @@ class RecurringRulesCompanion extends UpdateCompanion<RecurringRuleRow> {
           ..write('type: $type, ')
           ..write('categoryId: $categoryId, ')
           ..write('note: $note, ')
+          ..write('title: $title, ')
           ..write('unit: $unit, ')
           ..write('interval: $interval, ')
           ..write('startDate: $startDate, ')
@@ -1312,6 +1359,15 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1356,6 +1412,7 @@ class $TransactionsTable extends Transactions
     date,
     categoryId,
     note,
+    title,
     createdAt,
     updatedAt,
     recurringRuleId,
@@ -1406,6 +1463,12 @@ class $TransactionsTable extends Transactions
       context.handle(
         _noteMeta,
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -1468,6 +1531,10 @@ class $TransactionsTable extends Transactions
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1503,6 +1570,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
   final String date;
   final int categoryId;
   final String? note;
+
+  /// An optional short name shown before the category ("In & Out · Food").
+  final String? title;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -1516,6 +1586,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     required this.date,
     required this.categoryId,
     this.note,
+    this.title,
     required this.createdAt,
     required this.updatedAt,
     this.recurringRuleId,
@@ -1535,6 +1606,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    if (!nullToAbsent || title != null) {
+      map['title'] = Variable<String>(title);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || recurringRuleId != null) {
@@ -1551,6 +1625,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       date: Value(date),
       categoryId: Value(categoryId),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      title: title == null && nullToAbsent
+          ? const Value.absent()
+          : Value(title),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       recurringRuleId: recurringRuleId == null && nullToAbsent
@@ -1573,6 +1650,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       date: serializer.fromJson<String>(json['date']),
       categoryId: serializer.fromJson<int>(json['categoryId']),
       note: serializer.fromJson<String?>(json['note']),
+      title: serializer.fromJson<String?>(json['title']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       recurringRuleId: serializer.fromJson<int?>(json['recurringRuleId']),
@@ -1590,6 +1668,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       'date': serializer.toJson<String>(date),
       'categoryId': serializer.toJson<int>(categoryId),
       'note': serializer.toJson<String?>(note),
+      'title': serializer.toJson<String?>(title),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'recurringRuleId': serializer.toJson<int?>(recurringRuleId),
@@ -1603,6 +1682,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     String? date,
     int? categoryId,
     Value<String?> note = const Value.absent(),
+    Value<String?> title = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<int?> recurringRuleId = const Value.absent(),
@@ -1613,6 +1693,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     date: date ?? this.date,
     categoryId: categoryId ?? this.categoryId,
     note: note.present ? note.value : this.note,
+    title: title.present ? title.value : this.title,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     recurringRuleId: recurringRuleId.present
@@ -1631,6 +1712,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           ? data.categoryId.value
           : this.categoryId,
       note: data.note.present ? data.note.value : this.note,
+      title: data.title.present ? data.title.value : this.title,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       recurringRuleId: data.recurringRuleId.present
@@ -1648,6 +1730,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           ..write('date: $date, ')
           ..write('categoryId: $categoryId, ')
           ..write('note: $note, ')
+          ..write('title: $title, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('recurringRuleId: $recurringRuleId')
@@ -1663,6 +1746,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     date,
     categoryId,
     note,
+    title,
     createdAt,
     updatedAt,
     recurringRuleId,
@@ -1677,6 +1761,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           other.date == this.date &&
           other.categoryId == this.categoryId &&
           other.note == this.note &&
+          other.title == this.title &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.recurringRuleId == this.recurringRuleId);
@@ -1689,6 +1774,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
   final Value<String> date;
   final Value<int> categoryId;
   final Value<String?> note;
+  final Value<String?> title;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int?> recurringRuleId;
@@ -1699,6 +1785,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
     this.date = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.note = const Value.absent(),
+    this.title = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.recurringRuleId = const Value.absent(),
@@ -1710,6 +1797,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
     required String date,
     required int categoryId,
     this.note = const Value.absent(),
+    this.title = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.recurringRuleId = const Value.absent(),
@@ -1726,6 +1814,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
     Expression<String>? date,
     Expression<int>? categoryId,
     Expression<String>? note,
+    Expression<String>? title,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? recurringRuleId,
@@ -1737,6 +1826,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
       if (date != null) 'date': date,
       if (categoryId != null) 'category_id': categoryId,
       if (note != null) 'note': note,
+      if (title != null) 'title': title,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (recurringRuleId != null) 'recurring_rule_id': recurringRuleId,
@@ -1750,6 +1840,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
     Value<String>? date,
     Value<int>? categoryId,
     Value<String?>? note,
+    Value<String?>? title,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int?>? recurringRuleId,
@@ -1761,6 +1852,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
       date: date ?? this.date,
       categoryId: categoryId ?? this.categoryId,
       note: note ?? this.note,
+      title: title ?? this.title,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       recurringRuleId: recurringRuleId ?? this.recurringRuleId,
@@ -1790,6 +1882,9 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1811,6 +1906,7 @@ class TransactionsCompanion extends UpdateCompanion<TransactionRow> {
           ..write('date: $date, ')
           ..write('categoryId: $categoryId, ')
           ..write('note: $note, ')
+          ..write('title: $title, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('recurringRuleId: $recurringRuleId')
@@ -1890,6 +1986,15 @@ class $FavoritesTable extends Favorites
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -1921,6 +2026,7 @@ class $FavoritesTable extends Favorites
     amountCents,
     categoryId,
     note,
+    title,
     sortOrder,
     createdAt,
   ];
@@ -1968,6 +2074,12 @@ class $FavoritesTable extends Favorites
       context.handle(
         _noteMeta,
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
       );
     }
     if (data.containsKey('sort_order')) {
@@ -2019,6 +2131,10 @@ class $FavoritesTable extends Favorites
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      ),
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -2050,6 +2166,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
   final int? amountCents;
   final int categoryId;
   final String? note;
+  final String? title;
 
   /// Position in the Quick add strip, lowest first.
   final int sortOrder;
@@ -2061,6 +2178,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
     this.amountCents,
     required this.categoryId,
     this.note,
+    this.title,
     required this.sortOrder,
     required this.createdAt,
   });
@@ -2081,6 +2199,9 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    if (!nullToAbsent || title != null) {
+      map['title'] = Variable<String>(title);
+    }
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -2096,6 +2217,9 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
           : Value(amountCents),
       categoryId: Value(categoryId),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      title: title == null && nullToAbsent
+          ? const Value.absent()
+          : Value(title),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
     );
@@ -2115,6 +2239,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
       amountCents: serializer.fromJson<int?>(json['amountCents']),
       categoryId: serializer.fromJson<int>(json['categoryId']),
       note: serializer.fromJson<String?>(json['note']),
+      title: serializer.fromJson<String?>(json['title']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -2131,6 +2256,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
       'amountCents': serializer.toJson<int?>(amountCents),
       'categoryId': serializer.toJson<int>(categoryId),
       'note': serializer.toJson<String?>(note),
+      'title': serializer.toJson<String?>(title),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -2143,6 +2269,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
     Value<int?> amountCents = const Value.absent(),
     int? categoryId,
     Value<String?> note = const Value.absent(),
+    Value<String?> title = const Value.absent(),
     int? sortOrder,
     DateTime? createdAt,
   }) => FavoriteRow(
@@ -2152,6 +2279,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
     amountCents: amountCents.present ? amountCents.value : this.amountCents,
     categoryId: categoryId ?? this.categoryId,
     note: note.present ? note.value : this.note,
+    title: title.present ? title.value : this.title,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -2167,6 +2295,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
           ? data.categoryId.value
           : this.categoryId,
       note: data.note.present ? data.note.value : this.note,
+      title: data.title.present ? data.title.value : this.title,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
@@ -2181,6 +2310,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
           ..write('amountCents: $amountCents, ')
           ..write('categoryId: $categoryId, ')
           ..write('note: $note, ')
+          ..write('title: $title, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -2195,6 +2325,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
     amountCents,
     categoryId,
     note,
+    title,
     sortOrder,
     createdAt,
   );
@@ -2208,6 +2339,7 @@ class FavoriteRow extends DataClass implements Insertable<FavoriteRow> {
           other.amountCents == this.amountCents &&
           other.categoryId == this.categoryId &&
           other.note == this.note &&
+          other.title == this.title &&
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt);
 }
@@ -2219,6 +2351,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
   final Value<int?> amountCents;
   final Value<int> categoryId;
   final Value<String?> note;
+  final Value<String?> title;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
   const FavoritesCompanion({
@@ -2228,6 +2361,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
     this.amountCents = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.note = const Value.absent(),
+    this.title = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
@@ -2238,6 +2372,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
     this.amountCents = const Value.absent(),
     required int categoryId,
     this.note = const Value.absent(),
+    this.title = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required DateTime createdAt,
   }) : label = Value(label),
@@ -2251,6 +2386,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
     Expression<int>? amountCents,
     Expression<int>? categoryId,
     Expression<String>? note,
+    Expression<String>? title,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
   }) {
@@ -2261,6 +2397,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
       if (amountCents != null) 'amount_cents': amountCents,
       if (categoryId != null) 'category_id': categoryId,
       if (note != null) 'note': note,
+      if (title != null) 'title': title,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
     });
@@ -2273,6 +2410,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
     Value<int?>? amountCents,
     Value<int>? categoryId,
     Value<String?>? note,
+    Value<String?>? title,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
   }) {
@@ -2283,6 +2421,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
       amountCents: amountCents ?? this.amountCents,
       categoryId: categoryId ?? this.categoryId,
       note: note ?? this.note,
+      title: title ?? this.title,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -2311,6 +2450,9 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
@@ -2329,6 +2471,7 @@ class FavoritesCompanion extends UpdateCompanion<FavoriteRow> {
           ..write('amountCents: $amountCents, ')
           ..write('categoryId: $categoryId, ')
           ..write('note: $note, ')
+          ..write('title: $title, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -2936,6 +3079,7 @@ typedef $$RecurringRulesTableCreateCompanionBuilder =
       required TransactionType type,
       required int categoryId,
       Value<String?> note,
+      Value<String?> title,
       required RecurrenceUnit unit,
       Value<int> interval,
       required String startDate,
@@ -2951,6 +3095,7 @@ typedef $$RecurringRulesTableUpdateCompanionBuilder =
       Value<TransactionType> type,
       Value<int> categoryId,
       Value<String?> note,
+      Value<String?> title,
       Value<RecurrenceUnit> unit,
       Value<int> interval,
       Value<String> startDate,
@@ -3032,6 +3177,11 @@ class $$RecurringRulesTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3149,6 +3299,11 @@ class $$RecurringRulesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get unit => $composableBuilder(
     column: $table.unit,
     builder: (column) => ColumnOrderings(column),
@@ -3230,6 +3385,9 @@ class $$RecurringRulesTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<RecurrenceUnit, String> get unit =>
       $composableBuilder(column: $table.unit, builder: (column) => column);
@@ -3336,6 +3494,7 @@ class $$RecurringRulesTableTableManager
                 Value<TransactionType> type = const Value.absent(),
                 Value<int> categoryId = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> title = const Value.absent(),
                 Value<RecurrenceUnit> unit = const Value.absent(),
                 Value<int> interval = const Value.absent(),
                 Value<String> startDate = const Value.absent(),
@@ -3349,6 +3508,7 @@ class $$RecurringRulesTableTableManager
                 type: type,
                 categoryId: categoryId,
                 note: note,
+                title: title,
                 unit: unit,
                 interval: interval,
                 startDate: startDate,
@@ -3364,6 +3524,7 @@ class $$RecurringRulesTableTableManager
                 required TransactionType type,
                 required int categoryId,
                 Value<String?> note = const Value.absent(),
+                Value<String?> title = const Value.absent(),
                 required RecurrenceUnit unit,
                 Value<int> interval = const Value.absent(),
                 required String startDate,
@@ -3377,6 +3538,7 @@ class $$RecurringRulesTableTableManager
                 type: type,
                 categoryId: categoryId,
                 note: note,
+                title: title,
                 unit: unit,
                 interval: interval,
                 startDate: startDate,
@@ -3482,6 +3644,7 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       required String date,
       required int categoryId,
       Value<String?> note,
+      Value<String?> title,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int?> recurringRuleId,
@@ -3494,6 +3657,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<String> date,
       Value<int> categoryId,
       Value<String?> note,
+      Value<String?> title,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int?> recurringRuleId,
@@ -3571,6 +3735,11 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3665,6 +3834,11 @@ class $$TransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -3747,6 +3921,9 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -3835,6 +4012,7 @@ class $$TransactionsTableTableManager
                 Value<String> date = const Value.absent(),
                 Value<int> categoryId = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> title = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int?> recurringRuleId = const Value.absent(),
@@ -3845,6 +4023,7 @@ class $$TransactionsTableTableManager
                 date: date,
                 categoryId: categoryId,
                 note: note,
+                title: title,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 recurringRuleId: recurringRuleId,
@@ -3857,6 +4036,7 @@ class $$TransactionsTableTableManager
                 required String date,
                 required int categoryId,
                 Value<String?> note = const Value.absent(),
+                Value<String?> title = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int?> recurringRuleId = const Value.absent(),
@@ -3867,6 +4047,7 @@ class $$TransactionsTableTableManager
                 date: date,
                 categoryId: categoryId,
                 note: note,
+                title: title,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 recurringRuleId: recurringRuleId,
@@ -3955,6 +4136,7 @@ typedef $$FavoritesTableCreateCompanionBuilder = FavoritesCompanion Function({
   Value<int?> amountCents,
   required int categoryId,
   Value<String?> note,
+  Value<String?> title,
   Value<int> sortOrder,
   required DateTime createdAt,
 });
@@ -3965,6 +4147,7 @@ typedef $$FavoritesTableUpdateCompanionBuilder = FavoritesCompanion Function({
   Value<int?> amountCents,
   Value<int> categoryId,
   Value<String?> note,
+  Value<String?> title,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
 });
@@ -4023,6 +4206,11 @@ class $$FavoritesTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4094,6 +4282,11 @@ class $$FavoritesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -4153,6 +4346,9 @@ class $$FavoritesTableAnnotationComposer
 
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
@@ -4218,6 +4414,7 @@ class $$FavoritesTableTableManager
                 Value<int?> amountCents = const Value.absent(),
                 Value<int> categoryId = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> title = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => FavoritesCompanion(
@@ -4227,6 +4424,7 @@ class $$FavoritesTableTableManager
                 amountCents: amountCents,
                 categoryId: categoryId,
                 note: note,
+                title: title,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
               ),
@@ -4238,6 +4436,7 @@ class $$FavoritesTableTableManager
                 Value<int?> amountCents = const Value.absent(),
                 required int categoryId,
                 Value<String?> note = const Value.absent(),
+                Value<String?> title = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
               }) => FavoritesCompanion.insert(
@@ -4247,6 +4446,7 @@ class $$FavoritesTableTableManager
                 amountCents: amountCents,
                 categoryId: categoryId,
                 note: note,
+                title: title,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
               ),
