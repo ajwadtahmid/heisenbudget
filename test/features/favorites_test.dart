@@ -468,16 +468,34 @@ void main() {
     });
   });
 
-  group('the Quick add strip on Home', () {
-    testWidgets('is absent until there is a favorite', (tester) async {
+  group('Quick add in the Add sheet', () {
+    Future<void> openAddSheet(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Add transaction'));
+      await settle(tester);
+    }
+
+    testWidgets('Home no longer shows a Quick add strip', (tester) async {
       final env = await createEnv(tester);
+      final id = await addFavorite(tester, env);
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
       expect(find.text('QUICK ADD'), findsNothing);
+      expect(find.byKey(ValueKey('favorite-$id')), findsNothing);
       await disposeEnv(tester, env);
     });
 
-    testWidgets('shows each favorite with its amount, in order', (
+    testWidgets('the Add sheet has no row until there is a favorite', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await openAddSheet(tester);
+      expect(find.byKey(const ValueKey('quick-add-row')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the row shows each favorite with its amount, in order', (
       tester,
     ) async {
       final env = await createEnv(tester);
@@ -492,8 +510,9 @@ void main() {
       await addFavorite(tester, env, label: 'Lunch', cents: null);
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
+      await openAddSheet(tester);
 
-      expect(find.text('QUICK ADD'), findsOneWidget);
+      expect(find.text('Quick add'), findsOneWidget);
       expect(find.text('Coffee'), findsOneWidget);
       expect(find.text('\$4.00'), findsOneWidget);
       expect(find.text('\$2.50'), findsOneWidget);
@@ -506,44 +525,91 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('tapping logs it today, then Undo removes it', (tester) async {
+    testWidgets('the Edit sheet and a filled-in sheet do not show it', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
-      final id = await addFavorite(tester, env);
-      await tester.pumpWidget(wholeApp(env));
+      await addFavorite(tester, env);
+      final tx = await addExpense(tester, env, 450, d(2026, 10, 5), note: 'x');
+      await openForm(tester, env, editId: tx);
+      expect(find.byKey(const ValueKey('quick-add-row')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('form-menu')));
       await settle(tester);
-
-      await tester.tap(find.byKey(ValueKey('favorite-$id')));
+      await tester.tap(find.text('Duplicate'));
       await settle(tester);
-      final txs = await allTx(tester, env);
-      expect(txs, hasLength(1));
-      expect(
-        (
-          txs.single.amountCents,
-          txs.single.date,
-          txs.single.note,
-          txs.single.type,
-        ),
-        (400, '2026-10-15', 'Flat white', TransactionType.expense),
-      );
-      expect(find.text('Logged Coffee -\$4.00.'), findsOneWidget);
-      expect(find.byType(BottomSheet), findsNothing, reason: 'no sheet opened');
-
-      await tester.tap(find.text('Undo'));
-      await settle(tester);
-      expect(await allTx(tester, env), isEmpty);
+      expect(find.text('Add transaction'), findsOneWidget);
+      expect(find.byKey(const ValueKey('quick-add-row')), findsNothing);
       await disposeEnv(tester, env);
     });
 
-    testWidgets('tapping twice logs twice', (tester) async {
+    testWidgets(
+      'tapping one logs it today, closes the sheet, and Undo removes it',
+      (tester) async {
+        final env = await createEnv(tester);
+        final id = await addFavorite(tester, env);
+        await tester.pumpWidget(wholeApp(env));
+        await settle(tester);
+        await openAddSheet(tester);
+
+        await tester.tap(find.byKey(ValueKey('favorite-$id')));
+        await settle(tester);
+        final txs = await allTx(tester, env);
+        expect(txs, hasLength(1));
+        expect(
+          (
+            txs.single.amountCents,
+            txs.single.date,
+            txs.single.note,
+            txs.single.type,
+          ),
+          (400, '2026-10-15', 'Flat white', TransactionType.expense),
+        );
+        expect(
+          find.text('Add transaction'),
+          findsNothing,
+          reason: 'the sheet closed',
+        );
+        expect(find.text('Logged Coffee -\$4.00.'), findsOneWidget);
+
+        await tester.tap(find.text('Undo'));
+        await settle(tester);
+        expect(await allTx(tester, env), isEmpty);
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('a favorite\'s title goes onto the transaction it logs', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
-      final id = await addFavorite(tester, env);
+      final cat = await categoryId(
+        tester,
+        env,
+        'Food',
+        TransactionType.expense,
+      );
+      final id = (await tester.runAsync(
+        () => FavoriteRepository(env.db).add(
+          FavoriteInput(
+            label: 'Burger',
+            type: TransactionType.expense,
+            categoryId: cat,
+            amountCents: 2500,
+            title: 'In & Out',
+          ),
+        ),
+      ))!;
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
+      await openAddSheet(tester);
       await tester.tap(find.byKey(ValueKey('favorite-$id')));
       await settle(tester);
-      await tester.tap(find.byKey(ValueKey('favorite-$id')));
-      await settle(tester);
-      expect(await allTx(tester, env), hasLength(2));
+      expect((await allTx(tester, env)).single.title, 'In & Out');
+      expect(
+        find.text('In & Out · Food'),
+        findsWidgets,
+        reason: 'Recent shows it',
+      );
       await disposeEnv(tester, env);
     });
 
@@ -567,6 +633,7 @@ void main() {
       ))!;
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
+      await openAddSheet(tester);
       await tester.tap(find.byKey(ValueKey('favorite-$id')));
       await settle(tester);
       expect((await allTx(tester, env)).single.type, TransactionType.income);
@@ -574,25 +641,24 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('a favorite with no amount opens the sheet to enter one', (
+    testWidgets('a favorite with no amount fills the form instead', (
       tester,
     ) async {
       final env = await createEnv(tester);
-      final id = await addFavorite(
-        tester,
-        env,
-        label: 'Lunch',
-        cents: null,
-        note: 'Canteen',
-      );
+      final id = await addFavorite(tester, env, label: 'Lunch', cents: null);
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
+      await openAddSheet(tester);
       await tester.tap(find.byKey(ValueKey('favorite-$id')));
       await settle(tester);
 
-      expect(find.text('Add transaction'), findsOneWidget);
+      expect(
+        find.text('Add transaction'),
+        findsOneWidget,
+        reason: 'still open',
+      );
       expect(amountText(tester), '');
-      expect(noteText(tester), 'Canteen');
+      expect(noteText(tester), 'Flat white');
       expect(await allTx(tester, env), isEmpty);
 
       await tester.enterText(find.byKey(const ValueKey('amount-field')), '12');
@@ -603,7 +669,7 @@ void main() {
     });
 
     testWidgets(
-      'a favorite whose category was archived opens the sheet instead',
+      'a favorite whose category was archived fills the form with the default',
       (tester) async {
         final env = await createEnv(tester);
         final id = await addFavorite(tester, env, category: 'Transport');
@@ -618,50 +684,91 @@ void main() {
         );
         await tester.pumpWidget(wholeApp(env));
         await settle(tester);
+        await openAddSheet(tester);
         await tester.tap(find.byKey(ValueKey('favorite-$id')));
         await settle(tester);
         expect(find.text('Add transaction'), findsOneWidget);
         expect(amountText(tester), '4.00');
+        expect(find.byKey(ValueKey('category-$transport')), findsNothing);
         expect(await allTx(tester, env), isEmpty);
         await disposeEnv(tester, env);
       },
     );
 
-    testWidgets('long-press offers to open it or edit it', (tester) async {
-      final env = await createEnv(tester);
-      final id = await addFavorite(tester, env);
-      await tester.pumpWidget(wholeApp(env));
-      await settle(tester);
-      await longPressRow(tester, 'favorite-$id');
-      expect(find.byKey(const ValueKey('favorite-open')), findsOneWidget);
-      expect(find.byKey(const ValueKey('favorite-edit')), findsOneWidget);
+    testWidgets(
+      'with an amount already typed, a tap fills the form and logs nothing',
+      (tester) async {
+        final env = await createEnv(tester);
+        final id = await addFavorite(tester, env, cents: 450);
+        await tester.pumpWidget(wholeApp(env));
+        await settle(tester);
+        await openAddSheet(tester);
+        await tester.enterText(
+          find.byKey(const ValueKey('amount-field')),
+          '99',
+        );
+        await tester.tap(find.byKey(ValueKey('favorite-$id')));
+        await settle(tester);
+        expect(find.text('Add transaction'), findsOneWidget);
+        expect(amountText(tester), '4.50');
+        expect(await allTx(tester, env), isEmpty);
+        await disposeEnv(tester, env);
+      },
+    );
 
-      await tester.tap(find.byKey(const ValueKey('favorite-open')));
-      await settle(tester);
-      expect(find.text('Add transaction'), findsOneWidget);
-      expect(amountText(tester), '4.00');
-      expect(await allTx(tester, env), isEmpty, reason: 'opening does not log');
-      await disposeEnv(tester, env);
-    });
+    testWidgets(
+      'pressing and holding fills the form, even for a fixed amount',
+      (tester) async {
+        final env = await createEnv(tester);
+        final id = await addFavorite(tester, env);
+        await tester.pumpWidget(wholeApp(env));
+        await settle(tester);
+        await openAddSheet(tester);
+        await tester.longPress(find.byKey(ValueKey('favorite-$id')));
+        await settle(tester);
+        expect(find.text('Add transaction'), findsOneWidget);
+        expect(amountText(tester), '4.00');
+        expect(noteText(tester), 'Flat white');
+        expect(await allTx(tester, env), isEmpty, reason: 'filled, not logged');
 
-    testWidgets('editing from the long-press menu changes the favorite', (
+        await tester.tap(find.byKey(const ValueKey('save-button')));
+        await settle(tester);
+        expect((await allTx(tester, env)).single.amountCents, 400);
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('a favorite can switch the sheet between expense and income', (
       tester,
     ) async {
       final env = await createEnv(tester);
-      final id = await addFavorite(tester, env);
+      final cat = await categoryId(
+        tester,
+        env,
+        'Salary',
+        TransactionType.income,
+      );
+      final id = (await tester.runAsync(
+        () => FavoriteRepository(env.db).add(
+          FavoriteInput(
+            label: 'Pay',
+            type: TransactionType.income,
+            categoryId: cat,
+            amountCents: null,
+          ),
+        ),
+      ))!;
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
-      await longPressRow(tester, 'favorite-$id');
-      await tester.tap(find.byKey(const ValueKey('favorite-edit')));
+      await openAddSheet(tester);
+      await tester.tap(find.byKey(ValueKey('favorite-$id')));
       await settle(tester);
-      expect(find.text('Edit favorite'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const ValueKey('favorite-amount')),
-        '4.50',
+      expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(ValueKey('category-$cat')))
+            .selected,
+        isTrue,
       );
-      await tapKey(tester, 'favorite-save');
-      expect((await allFavorites(tester, env)).single.amountCents, 450);
-      expect(find.text('\$4.50'), findsOneWidget);
       await disposeEnv(tester, env);
     });
   });
@@ -741,10 +848,14 @@ void main() {
     ) async {
       final env = await createEnv(tester);
       final id = await addFavorite(tester, env);
+      await addExpense(
+        tester,
+        env,
+        400,
+        d(2026, 10, 15),
+      ); // one it logged earlier
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
-      await tester.tap(find.byKey(ValueKey('favorite-$id')));
-      await settle(tester); // logs one
       await openManager(tester);
 
       await tester.tap(find.byKey(ValueKey('favorite-delete-$id')));
@@ -784,7 +895,9 @@ void main() {
   });
 
   group('large text', () {
-    testWidgets('the strip, menus and editor fit at 200% text', (tester) async {
+    testWidgets('the Add sheet row, menus and editor fit at 200% text', (
+      tester,
+    ) async {
       final env = await createEnv(tester);
       for (var i = 0; i < 5; i++) {
         await addFavorite(tester, env, label: 'A fairly long favorite $i');
@@ -801,7 +914,12 @@ void main() {
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       await tester.pumpWidget(wholeApp(env));
       await settle(tester);
-      expect(tester.takeException(), isNull, reason: 'Home with the strip');
+      await tester.tap(find.byTooltip('Add transaction'));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('quick-add-row')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'the Add sheet row');
+      await tester.tap(find.byTooltip('Close'));
+      await settle(tester);
 
       await goToTab(tester, 'History');
       await longPressRow(tester, 'tx-$tx');

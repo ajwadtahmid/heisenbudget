@@ -30,16 +30,20 @@ cloud, no analytics. Everything is stored on the device.
   week mode (calendar weeks or fixed 7-day blocks) and which weekday a week
   starts on.
 
-- Search in History: a search box finds transactions by note, category or
-  amount (a number matches by prefix, so `4` finds 4.00 to 4.99; several words
+- Optional titles: give a transaction a short name such as "In & Out" and its
+  row reads "In & Out · Food" over the date, or just "Food" when there is no
+  title. Titles are kept by Duplicate, favorites and repeating transactions,
+  searched by History search, and included in backups and the CSV.
+- Search in History: a search box finds transactions by title, note,
+  category or amount (a number matches by prefix, so `4` finds 4.00 to 4.99; several words
   must all match). Matches are highlighted, a results line shows the count and
   net, and it works together with the filters.
 - Duplicate and favorites: press and hold a transaction for Edit, Duplicate
   (opens the Add sheet filled in, dated today), Save as favorite and Delete.
-  Favorites appear as one-tap buttons under Quick add on Home: tap to log
-  one dated today (with Undo), or press and hold to open or edit it. A
-  favorite can leave the amount empty to be asked each time. Manage and
-  reorder them under Settings > Quick add.
+  Favorites appear as a Quick add row at the top of the Add sheet: tap one to
+  log it dated today and close the sheet (with Undo), or press and hold to fill
+  the form with it and change it first. A favorite can leave the amount empty
+  to be asked each time. Manage and reorder them under Settings > Quick add.
 - "vs last month": under Spent and Received on Home, a quiet line such as
   `▼ 12% vs Sep 1–25`. While a period is still going it compares the same days
   (Oct 1–25 with Sep 1–25, not all of September); a finished one compares

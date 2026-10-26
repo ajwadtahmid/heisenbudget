@@ -52,6 +52,14 @@ class TransactionTile extends StatelessWidget {
     final signed = isIncome ? tx.amountCents : -tx.amountCents;
     final amount = formatMoney(signed, currencySymbol, showPlus: true);
 
+    // "In & Out · Food": the title, when there is one, then the category.
+    final categoryText = category.isArchived
+        ? '${category.name} (archived)'
+        : category.name;
+    final heading = tx.title == null
+        ? categoryText
+        : '${tx.title} · $categoryText';
+
     // A small mark when a repeating rule made this one.
     final repeats = tx.recurringRuleId != null;
     final subtitleParts = [
@@ -73,10 +81,7 @@ class TransactionTile extends StatelessWidget {
             iconKey: category.icon,
             archived: category.isArchived,
           ),
-          title: HighlightedText(
-            category.isArchived ? '${category.name} (archived)' : category.name,
-            query: highlight,
-          ),
+          title: HighlightedText(heading, query: highlight),
           subtitle: subtitleParts.isEmpty && !repeats
               ? null
               : Row(

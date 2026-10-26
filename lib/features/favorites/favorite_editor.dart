@@ -49,6 +49,7 @@ class _FavoriteEditorState extends ConsumerState<_FavoriteEditor> {
   late final TextEditingController _label;
   late final TextEditingController _amount;
   late final TextEditingController _note;
+  late final TextEditingController _title;
   late final TransactionType _type;
   int? _categoryId;
   String? _error;
@@ -68,9 +69,11 @@ class _FavoriteEditorState extends ConsumerState<_FavoriteEditor> {
       text: cents == null ? '' : centsToInputText(cents),
     );
     final note = existing?.note ?? from?.note ?? '';
+    final title = existing?.title ?? from?.title ?? '';
     _note = TextEditingController(text: note);
+    _title = TextEditingController(text: title);
     _label = TextEditingController(
-      text: existing?.label ?? _suggestLabel(note),
+      text: existing?.label ?? _suggestLabel(title.isNotEmpty ? title : note),
     );
   }
 
@@ -87,6 +90,7 @@ class _FavoriteEditorState extends ConsumerState<_FavoriteEditor> {
     _label.dispose();
     _amount.dispose();
     _note.dispose();
+    _title.dispose();
     super.dispose();
   }
 
@@ -122,6 +126,7 @@ class _FavoriteEditorState extends ConsumerState<_FavoriteEditor> {
       categoryId: categoryId,
       amountCents: text.isEmpty ? null : parseMoney(text).cents,
       note: _note.text,
+      title: _title.text,
     );
 
     setState(() {
@@ -278,6 +283,18 @@ class _FavoriteEditorState extends ConsumerState<_FavoriteEditor> {
                     ],
                   ),
                   const SizedBox(height: Gap.l),
+                  TextFormField(
+                    key: const ValueKey('favorite-title'),
+                    controller: _title,
+                    maxLength: maxTitleLength,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Title (optional)',
+                      helperText: 'Shown before the category in History',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: Gap.m),
                   TextFormField(
                     key: const ValueKey('favorite-note'),
                     controller: _note,

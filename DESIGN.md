@@ -276,7 +276,7 @@ The balance counts to its new value in 350ms (ease-out cubic). Screen readers he
 Top categories (up to five plus a Rest bar in the render) as 24dp amber peaks over a graticule of four hairlines and a stronger baseline, 152dp tall; percentage in 12sp mono above each peak, icon and name below. Tap focuses one peak: others dim to 32% and a readout line shows name, share and amount. Each peak is a labelled button. Empty state: a flat baseline with one line of text. Peaks rise left to right over 700ms. Chart labels are capped at 130% text scale.
 
 ### Transaction row
-Category tile at left, category name (16sp medium), date and note in dim (Home shows the date), amount in 16sp mono at right coloured by channel with explicit sign, closed by a hairline. Archived categories are marked "(archived)" and drawn in faint.
+Category tile at left, then the first line in 16sp medium: the category name, or "Title · Category" when the transaction has a title (the title is never a replacement for the category). Under it the date and note in dim (Home shows the date), amount in 16sp mono at right coloured by channel with explicit sign, closed by a hairline. Archived categories are marked "(archived)" and drawn in faint.
 
 A row made by a repeating rule carries a small 14dp repeat icon (dim, labelled "Repeating") ahead of its date and note.
 
@@ -293,7 +293,7 @@ Three 192px icons for the long-press menu: an amber up arrow (Add expense), a gr
 A search icon in the History app bar reveals a text field above Filter and Sort (hint "Search notes, categories, amounts", clear button). Matches in the category name and note are bold on a soft accent tint (22% accent), never colour alone. A dim line under the controls reads "12 results · net -$84.20". The control block scrolls when it needs more than half the screen.
 
 ### Row menu and Quick add
-Pressing and holding a transaction opens a full-height-capable bottom sheet of 48dp rows: Edit, Duplicate, Save as favorite, Delete (error colour). Favorites are chips on Home under a QUICK ADD label: panel fill, hairline border, 8dp radius, 48dp tall, category icon, name in 14sp medium and the amount in 13sp dim mono. They wrap onto new lines at large text. Hidden when there are none. Tap logs, long-press opens options.
+Pressing and holding a transaction opens a full-height-capable bottom sheet of 48dp rows: Edit, Duplicate, Save as favorite, Delete (error colour). Favorites are chips in a one-line Quick add row at the top of the Add sheet (scrolls sideways): panel fill, hairline border, 8dp radius, 48dp tall, category icon, name in 14sp medium and the amount in 13sp dim mono. Absent when there are none, and on the Edit sheet or a sheet opened already filled in. Tap logs and closes the sheet; long-press fills the form. Home has no Quick add.
 
 ### Repeat sheet
 A bottom sheet with wrapping choice chips (Does not repeat, Weekly, Monthly, Yearly, Custom), a number field and unit chips for Custom, a dim plain-language summary ("Monthly on the 1st") and an Ends row. It scrolls, so it holds at 200% text.

@@ -127,7 +127,7 @@ void main() {
     expect(file.mime, 'text/csv');
     expect(
       utf8.decode(file.bytes),
-      contains('2026-10-05,Expense,Food,12.50,Lunch'),
+      contains('2026-10-05,Expense,Food,,12.50,Lunch'),
     );
     await disposeEnv(tester, env);
   });

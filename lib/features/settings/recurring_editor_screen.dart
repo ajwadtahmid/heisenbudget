@@ -60,6 +60,7 @@ class _EditorState extends ConsumerState<_Editor> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _amount;
   late final TextEditingController _note;
+  late final TextEditingController _title;
   late int _categoryId;
   late RepeatChoice _choice;
 
@@ -75,6 +76,7 @@ class _EditorState extends ConsumerState<_Editor> {
     final rule = _rule;
     _amount = TextEditingController(text: centsToInputText(rule.amountCents));
     _note = TextEditingController(text: rule.note ?? '');
+    _title = TextEditingController(text: rule.title ?? '');
     _categoryId = rule.categoryId;
     _choice = RepeatChoice(
       unit: rule.unit,
@@ -87,6 +89,7 @@ class _EditorState extends ConsumerState<_Editor> {
   void dispose() {
     _amount.dispose();
     _note.dispose();
+    _title.dispose();
     super.dispose();
   }
 
@@ -158,6 +161,7 @@ class _EditorState extends ConsumerState<_Editor> {
             type: rule.type,
             categoryId: _categoryId,
             note: _note.text,
+            title: _title.text,
             unit: _choice.unit,
             interval: _choice.interval,
             start: start,
@@ -308,6 +312,18 @@ class _EditorState extends ConsumerState<_Editor> {
                     onSelected: (_) => setState(() => _categoryId = cat.id),
                   ),
               ],
+            ),
+            const SizedBox(height: Gap.l),
+            TextFormField(
+              key: const ValueKey('rule-title'),
+              controller: _title,
+              maxLength: maxTitleLength,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Title (optional)',
+                border: OutlineInputBorder(),
+                counterText: '',
+              ),
             ),
             const SizedBox(height: Gap.l),
             TextFormField(

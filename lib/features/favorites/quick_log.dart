@@ -37,20 +37,9 @@ Future<void> openFavoriteInForm(
   );
 }
 
-/// What tapping a favorite does: logs it dated today with a tick and an Undo,
-/// or, when it has no amount (or its category was archived), opens the Add
-/// sheet filled in so the missing part can be entered.
-Future<void> useFavorite(
-  BuildContext context,
-  WidgetRef ref,
-  FavoriteRow favorite,
-) async {
-  final categories = ref.read(allCategoriesProvider).value ?? const [];
-  if (!canLogDirectly(favorite, categories)) {
-    await openFavoriteInForm(context, ref, favorite);
-    return;
-  }
-
+/// Logs [favorite] dated today with a tick and an Undo. The caller has
+/// checked that it can be logged directly ([canLogDirectly]).
+Future<void> logFavoriteNow(WidgetRef ref, FavoriteRow favorite) async {
   final repo = ref.read(transactionRepositoryProvider);
   final messenger = ref.read(rootMessengerKeyProvider);
   final symbol = ref.read(settingsProvider).currencySymbol;
@@ -62,6 +51,7 @@ Future<void> useFavorite(
       date: ref.read(clockProvider),
       categoryId: favorite.categoryId,
       note: favorite.note,
+      title: favorite.title,
     ),
   );
   HapticFeedback.selectionClick();

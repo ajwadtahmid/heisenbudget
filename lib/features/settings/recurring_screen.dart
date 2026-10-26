@@ -103,7 +103,8 @@ class _RuleTile extends ConsumerWidget {
         : !rule.isActive
         ? 'Paused'
         : 'Next ${formatDate(next!)}';
-    final name = rule.note ?? category?.name ?? 'Repeating transaction';
+    final name =
+        rule.title ?? rule.note ?? category?.name ?? 'Repeating transaction';
 
     return DecoratedBox(
       decoration: BoxDecoration(

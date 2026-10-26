@@ -11,6 +11,7 @@ class TransactionDraft {
     this.amountCents,
     this.categoryId,
     this.note,
+    this.title,
   });
 
   final TransactionType type;
@@ -21,6 +22,7 @@ class TransactionDraft {
   /// Null picks the usual default (last used, else "Other").
   final int? categoryId;
   final String? note;
+  final String? title;
 
   /// A copy of an existing transaction. An archived category is not carried
   /// over: it can no longer be picked for new transactions.
@@ -31,6 +33,7 @@ class TransactionDraft {
       amountCents: tx.amountCents,
       categoryId: item.category.isArchived ? null : tx.categoryId,
       note: tx.note,
+      title: tx.title,
     );
   }
 
@@ -44,6 +47,7 @@ class TransactionDraft {
       amountCents: favorite.amountCents,
       categoryId: categoryArchived ? null : favorite.categoryId,
       note: favorite.note,
+      title: favorite.title,
     );
   }
 }

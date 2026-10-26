@@ -33,7 +33,11 @@ class ComingUpTile extends StatelessWidget {
       item.date.day,
     ).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
     final when = days == 1 ? 'tomorrow' : 'in $days days';
-    final name = rule.note ?? item.category?.name ?? 'Repeating transaction';
+    final name =
+        rule.title ??
+        rule.note ??
+        item.category?.name ??
+        'Repeating transaction';
     final amount = formatMoney(
       isIncome ? rule.amountCents : -rule.amountCents,
       currencySymbol,

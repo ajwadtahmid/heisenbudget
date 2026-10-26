@@ -63,7 +63,7 @@ Future<void> showTransactionMenu(
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, Gap.s),
               child: Text(
-                '${item.category.name}  ${formatMoney(signed, symbol, showPlus: true)}',
+                '${tx.title ?? item.category.name}  ${formatMoney(signed, symbol, showPlus: true)}',
                 style: theme.textTheme.titleMedium,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

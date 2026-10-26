@@ -24,7 +24,10 @@ import '../../providers/transaction_providers.dart';
 import '../../data/repositories/recurring_repository.dart';
 import '../settings/recurring_editor_screen.dart';
 import '../shared/recurring_catch_up.dart';
+import '../../providers/favorite_providers.dart';
+import '../favorites/favorite_chip.dart';
 import '../favorites/favorite_editor.dart';
+import '../favorites/quick_log.dart';
 import 'new_category_dialog.dart';
 import 'transaction_draft.dart';
 import 'repeat_sheet.dart';
@@ -93,6 +96,8 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _amount;
   late final TextEditingController _note;
+  late final TextEditingController _title;
+  final _amountFocus = FocusNode();
   late TransactionType _type;
   late DateTime _date;
 
@@ -126,6 +131,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       text: cents != null ? centsToInputText(cents) : '',
     );
     _note = TextEditingController(text: tx?.note ?? draft?.note ?? '');
+    _title = TextEditingController(text: tx?.title ?? draft?.title ?? '');
   }
 
   @override
@@ -133,6 +139,8 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     Future.microtask(_openSheets.closed);
     _amount.dispose();
     _note.dispose();
+    _title.dispose();
+    _amountFocus.dispose();
     super.dispose();
   }
 
@@ -244,6 +252,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       date: _date,
       categoryId: categoryId,
       note: _note.text,
+      title: _title.text,
     );
     final existing = widget.existing;
     final repeat = _canSetRepeat ? _repeat : null;
@@ -259,6 +268,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
             type: _type,
             categoryId: categoryId,
             note: _note.text,
+            title: _title.text,
             unit: repeat.unit,
             interval: repeat.interval,
             start: _date,
@@ -287,6 +297,79 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     // A rule that starts in the past fills in the days since.
     if (repeat != null) await runRecurringCatchUp(ref);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// The Quick add row shows when adding a plain new transaction: not when
+  /// editing, and not when the sheet was opened already filled in.
+  bool get _showQuickAdd => !_isEdit && widget.draft == null;
+
+  /// What tapping a favorite does: log it right away and close the sheet,
+  /// or, when it cannot be logged as it is (no amount, or its category was
+  /// archived) or an amount is already typed, fill the form with it.
+  Future<void> _onFavoriteTap(
+    FavoriteRow favorite,
+    List<CategoryRow> categories,
+  ) async {
+    final typing = _amount.text.trim().isNotEmpty;
+    if (typing || !canLogDirectly(favorite, categories)) {
+      _fillFrom(favorite, categories);
+      return;
+    }
+    await logFavoriteNow(ref, favorite);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Puts a favorite's values in the form, ready to change before saving.
+  void _fillFrom(FavoriteRow favorite, List<CategoryRow> categories) {
+    final category = categories.where((c) => c.id == favorite.categoryId);
+    final usable = category.isNotEmpty && !category.first.isArchived;
+    final cents = favorite.amountCents;
+    setState(() {
+      _type = favorite.type;
+      _categoryId = usable ? favorite.categoryId : null;
+      _categoryError = null;
+      _amount.text = cents == null ? '' : centsToInputText(cents);
+      _title.text = favorite.title ?? '';
+      _note.text = favorite.note ?? '';
+    });
+    _amountFocus.requestFocus();
+  }
+
+  Widget _quickAddRow(BuildContext context, List<CategoryRow> categories) {
+    final favorites = ref.watch(favoritesProvider).value ?? const [];
+    if (!_showQuickAdd || favorites.isEmpty) return const SizedBox.shrink();
+    final symbol = ref.watch(settingsProvider.select((s) => s.currencySymbol));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Quick add', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          key: const ValueKey('quick-add-row'),
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final favorite in favorites)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: FavoriteChip(
+                    key: ValueKey('favorite-${favorite.id}'),
+                    favorite: favorite,
+                    iconKey: categories
+                        .where((c) => c.id == favorite.categoryId)
+                        .map((c) => c.icon)
+                        .firstOrNull,
+                    symbol: symbol,
+                    onTap: () => _onFavoriteTap(favorite, categories),
+                    onLongPress: () => _fillFrom(favorite, categories),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
   }
 
   void _onAction(_FormAction action) {
@@ -472,6 +555,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
+                  _quickAddRow(context, all),
                   SegmentedButton<TransactionType>(
                     segments: const [
                       ButtonSegment(
@@ -493,6 +577,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                     child: TextFormField(
                       key: const ValueKey('amount-field'),
                       controller: _amount,
+                      focusNode: _amountFocus,
                       autofocus: !_isEdit,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
@@ -524,6 +609,18 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  TextFormField(
+                    key: const ValueKey('title-field'),
+                    controller: _title,
+                    maxLength: maxTitleLength,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Title (optional)',
+                      hintText: 'A shop or a name, such as In & Out',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   ListTile(
                     key: const ValueKey('date-tile'),
                     contentPadding: EdgeInsets.zero,

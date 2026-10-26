@@ -23,7 +23,6 @@ import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
 import 'coming_up_tile.dart';
 import 'delta_line.dart';
-import 'quick_add_strip.dart';
 import 'spectrum_chart.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -167,7 +166,6 @@ class HomeScreen extends ConsumerWidget {
                   today: ref.watch(clockProvider),
                 ),
             ],
-            const QuickAddStrip(),
             const SizedBox(height: Gap.xl),
             SectionLabel(
               'Recent',
