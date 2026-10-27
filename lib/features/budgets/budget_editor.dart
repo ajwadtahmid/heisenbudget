@@ -18,19 +18,27 @@ import '../../providers/settings_providers.dart';
 ///
 /// [current] is the budget in force now, if any. A change always starts with
 /// the current period, so earlier periods keep what they had.
+///
+/// [copyFrom] is a finished period whose amount and length are offered again
+/// (the budget is not in force now): it is a new budget, filled in.
 Future<void> showBudgetEditor(
   BuildContext context, {
   required int? categoryId,
   required String name,
   BudgetLine? current,
+  PastBudget? copyFrom,
 }) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     showDragHandle: true,
-    builder: (_) =>
-        _BudgetEditor(categoryId: categoryId, name: name, current: current),
+    builder: (_) => _BudgetEditor(
+      categoryId: categoryId,
+      name: name,
+      current: current,
+      copyFrom: copyFrom,
+    ),
   );
 }
 
@@ -39,11 +47,13 @@ class _BudgetEditor extends ConsumerStatefulWidget {
     required this.categoryId,
     required this.name,
     required this.current,
+    this.copyFrom,
   });
 
   final int? categoryId;
   final String name;
   final BudgetLine? current;
+  final PastBudget? copyFrom;
 
   @override
   ConsumerState<_BudgetEditor> createState() => _BudgetEditorState();
@@ -78,18 +88,22 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   @override
   void initState() {
     super.initState();
-    final current = _current;
-    _custom = current != null && !current.unit.isMonth;
-    _inMonths = _custom && current!.unit.inMonths;
+    // What the fields start with: the budget in force, or the finished period
+    // being copied forward, or nothing.
+    final copy = widget.copyFrom;
+    final unit = _current?.unit ?? copy?.unit;
+    final startLimit = _current?.status.limit ?? copy?.limit;
+    _custom = unit != null && !unit.isMonth;
+    _inMonths = _custom && unit!.inMonths;
     _lastCount = !_custom
         ? 7
         : _inMonths
-        ? current!.unit.months
-        : current!.unit.days;
+        ? unit!.months
+        : unit!.days;
     _length = TextEditingController(text: '$_lastCount');
-    _repeats = current?.entry.repeats ?? true;
+    _repeats = _current?.entry.repeats ?? copy?.entry.repeats ?? true;
     _amount = TextEditingController(
-      text: current == null ? '' : centsToInputText(current.status.limit),
+      text: startLimit == null ? '' : centsToInputText(startLimit),
     );
     _loadSuggestion();
   }
@@ -345,7 +359,11 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
               children: [
                 Expanded(
                   child: Text(
-                    isNew ? 'Set a limit' : 'Change the limit',
+                    widget.copyFrom != null && isNew
+                        ? 'Copy forward'
+                        : isNew
+                        ? 'Set a limit'
+                        : 'Change the limit',
                     style: theme.textTheme.titleLarge,
                   ),
                 ),
@@ -365,6 +383,18 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
                   Text(widget.name, style: theme.textTheme.titleMedium),
+                  if (widget.copyFrom != null && isNew) ...[
+                    const SizedBox(height: Gap.xs),
+                    Text(
+                      'Same amount and length as the budget that ran '
+                      '${formatRange(widget.copyFrom!.range)}. It starts '
+                      'with the current period.',
+                      key: const ValueKey('budget-copy-note'),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: context.appColors.dim,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: Gap.m),
                   ClampedTextScale(
                     child: TextFormField(

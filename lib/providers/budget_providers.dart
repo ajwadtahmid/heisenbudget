@@ -239,6 +239,50 @@ final budgetOverviewProvider = Provider<AsyncValue<BudgetOverview>>((ref) {
   );
 });
 
+/// For each budget on the Budgets screen (by category id; null is all
+/// spending): that it usually runs over, when it does. Looks at up to six
+/// finished periods of the budget's current length (ones a later change cut
+/// short do not count). Empty until the spending has loaded, and for a budget
+/// with too little history to say.
+final budgetOverrunHintsProvider = Provider<Map<int?, OverrunHint>>((ref) {
+  final overview = ref.watch(budgetOverviewProvider).value;
+  final limits = ref.watch(budgetLimitsProvider).value;
+  if (overview == null || limits == null) return const {};
+  final today = ref.watch(clockProvider);
+  final startDay = ref.watch(monthStartDayProvider);
+  final entries = [for (final row in limits) row.entry];
+
+  final periods = <int?, List<PastPeriod>>{};
+  final keys = <SpendKey>[];
+  for (final line in overview.all) {
+    final past = pastPeriods(
+      entries.where((e) => e.categoryId == line.categoryId),
+      today,
+      monthStartDay: startDay,
+      limit: 24,
+    ).where((p) => !p.endedEarly && p.entry.unit == line.unit).take(6).toList();
+    if (past.length < 3) continue;
+    periods[line.categoryId] = past;
+    for (final p in past) {
+      keys.add((p.range, line.categoryId));
+    }
+  }
+  if (keys.isEmpty) return const {};
+  final spent = ref.watch(_spentManyProvider(_SpendKeys(keys))).value;
+  if (spent == null) return const {};
+
+  final hints = <int?, OverrunHint>{};
+  var next = 0;
+  for (final entry in periods.entries) {
+    final results = [
+      for (final p in entry.value) (limit: p.limit, spent: spent[next++]),
+    ];
+    final hint = overrunHint(results);
+    if (hint != null) hints[entry.key] = hint;
+  }
+  return hints;
+});
+
 /// Reads everything the overview needs again (the Budgets screen's "Try
 /// again").
 void reloadBudgets(WidgetRef ref) {

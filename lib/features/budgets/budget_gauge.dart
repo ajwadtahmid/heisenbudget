@@ -92,6 +92,11 @@ class GaugeText {
 /// The bar is spending (the Spent amber). Over the limit it turns to the
 /// error colour **and** is striped, and the words say "Over by"; "almost" is
 /// words and an icon. Colour is never the only signal.
+/// "Usually runs over by $12.00 (over in 4 of the last 6 periods)".
+String overrunText(OverrunHint hint, String symbol) =>
+    'Usually runs over by ${formatMoney(hint.averageOverCents, symbol)} '
+    '(over in ${hint.over} of the last ${hint.of} periods)';
+
 class BudgetGauge extends StatelessWidget {
   const BudgetGauge({
     super.key,
@@ -103,6 +108,7 @@ class BudgetGauge extends StatelessWidget {
     this.onTap,
     this.periodLabel,
     this.finished = false,
+    this.hint,
   });
 
   final String name;
@@ -121,6 +127,10 @@ class BudgetGauge extends StatelessWidget {
 
   /// A finished period (History): shows the result, not what is left.
   final bool finished;
+
+  /// A line about how the budget has gone in past periods, when worth saying
+  /// (see [overrunText]).
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +158,7 @@ class BudgetGauge extends StatelessWidget {
     return Semantics(
       container: true,
       button: onTap != null,
-      label: text.spoken,
+      label: hint == null ? text.spoken : '${text.spoken}. $hint',
       onTap: onTap,
       child: ExcludeSemantics(
         child: InkWell(
@@ -235,6 +245,14 @@ class BudgetGauge extends StatelessWidget {
                   Text(
                     text.planned!,
                     key: const ValueKey('gauge-planned'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
+                  ),
+                ],
+                if (hint != null) ...[
+                  const SizedBox(height: Gap.xs),
+                  Text(
+                    hint!,
+                    key: const ValueKey('gauge-hint'),
                     style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
                   ),
                 ],

@@ -378,6 +378,46 @@ List<PastPeriod> pastPeriods(
   return out.length > limit ? out.sublist(0, limit) : out;
 }
 
+/// How often a budget has run over lately, and by how much when it did.
+class OverrunHint {
+  const OverrunHint({
+    required this.over,
+    required this.of,
+    required this.averageOverCents,
+  });
+
+  /// Periods that ended over the limit, out of [of] looked at.
+  final int over;
+  final int of;
+
+  /// The average overshoot in the periods that ran over, in cents.
+  final int averageOverCents;
+}
+
+/// Says something only when a budget usually runs over: [periods] (newest
+/// first, finished and full length) must number at least [minPeriods], and at
+/// least two of the last [lookBack] must have ended over, and at least half.
+/// A budget that went over once is not "usually" over.
+OverrunHint? overrunHint(
+  List<({int limit, int spent})> periods, {
+  int lookBack = 6,
+  int minPeriods = 3,
+}) {
+  final recent = periods.take(lookBack).toList();
+  if (recent.length < minPeriods) return null;
+  final overs = [
+    for (final p in recent)
+      if (p.spent > p.limit) p.spent - p.limit,
+  ];
+  if (overs.length < 2 || overs.length * 2 < recent.length) return null;
+  final total = overs.fold<int>(0, (a, b) => a + b);
+  return OverrunHint(
+    over: overs.length,
+    of: recent.length,
+    averageOverCents: (total + overs.length ~/ 2) ~/ overs.length,
+  );
+}
+
 enum BudgetLevel { ok, almost, over }
 
 /// Spending at or above this share of the limit is "almost".

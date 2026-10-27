@@ -830,4 +830,232 @@ void main() {
       await disposeEnv(tester, env);
     });
   });
+
+  group('a budget that usually runs over', () {
+    // Monthly Food budget of 100.00 since April; today is Oct 15, 2026.
+    Future<TestEnv> usuallyOver(
+      WidgetTester tester, {
+      List<int> months = const [150, 90, 130, 80, 120, 110],
+    }) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 10000, d(2026, 4, 1));
+      for (var i = 0; i < months.length; i++) {
+        await addExpense(
+          tester,
+          env,
+          months[i] * 100,
+          d(2026, 4 + i, 10),
+          category: 'Food',
+        );
+      }
+      return env;
+    }
+
+    testWidgets('the card says so, with how often and by how much', (
+      tester,
+    ) async {
+      final env = await usuallyOver(tester);
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await goToTab(tester, 'Budgets');
+
+      // Over in Apr (+50), Jun (+30), Aug (+20) and Sep (+10): 27.50 on average.
+      expect(
+        text(tester, find.byKey(const ValueKey('gauge-hint'))),
+        r'Usually runs over by $27.50 (over in 4 of the last 6 periods)',
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a budget that went over once says nothing', (tester) async {
+      final env = await usuallyOver(
+        tester,
+        months: const [150, 90, 80, 70, 95, 60],
+      );
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await goToTab(tester, 'Budgets');
+      expect(find.byKey(const ValueKey('gauge-hint')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('too little history says nothing', (tester) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 10000, d(2026, 8, 1)); // Aug, Sep done
+      await addExpense(tester, env, 20000, d(2026, 8, 5), category: 'Food');
+      await addExpense(tester, env, 20000, d(2026, 9, 5), category: 'Food');
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await goToTab(tester, 'Budgets');
+      expect(find.byKey(const ValueKey('gauge-hint')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('periods from an older length do not count', (tester) async {
+      final env = await createEnv(tester);
+      // Weekly budget long ago, always over; monthly since July: under.
+      await limit(
+        tester,
+        env,
+        'Food',
+        1000,
+        d(2026, 3, 2),
+        unit: BudgetUnit.week,
+      );
+      for (var w = 0; w < 8; w++) {
+        await addExpense(
+          tester,
+          env,
+          5000,
+          d(2026, 3, 2).add(Duration(days: 7 * w)),
+          category: 'Food',
+        );
+      }
+      await limit(tester, env, 'Food', 10000, d(2026, 7, 1));
+      for (var m = 7; m <= 9; m++) {
+        await addExpense(tester, env, 3000, d(2026, m, 10), category: 'Food');
+      }
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await goToTab(tester, 'Budgets');
+      expect(find.byKey(const ValueKey('gauge-hint')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the hint is part of what a screen reader says', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final env = await usuallyOver(tester);
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await goToTab(tester, 'Budgets');
+      expect(
+        find.bySemanticsLabel(RegExp(r'Usually runs over by \$27\.50')),
+        findsOneWidget,
+      );
+      handle.dispose();
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('copy a finished budget forward', () {
+    Finder copyButton() => find.byWidgetPredicate((w) {
+      final key = w.key;
+      return key is ValueKey<String> && key.value.startsWith('copy-forward-');
+    });
+
+    testWidgets('offers it for a one-time budget that has ended', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 5000, d(2026, 8, 1), repeats: false);
+      await addExpense(tester, env, 4000, d(2026, 8, 9), category: 'Food');
+      await openPastBudgets(tester, env);
+      expect(rows(), 1);
+      expect(copyButton(), findsOneWidget);
+
+      await tester.tap(copyButton());
+      await settle(tester);
+
+      // The editor is filled in from the finished budget.
+      expect(find.text('Copy forward'), findsWidgets);
+      expect(find.byKey(const ValueKey('budget-copy-note')), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('budget-amount')))
+            .controller!
+            .text,
+        '50.00',
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('saving starts it again with the same amount, from now', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 5000, d(2026, 8, 1), repeats: false);
+      await openPastBudgets(tester, env);
+      await tester.tap(copyButton());
+      await settle(tester);
+
+      await tester.tap(find.text('Save'));
+      await settle(tester);
+
+      final rowsNow = await tester.runAsync(
+        () => BudgetRepository(env.db).watchAll().first,
+      );
+      final food = await catId(tester, env, 'Food');
+      final copy = rowsNow!.where((r) => r.start == '2026-10-01').single;
+      expect(copy.categoryId, food);
+      expect(copy.amountCents, 5000);
+      expect(copy.repeats, isFalse, reason: 'the same kind of budget');
+      // The old period keeps what it had, and it now has nothing to copy to.
+      expect(rowsNow.where((r) => r.start == '2026-08-01'), hasLength(1));
+      expect(copyButton(), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('keeps a custom length', (tester) async {
+      final env = await createEnv(tester);
+      await limit(
+        tester,
+        env,
+        'Food',
+        7000,
+        d(2026, 8, 1),
+        unit: BudgetUnit.days(10),
+        repeats: false,
+      );
+      await openPastBudgets(tester, env);
+      await tester.tap(copyButton());
+      await settle(tester);
+
+      expect(find.byKey(const ValueKey('budget-unit-custom')), findsOneWidget);
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.byKey(const ValueKey('budget-unit-custom')),
+            )
+            .selected,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('budget-length')))
+            .controller!
+            .text,
+        '10',
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('is not offered while the budget is still running', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 5000, d(2026, 7, 1)); // repeats on
+      await openPastBudgets(tester, env);
+      expect(rows(), greaterThan(0), reason: 'July to September are past');
+      expect(copyButton(), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('closing the editor changes nothing', (tester) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 5000, d(2026, 8, 1), repeats: false);
+      await openPastBudgets(tester, env);
+      await tester.tap(copyButton());
+      await settle(tester);
+      await tester.tap(find.byTooltip('Close'));
+      await settle(tester);
+
+      final rowsNow = await tester.runAsync(
+        () => BudgetRepository(env.db).watchAll().first,
+      );
+      expect(rowsNow, hasLength(1));
+      await disposeEnv(tester, env);
+    });
+  });
 }

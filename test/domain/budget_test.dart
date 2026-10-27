@@ -1002,4 +1002,73 @@ void main() {
       );
     });
   });
+
+  group('overrunHint', () {
+    // Newest first, as pastPeriods gives them.
+    OverrunHint? hint(
+      List<(int limit, int spent)> periods, {
+      int lookBack = 6,
+    }) => overrunHint([
+      for (final (limit, spent) in periods) (limit: limit, spent: spent),
+    ], lookBack: lookBack);
+
+    test('says nothing with fewer than three finished periods', () {
+      expect(hint(const []), isNull);
+      expect(hint(const [(100, 200), (100, 200)]), isNull);
+    });
+
+    test('says nothing when it ran over only once', () {
+      expect(hint(const [(100, 150), (100, 90), (100, 80), (100, 95)]), isNull);
+    });
+
+    test('says nothing when it ran over in fewer than half the periods', () {
+      // 2 of 5 is under half.
+      expect(
+        hint(const [(100, 150), (100, 90), (100, 160), (100, 80), (100, 70)]),
+        isNull,
+      );
+    });
+
+    test(
+      'speaks up when it ran over in at least half, and says by how much',
+      () {
+        final h = hint(const [
+          (100, 150), // over by 50
+          (100, 90),
+          (100, 130), // over by 30
+          (100, 80),
+        ])!;
+        expect((h.over, h.of), (2, 4));
+        expect(h.averageOverCents, 40);
+      },
+    );
+
+    test('a spend exactly at the limit is not over', () {
+      expect(
+        hint(const [(100, 100), (100, 100), (100, 100), (100, 101)]),
+        isNull,
+      );
+      expect(
+        hint(const [(100, 101), (100, 101), (100, 100)])!.averageOverCents,
+        1,
+      );
+    });
+
+    test('looks only at the most recent periods', () {
+      // Six recent ones within the limit, older ones all over: not "usually".
+      final periods = [
+        for (var i = 0; i < 6; i++) (100, 50),
+        for (var i = 0; i < 6; i++) (100, 500),
+      ];
+      expect(hint(periods), isNull);
+      // But a window wide enough to reach them would say so.
+      expect(hint(periods, lookBack: 12), isNotNull);
+    });
+
+    test('the average is rounded to the nearest cent', () {
+      // Over by 1 and 2: average 1.5 rounds up to 2.
+      final h = hint(const [(100, 101), (100, 102), (100, 50)])!;
+      expect(h.averageOverCents, 2);
+    });
+  });
 }

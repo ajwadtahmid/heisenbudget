@@ -8,6 +8,7 @@ import '../../domain/budget.dart';
 import '../../providers/budget_history_providers.dart';
 import '../../providers/budget_providers.dart';
 import '../../providers/settings_providers.dart';
+import '../budgets/budget_editor.dart';
 import '../budgets/budget_gauge.dart';
 import '../shared/empty_state.dart';
 import 'history_widgets.dart';
@@ -155,6 +156,15 @@ class _List extends ConsumerWidget {
       ),
     );
 
+    // Budgets in force now: a finished period of one of these has nothing to
+    // copy forward, because the budget carries on (or has been changed).
+    final inForce = {
+      for (final line
+          in ref.watch(budgetOverviewProvider).value?.all ??
+              const <BudgetLine>[])
+        line.categoryId,
+    };
+
     Widget tile(PastBudget b) {
       final status = buildBudgetStatus(
         limit: b.limit,
@@ -166,15 +176,18 @@ class _List extends ConsumerWidget {
           b.range.end.day + 1,
         ),
       );
-      return BudgetGauge(
+      final name = b.category == null
+          ? 'All spending'
+          : (b.category!.isArchived
+                ? '${b.category!.name} (archived)'
+                : b.category!.name);
+      final canCopy =
+          !inForce.contains(b.categoryId) && !(b.category?.isArchived ?? false);
+      final gauge = BudgetGauge(
         key: ValueKey(
           'past-${b.categoryId ?? 0}-${b.range.start.toIso8601String()}',
         ),
-        name: b.category == null
-            ? 'All spending'
-            : (b.category!.isArchived
-                  ? '${b.category!.name} (archived)'
-                  : b.category!.name),
+        name: name,
         iconKey: b.category == null
             ? null
             : categoryIconFor(b.category!.icon).key,
@@ -188,6 +201,30 @@ class _List extends ConsumerWidget {
         range: b.range,
         symbol: symbol,
         finished: true,
+      );
+      if (!canCopy) return gauge;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          gauge,
+          Padding(
+            padding: const EdgeInsets.only(bottom: Gap.m),
+            child: TextButton.icon(
+              key: ValueKey(
+                'copy-forward-${b.categoryId ?? 0}-'
+                '${b.range.start.toIso8601String()}',
+              ),
+              onPressed: () => showBudgetEditor(
+                context,
+                categoryId: b.categoryId,
+                name: name,
+                copyFrom: b,
+              ),
+              icon: const Icon(Icons.redo, size: 18),
+              label: const Text('Copy forward'),
+            ),
+          ),
+        ],
       );
     }
 

@@ -42,6 +42,12 @@ class BudgetsScreen extends ConsumerWidget {
       );
     }
 
+    final hints = ref.watch(budgetOverrunHintsProvider);
+    String? hintFor(int? categoryId) {
+      final hint = hints[categoryId];
+      return hint == null ? null : overrunText(hint, symbol);
+    }
+
     final Widget body;
     if (loaded.hasError) {
       body = EmptyState(
@@ -78,6 +84,7 @@ class BudgetsScreen extends ConsumerWidget {
               status: overview.overall!.status,
               range: overview.overall!.range,
               symbol: symbol,
+              hint: hintFor(null),
               onTap: () => edit(overview.overall!),
             ),
           if (overview.categoriesExceedOverall)
@@ -102,6 +109,7 @@ class BudgetsScreen extends ConsumerWidget {
               status: line.status,
               range: line.range,
               symbol: symbol,
+              hint: hintFor(line.categoryId),
               onTap: () => edit(line),
             ),
           Wrap(
