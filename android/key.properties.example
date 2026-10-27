@@ -1,0 +1,17 @@
+# Copy this file to android/key.properties (git-ignored) and fill it in.
+# It tells Gradle which keystore signs the release build for Google Play.
+#
+# Make the upload keystore once, and keep it and its passwords somewhere safe
+# and backed up (Play App Signing can reset a lost upload key, but only with
+# Google's help):
+#
+#   keytool -genkey -v -keystore ~/heisenbudget-upload.jks -keyalg RSA \
+#     -keysize 2048 -validity 10000 -alias upload
+#
+# storeFile is absolute, or relative to android/app (the GitHub Actions build
+# writes android/app/release.keystore and android/key.properties from secrets;
+# see .github/workflows/build-release.yml).
+storeFile=/home/you/heisenbudget-upload.jks
+storePassword=change-me
+keyAlias=upload
+keyPassword=change-me

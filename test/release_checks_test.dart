@@ -29,6 +29,27 @@ void main() {
     }
   });
 
+  test('iOS says "no non-exempt encryption" only while the app has none', () {
+    final plist = File('ios/Runner/Info.plist').readAsStringSync();
+    expect(
+      plist,
+      contains('<key>ITSAppUsesNonExemptEncryption</key>\n\t<false/>'),
+    );
+    // Adding encryption (locked backups, an encrypted database) makes that
+    // answer wrong: decide the export-compliance answer, then change this test.
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    for (final name in [
+      'cryptography',
+      'pointycastle',
+      'encrypt:',
+      'sqlcipher',
+      'sqlite3mc',
+      'flutter_secure_storage',
+    ]) {
+      expect(pubspec, isNot(contains(name)), reason: 'found "$name"');
+    }
+  });
+
   test('app code does not touch the network', () {
     final offenders = <String>[];
     for (final file
@@ -65,6 +86,24 @@ void main() {
       File('ios/Runner/Info.plist').readAsStringSync(),
       contains('<string>Heisenbudget</string>'),
     );
+  });
+
+  test('the app id is ours on Android and iOS, not the template one', () {
+    const id = 'com.ajwadtahmid.heisenbudget';
+    final gradle = File('android/app/build.gradle.kts').readAsStringSync();
+    expect(gradle, contains('namespace = "$id"'));
+    expect(gradle, contains('applicationId = "$id"'));
+    // The manifest's .MainActivity resolves against the namespace.
+    expect(
+      File(
+        'android/app/src/main/kotlin/com/ajwadtahmid/heisenbudget/MainActivity.kt',
+      ).readAsStringSync(),
+      startsWith('package $id'),
+    );
+    final project = File('ios/Runner.xcodeproj/project.pbxproj')
+        .readAsStringSync();
+    expect(project, contains('PRODUCT_BUNDLE_IDENTIFIER = $id;'));
+    expect(project, isNot(contains('com.example')));
   });
 
   group('bundled fonts', () {

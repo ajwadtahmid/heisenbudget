@@ -1,0 +1,179 @@
+name: Build Release
+
+# Builds the Play Store bundle when a version tag (v1.0.0, v1.1.0, ...) is
+# pushed. Tag-triggered only, not on every push: tests are run again here, on
+# the tagged commit, as a gate before anything is built.
+#
+# Repository secrets this needs (Settings > Secrets and variables > Actions):
+#   KEYSTORE_BASE64   the upload keystore, as one line:  base64 -w0 upload.jks
+#   KEY_ALIAS         the alias inside it
+#   KEY_PASSWORD      that key's password
+#   STORE_PASSWORD    the keystore's password
+# The app is offline and has no API keys, so there is nothing else to provide.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Read-only by default; the job that publishes the release asks for write
+# access itself.
+permissions:
+  contents: read
+
+jobs:
+  extract-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      # The build takes its version from pubspec.yaml but the artifacts are
+      # named from the tag; a mismatch would publish a file whose name
+      # disagrees with the app inside it. The part after "+" is the build
+      # number, which a tag does not carry.
+      - name: Check the tag matches pubspec.yaml
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pubspec_version="$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml)"
+          if [ "$TAG_VERSION" != "$pubspec_version" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match pubspec.yaml version $pubspec_version. Bump pubspec.yaml (and its build number) before tagging."
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # The version releases are verified with locally; bump it together
+          # with the local toolchain, not whenever stable moves.
+          flutter-version: "3.47.8"
+          channel: "stable"
+          cache: true
+
+      # The committed pubspec.lock is what gets built: fail if it is out of
+      # step with pubspec.yaml instead of quietly resolving something new.
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze
+        run: flutter analyze
+
+      # Includes the offline guard (no INTERNET permission, no network
+      # packages, the app id) in test/release_checks_test.dart.
+      - name: Test
+        run: flutter test
+
+  build-android:
+    needs: [test, extract-version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: "temurin"
+          # AGP 9's bundled lint has crashed under JDK 17 (NoSuchMethodError on
+          # java.util.List.removeLast(), a JDK 21+ default method) during
+          # lintVitalAnalyzeRelease. JDK 21 avoids it.
+          java-version: "21"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.8"
+          channel: "stable"
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+
+      # Without these, Gradle would quietly sign with the debug key and Play
+      # would reject the bundle at upload. Fail here, with the reason.
+      - name: Set up Android signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          for name in KEYSTORE_BASE64 KEY_ALIAS KEY_PASSWORD STORE_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::The repository secret $name is not set. See the comment at the top of this workflow."
+              exit 1
+            fi
+          done
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+          {
+            echo "storeFile=release.keystore"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+
+      # The same script used locally: an obfuscated release bundle, the debug
+      # symbols in build/symbols/<version>, and a check that the merged release
+      # manifest does not ask for the INTERNET permission.
+      - name: Build Android App Bundle
+        run: tools/build_play_bundle.sh
+
+      - name: Check the bundle is signed with the upload key
+        run: |
+          cert="$(keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab)"
+          echo "$cert" | grep -E "Owner:|SHA256:"
+          if echo "$cert" | grep -q "CN=Android Debug"; then
+            echo "::error::The bundle is signed with the debug key, not the upload key."
+            exit 1
+          fi
+
+      - name: Rename AAB artifact
+        run: mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/heisenbudget-release-v${{ needs.extract-version.outputs.version }}.aab
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: heisenbudget-android
+          path: build/app/outputs/bundle/release/heisenbudget-release-v${{ needs.extract-version.outputs.version }}.aab
+
+      # Needed to read crash reports from the obfuscated build. Kept as a
+      # private workflow artifact, not attached to the public release (it maps
+      # the obfuscated names back). Artifacts expire: download this for every
+      # release you publish and keep it.
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v7
+        with:
+          name: heisenbudget-symbols-v${{ needs.extract-version.outputs.version }}
+          path: build/symbols/
+          retention-days: 90
+
+  create-release:
+    needs: [extract-version, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: heisenbudget-android
+          path: android-build/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            android-build/heisenbudget-release-v${{ needs.extract-version.outputs.version }}.aab
+          draft: true
+          generate_release_notes: true
