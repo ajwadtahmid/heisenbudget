@@ -20,13 +20,19 @@ numbers read the same whatever language the phone is set to.
 - Adds, edits and deletes income and expenses from a bottom sheet (amount,
   date, category, note).
 - History tab: grouped by day, filter by type, category and date (All time,
-  this week, this month, last month, custom), sort, swipe to delete with Undo.
+  this week, this month, last month, custom) and amount range (at least and at
+  most), sort, swipe to delete with Undo. "Jump to date" starts a date-sorted
+  list from a day you pick (inside the period, if one is set). Filters you use
+  often can be saved under a name in the filter sheet and brought back in one
+  tap (up to 20; "This month" means the month of the day you use it; they travel
+  in a backup).
 - Every category has an icon, picked from about 240 built-in Material icons in
   labelled sections with a search box. Change any of them, and pick one when you
   make your own. Archive and restore categories.
 - A calm "instrument" look: ruled readouts in tabular mono numbers, a tick
   ruler showing how far through the period you are, and a spectrum chart of
-  spending by category (tap a peak for the exact share).
+  spending by category (tap a peak for the exact share, then "See
+  transactions" opens History on that category and period).
 - Appearance settings: light, dark or follow the phone; five accent colours;
   four text fonts (Geist, Inter, Atkinson Hyperlegible, System; numbers always
   Geist Mono); and a Lab flavor switch for the playful wording.
@@ -66,7 +72,11 @@ numbers read the same whatever language the phone is set to.
   and "Almost" shows from 80 percent, so it never relies on colour. Changing a
   limit always applies from the current period on and never rewrites earlier
   ones; "Stop this budget" ends it. "Use the average of the last 3 months or
-  periods" suggests an amount. Repeating transactions still due
+  periods" suggests an amount. A budget that has ended (a one-time one, or one
+  you stopped) shows "Copy forward" in History's Budgets: the same amount and
+  length, starting with the current period. A budget that ran over in at least
+  half of its last few finished periods says "Usually runs over by ..." on its
+  card. Repeating transactions still due
   in the period show as a lighter "planned" part. Saving an expense that takes
   a budget over its limit says so, and Home has one line ("2 over budget",
   "All within budget"). A custom length of whole weeks starts on your "Week
@@ -113,7 +123,13 @@ numbers read the same whatever language the phone is set to.
   stored, the app keeps one private copy of the database for 14 days. If the
   data cannot be opened, a recovery screen offers: try again, restore that
   copy, restore a backup file, or erase and start over. Backups larger than
-  about half a megabyte are read and written in the background.
+  about half a megabyte are read and written in the background. "Save to a
+  folder" opens the phone's own save dialog so you pick where the file goes.
+  Home shows a quiet reminder card when the last backup is over 30 days old
+  (or there are 10 or more transactions and none was ever made), with Back up
+  now, Remind me later (a week) and Stop reminding me; a switch under Settings >
+  Backup turns it back on. It is only a card: the app sends no notification and
+  asks for no permission. About has a page of open-source licences.
 
 Planned for later: multiple accounts.
 
