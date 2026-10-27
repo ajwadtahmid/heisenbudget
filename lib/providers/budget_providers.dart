@@ -100,15 +100,23 @@ class BudgetOverview {
       all.where((l) => l.status.level == BudgetLevel.almost).length;
 }
 
-/// The budgets in force today, with how each is doing. Null until the
-/// spending for each has loaded.
-final budgetOverviewProvider = Provider<BudgetOverview?>((ref) {
-  final limits = ref.watch(budgetLimitsProvider).value;
-  final categories = ref.watch(allCategoriesProvider).value;
+/// The budgets in force today, with how each is doing. Loading until the
+/// spending for each has loaded; an error if any of it cannot be read, so a
+/// failed read is never shown as an endless wait.
+final budgetOverviewProvider = Provider<AsyncValue<BudgetOverview>>((ref) {
+  final limitsAsync = ref.watch(budgetLimitsProvider);
+  final categoriesAsync = ref.watch(allCategoriesProvider);
   final rules = ref.watch(recurringRulesProvider).value ?? const [];
   final today = ref.watch(clockProvider);
   final startDay = ref.watch(monthStartDayProvider);
-  if (limits == null || categories == null) return null;
+  // Loading comes first: a reload keeps the old error until it finishes.
+  for (final input in [limitsAsync, categoriesAsync]) {
+    if (input.isLoading) return const AsyncLoading();
+    if (input.hasError) return AsyncError(input.error!, input.stackTrace!);
+  }
+  final limits = limitsAsync.value;
+  final categories = categoriesAsync.value;
+  if (limits == null || categories == null) return const AsyncLoading();
 
   final entries = [for (final row in limits) row.entry];
   final plannedRules = [
@@ -122,7 +130,8 @@ final budgetOverviewProvider = Provider<BudgetOverview?>((ref) {
         ),
   ];
 
-  // Null means a spending figure is still loading.
+  // Null means this budget does not exist now. A spending figure that is
+  // still loading or failed ends the whole overview (see the catches below).
   BudgetLine? line(int? categoryId, CategoryRow? category) {
     final resolved = resolveBudget(
       entries,
@@ -131,7 +140,12 @@ final budgetOverviewProvider = Provider<BudgetOverview?>((ref) {
       monthStartDay: startDay,
     );
     if (resolved == null) return null;
-    final spent = ref.watch(_spentProvider((resolved.range, categoryId))).value;
+    final spentAsync = ref.watch(_spentProvider((resolved.range, categoryId)));
+    if (spentAsync.isLoading) throw _Loading();
+    if (spentAsync.hasError) {
+      throw _Failed(spentAsync.error!, spentAsync.stackTrace!);
+    }
+    final spent = spentAsync.value;
     if (spent == null) throw _Loading();
     final planned = plannedByCategory(plannedRules, resolved.range, today);
     final plannedCents = categoryId == null
@@ -179,18 +193,36 @@ final budgetOverviewProvider = Provider<BudgetOverview?>((ref) {
         : lines
               .where((l) => l.unit == overall.unit)
               .fold<int>(0, (a, l) => a + l.status.limit);
-    return BudgetOverview(
-      overall: overall,
-      lines: lines,
-      withoutLimit: withoutLimit,
-      sameUnitCategoryTotal: sameUnit,
+    return AsyncData(
+      BudgetOverview(
+        overall: overall,
+        lines: lines,
+        withoutLimit: withoutLimit,
+        sameUnitCategoryTotal: sameUnit,
+      ),
     );
   } on _Loading {
-    return null;
+    return const AsyncLoading();
+  } on _Failed catch (failure) {
+    return AsyncError(failure.error, failure.stackTrace);
   }
 });
 
 class _Loading implements Exception {}
+
+class _Failed implements Exception {
+  _Failed(this.error, this.stackTrace);
+  final Object error;
+  final StackTrace stackTrace;
+}
+
+/// Reads everything the overview needs again (the Budgets screen's "Try
+/// again").
+void reloadBudgets(WidgetRef ref) {
+  ref.invalidate(budgetLimitsProvider);
+  ref.invalidate(allCategoriesProvider);
+  ref.invalidate(_spentProvider);
+}
 
 /// What Home says about budgets.
 class BudgetSummary {
@@ -202,7 +234,7 @@ class BudgetSummary {
 
 /// Null when no budget is in force (Home then shows nothing).
 final budgetSummaryProvider = Provider<BudgetSummary?>((ref) {
-  final overview = ref.watch(budgetOverviewProvider);
+  final overview = ref.watch(budgetOverviewProvider).value;
   if (overview == null || !overview.hasAny) return null;
   return BudgetSummary(over: overview.overCount, almost: overview.almostCount);
 });

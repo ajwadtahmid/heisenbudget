@@ -37,11 +37,12 @@ class BudgetHistoryView extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
+                  SizedBox(
+                    width: double.infinity,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                       child: Wrap(
+                        alignment: WrapAlignment.spaceBetween,
                         spacing: 8,
                         runSpacing: 8,
                         children: [

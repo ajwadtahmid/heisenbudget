@@ -79,26 +79,85 @@ void _checkStartDay(int startDay) {
   RangeError.checkValueInInterval(startDay, 1, maxBudgetStartDay, 'startDay');
 }
 
-/// How long one budget period is.
-enum BudgetUnit {
-  week('Weekly', 7),
-  fortnight('Every 2 weeks', 14),
-  month('Monthly', 0);
+/// The longest custom budget period in days, and in months.
+const maxBudgetDays = 365;
+const maxBudgetMonths = 60;
 
-  const BudgetUnit(this.label, this.days);
+/// How long one budget period is: a number of budget months (which follow
+/// the budget-month start day), or a fixed number of days counted from the
+/// entry's first day.
+class BudgetUnit {
+  /// A period of [days] days (1 to [maxBudgetDays]).
+  const BudgetUnit.days(this.days) : months = 0;
 
-  /// "Weekly", "Every 2 weeks", "Monthly".
-  final String label;
+  /// A period of [months] budget months (1 to [maxBudgetMonths]).
+  const BudgetUnit.months(this.months) : days = 0;
 
-  /// Days in a period; 0 for months (they vary).
+  static const week = BudgetUnit.days(7);
+  static const fortnight = BudgetUnit.days(14);
+  static const month = BudgetUnit.months(1);
+  static const quarter = BudgetUnit.months(3);
+  static const year = BudgetUnit.months(12);
+
+  /// Days in a period; 0 when the period is counted in months.
   final int days;
 
-  /// "week", "2 weeks", "month": for sentences like "just this month".
-  String get noun => switch (this) {
-    BudgetUnit.week => 'week',
-    BudgetUnit.fortnight => '2 weeks',
-    BudgetUnit.month => 'month',
-  };
+  /// Budget months in a period; 0 when the period is counted in days.
+  final int months;
+
+  /// A single budget month ("Monthly").
+  bool get isMonth => months == 1;
+
+  /// Counted in months (one or more) rather than days.
+  bool get inMonths => months > 0;
+
+  /// "Monthly", "Quarterly", "Yearly", "Weekly", "Every 2 weeks", "Every 10
+  /// days", "Every 4 months".
+  String get label {
+    if (inMonths) {
+      if (months == 1) return 'Monthly';
+      if (months == 3) return 'Quarterly';
+      if (months == 12) return 'Yearly';
+      if (months % 12 == 0) return 'Every ${months ~/ 12} years';
+      return 'Every $months months';
+    }
+    if (days == 1) return 'Daily';
+    if (days == 7) return 'Weekly';
+    if (days % 7 == 0) return 'Every ${days ~/ 7} weeks';
+    return 'Every $days days';
+  }
+
+  /// "month", "year", "2 weeks", "10 days": for sentences like "every 2 weeks".
+  String get noun {
+    if (inMonths) {
+      if (months == 1) return 'month';
+      if (months == 12) return 'year';
+      if (months % 12 == 0) return '${months ~/ 12} years';
+      return '$months months';
+    }
+    if (days == 1) return 'day';
+    if (days == 7) return 'week';
+    if (days % 7 == 0) return '${days ~/ 7} weeks';
+    return '$days days';
+  }
+
+  /// "months", "weeks", "10-day periods": for "the last 3 ...".
+  String get plural {
+    if (inMonths) return months == 1 ? 'months' : '$months-month periods';
+    if (days == 1) return 'days';
+    if (days == 7) return 'weeks';
+    return '$days-day periods';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is BudgetUnit && other.days == days && other.months == months;
+
+  @override
+  int get hashCode => Object.hash(days, months);
+
+  @override
+  String toString() => 'BudgetUnit(days: $days, months: $months)';
 }
 
 /// The first day of the week (starting on [weekStartDay], 1 = Monday to 7 =
@@ -117,10 +176,18 @@ int _daysBetween(DateTime a, DateTime b) => DateTime.utc(
   b.day,
 ).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
+/// [count] budget months from [first], as one range.
+DateRange _monthsRange(BudgetMonth first, int count, int startDay) => DateRange(
+  first.range(startDay).start,
+  first.shift(count - 1).range(startDay).end,
+);
+
 /// The period of [unit] that contains [date], for a budget that has not
-/// been created yet (or has no anchor): weeks start on [weekStartDay], a
-/// fortnight is the week plus the next one (or counts from [anchor]), and a
-/// month is the budget month for [monthStartDay].
+/// been created yet (or has no anchor). Months start with the budget month
+/// for [monthStartDay] that holds [date]. A run of days counts from [anchor];
+/// without one it counts from the start of the week (starting on
+/// [weekStartDay]) when the length is whole weeks, and from [date] itself
+/// otherwise.
 DateRange currentRangeFor(
   BudgetUnit unit,
   DateTime date, {
@@ -128,31 +195,34 @@ DateRange currentRangeFor(
   required int weekStartDay,
   DateTime? anchor,
 }) {
-  switch (unit) {
-    case BudgetUnit.week:
-      final start = weekStartOf(date, weekStartDay);
-      return DateRange(start, _addDays(start, 6));
-    case BudgetUnit.fortnight:
-      final from = anchor == null
-          ? weekStartOf(date, weekStartDay)
-          : dateOnly(anchor);
-      final n = _floorDiv(_daysBetween(from, dateOnly(date)), 14);
-      final start = _addDays(from, n * 14);
-      return DateRange(start, _addDays(start, 13));
-    case BudgetUnit.month:
-      return BudgetMonth.containing(date, monthStartDay).range(monthStartDay);
+  if (unit.inMonths) {
+    return _monthsRange(
+      BudgetMonth.containing(date, monthStartDay),
+      unit.months,
+      monthStartDay,
+    );
   }
+  final day = dateOnly(date);
+  final from = anchor != null
+      ? dateOnly(anchor)
+      : unit.days % 7 == 0
+      ? weekStartOf(day, weekStartDay)
+      : day;
+  final n = _floorDiv(_daysBetween(from, day), unit.days);
+  final start = _addDays(from, n * unit.days);
+  return DateRange(start, _addDays(start, unit.days - 1));
 }
 
 int _floorDiv(int a, int b) => (a / b).floor();
 
 /// The period just before [range].
 DateRange previousRange(DateRange range, BudgetUnit unit, int monthStartDay) {
-  if (unit == BudgetUnit.month) {
-    return BudgetMonth.containing(
-      range.start,
+  if (unit.inMonths) {
+    return _monthsRange(
+      BudgetMonth.containing(range.start, monthStartDay).shift(-unit.months),
+      unit.months,
       monthStartDay,
-    ).shift(-1).range(monthStartDay);
+    );
   }
   final start = _addDays(range.start, -unit.days);
   return DateRange(start, _addDays(start, unit.days - 1));
@@ -160,11 +230,12 @@ DateRange previousRange(DateRange range, BudgetUnit unit, int monthStartDay) {
 
 /// The period just after [range].
 DateRange nextRange(DateRange range, BudgetUnit unit, int monthStartDay) {
-  if (unit == BudgetUnit.month) {
-    return BudgetMonth.containing(
-      range.start,
+  if (unit.inMonths) {
+    return _monthsRange(
+      BudgetMonth.containing(range.start, monthStartDay).shift(unit.months),
+      unit.months,
       monthStartDay,
-    ).shift(1).range(monthStartDay);
+    );
   }
   final start = _addDays(range.start, unit.days);
   return DateRange(start, _addDays(start, unit.days - 1));
@@ -189,18 +260,20 @@ class LimitEntry {
   final DateTime start;
   final int? amountCents;
 
-  /// The period of this entry that contains [date]. Weeks and fortnights
-  /// count from [start]; months follow the budget-month start day.
+  /// The period of this entry that contains [date]. A run of days counts
+  /// from [start]; months count budget months from the one that holds
+  /// [start], in blocks of [BudgetUnit.months].
   DateRange rangeAt(DateTime date, int monthStartDay) {
-    switch (unit) {
-      case BudgetUnit.week:
-      case BudgetUnit.fortnight:
-        final n = _floorDiv(_daysBetween(start, dateOnly(date)), unit.days);
-        final first = _addDays(start, n * unit.days);
-        return DateRange(first, _addDays(first, unit.days - 1));
-      case BudgetUnit.month:
-        return BudgetMonth.containing(date, monthStartDay).range(monthStartDay);
+    if (unit.inMonths) {
+      final from = BudgetMonth.containing(start, monthStartDay);
+      final at = BudgetMonth.containing(date, monthStartDay);
+      final gap = (at.year - from.year) * 12 + (at.month - from.month);
+      final first = from.shift(_floorDiv(gap, unit.months) * unit.months);
+      return _monthsRange(first, unit.months, monthStartDay);
     }
+    final n = _floorDiv(_daysBetween(start, dateOnly(date)), unit.days);
+    final first = _addDays(start, n * unit.days);
+    return DateRange(first, _addDays(first, unit.days - 1));
   }
 
   /// This entry's first period.

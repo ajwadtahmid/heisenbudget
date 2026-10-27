@@ -349,14 +349,14 @@ class _FillPainter extends CustomPainter {
       old.color != color || old.striped != striped || old.stripe != stripe;
 }
 
-/// "Monthly · October 2026", "Weekly · Oct 12 – 18, 2026", or for a one-time
-/// budget "Just this month · October 2026".
+/// "Monthly · October 2026", "Weekly · Oct 12 – 18, 2026", "Every 10 days ·
+/// Oct 12 – 21, 2026", or for a one-time budget "Just this month · October 2026".
 String budgetPeriodLabel(LimitEntry entry, DateRange range, int monthStartDay) {
-  final dates = entry.unit == BudgetUnit.month && monthStartDay == 1
+  final dates = entry.unit.isMonth && monthStartDay == 1
       ? formatMonth(range.start)
       : formatRange(range);
   final what = entry.repeats
       ? entry.unit.label
-      : 'Just this ${entry.unit.noun}';
+      : 'Just this ${entry.unit.isMonth ? 'month' : 'period'}';
   return '$what · $dates';
 }

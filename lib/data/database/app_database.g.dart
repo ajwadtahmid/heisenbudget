@@ -2512,15 +2512,32 @@ class $BudgetLimitsTable extends BudgetLimits
       'REFERENCES categories (id)',
     ),
   );
+  static const VerificationMeta _lengthDaysMeta = const VerificationMeta(
+    'lengthDays',
+  );
   @override
-  late final GeneratedColumnWithTypeConverter<BudgetUnit, String> unit =
-      GeneratedColumn<String>(
-        'unit',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: true,
-      ).withConverter<BudgetUnit>($BudgetLimitsTable.$converterunit);
+  late final GeneratedColumn<int> lengthDays = GeneratedColumn<int>(
+    'length_days',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(lengthDays).isBetweenValues(0, maxBudgetDays),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lengthMonthsMeta = const VerificationMeta(
+    'lengthMonths',
+  );
+  @override
+  late final GeneratedColumn<int> lengthMonths = GeneratedColumn<int>(
+    'length_months',
+    aliasedName,
+    false,
+    check: () =>
+        ComparableExpr(lengthMonths).isBetweenValues(0, maxBudgetMonths),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _repeatsMeta = const VerificationMeta(
     'repeats',
   );
@@ -2572,7 +2589,8 @@ class $BudgetLimitsTable extends BudgetLimits
   List<GeneratedColumn> get $columns => [
     id,
     categoryId,
-    unit,
+    lengthDays,
+    lengthMonths,
     repeats,
     start,
     amountCents,
@@ -2597,6 +2615,23 @@ class $BudgetLimitsTable extends BudgetLimits
       context.handle(
         _categoryIdMeta,
         categoryId.isAcceptableOrUnknown(data['category_id']!, _categoryIdMeta),
+      );
+    }
+    if (data.containsKey('length_days')) {
+      context.handle(
+        _lengthDaysMeta,
+        lengthDays.isAcceptableOrUnknown(data['length_days']!, _lengthDaysMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_lengthDaysMeta);
+    }
+    if (data.containsKey('length_months')) {
+      context.handle(
+        _lengthMonthsMeta,
+        lengthMonths.isAcceptableOrUnknown(
+          data['length_months']!,
+          _lengthMonthsMeta,
+        ),
       );
     }
     if (data.containsKey('repeats')) {
@@ -2647,12 +2682,14 @@ class $BudgetLimitsTable extends BudgetLimits
         DriftSqlType.int,
         data['${effectivePrefix}category_id'],
       ),
-      unit: $BudgetLimitsTable.$converterunit.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}unit'],
-        )!,
-      ),
+      lengthDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}length_days'],
+      )!,
+      lengthMonths: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}length_months'],
+      )!,
       repeats: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}repeats'],
@@ -2676,9 +2713,6 @@ class $BudgetLimitsTable extends BudgetLimits
   $BudgetLimitsTable createAlias(String alias) {
     return $BudgetLimitsTable(attachedDatabase, alias);
   }
-
-  static JsonTypeConverter2<BudgetUnit, String, String> $converterunit =
-      const EnumNameConverter<BudgetUnit>(BudgetUnit.values);
 }
 
 class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
@@ -2687,8 +2721,11 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
   /// An expense category, or null for the limit on all spending.
   final int? categoryId;
 
-  /// Week, fortnight (every 2 weeks) or month.
-  final BudgetUnit unit;
+  /// Days in one period (1 to 365); 0 when the period is counted in months.
+  final int lengthDays;
+
+  /// Budget months in one period (1 to 60); 0 when counted in days.
+  final int lengthMonths;
 
   /// False for a one-time budget (just its first period).
   final bool repeats;
@@ -2702,7 +2739,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
   const BudgetLimitRow({
     required this.id,
     this.categoryId,
-    required this.unit,
+    required this.lengthDays,
+    required this.lengthMonths,
     required this.repeats,
     required this.start,
     this.amountCents,
@@ -2715,11 +2753,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
     if (!nullToAbsent || categoryId != null) {
       map['category_id'] = Variable<int>(categoryId);
     }
-    {
-      map['unit'] = Variable<String>(
-        $BudgetLimitsTable.$converterunit.toSql(unit),
-      );
-    }
+    map['length_days'] = Variable<int>(lengthDays);
+    map['length_months'] = Variable<int>(lengthMonths);
     map['repeats'] = Variable<bool>(repeats);
     map['start'] = Variable<String>(start);
     if (!nullToAbsent || amountCents != null) {
@@ -2735,7 +2770,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
       categoryId: categoryId == null && nullToAbsent
           ? const Value.absent()
           : Value(categoryId),
-      unit: Value(unit),
+      lengthDays: Value(lengthDays),
+      lengthMonths: Value(lengthMonths),
       repeats: Value(repeats),
       start: Value(start),
       amountCents: amountCents == null && nullToAbsent
@@ -2753,9 +2789,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
     return BudgetLimitRow(
       id: serializer.fromJson<int>(json['id']),
       categoryId: serializer.fromJson<int?>(json['categoryId']),
-      unit: $BudgetLimitsTable.$converterunit.fromJson(
-        serializer.fromJson<String>(json['unit']),
-      ),
+      lengthDays: serializer.fromJson<int>(json['lengthDays']),
+      lengthMonths: serializer.fromJson<int>(json['lengthMonths']),
       repeats: serializer.fromJson<bool>(json['repeats']),
       start: serializer.fromJson<String>(json['start']),
       amountCents: serializer.fromJson<int?>(json['amountCents']),
@@ -2768,9 +2803,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'categoryId': serializer.toJson<int?>(categoryId),
-      'unit': serializer.toJson<String>(
-        $BudgetLimitsTable.$converterunit.toJson(unit),
-      ),
+      'lengthDays': serializer.toJson<int>(lengthDays),
+      'lengthMonths': serializer.toJson<int>(lengthMonths),
       'repeats': serializer.toJson<bool>(repeats),
       'start': serializer.toJson<String>(start),
       'amountCents': serializer.toJson<int?>(amountCents),
@@ -2781,7 +2815,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
   BudgetLimitRow copyWith({
     int? id,
     Value<int?> categoryId = const Value.absent(),
-    BudgetUnit? unit,
+    int? lengthDays,
+    int? lengthMonths,
     bool? repeats,
     String? start,
     Value<int?> amountCents = const Value.absent(),
@@ -2789,7 +2824,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
   }) => BudgetLimitRow(
     id: id ?? this.id,
     categoryId: categoryId.present ? categoryId.value : this.categoryId,
-    unit: unit ?? this.unit,
+    lengthDays: lengthDays ?? this.lengthDays,
+    lengthMonths: lengthMonths ?? this.lengthMonths,
     repeats: repeats ?? this.repeats,
     start: start ?? this.start,
     amountCents: amountCents.present ? amountCents.value : this.amountCents,
@@ -2801,7 +2837,12 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
       categoryId: data.categoryId.present
           ? data.categoryId.value
           : this.categoryId,
-      unit: data.unit.present ? data.unit.value : this.unit,
+      lengthDays: data.lengthDays.present
+          ? data.lengthDays.value
+          : this.lengthDays,
+      lengthMonths: data.lengthMonths.present
+          ? data.lengthMonths.value
+          : this.lengthMonths,
       repeats: data.repeats.present ? data.repeats.value : this.repeats,
       start: data.start.present ? data.start.value : this.start,
       amountCents: data.amountCents.present
@@ -2816,7 +2857,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
     return (StringBuffer('BudgetLimitRow(')
           ..write('id: $id, ')
           ..write('categoryId: $categoryId, ')
-          ..write('unit: $unit, ')
+          ..write('lengthDays: $lengthDays, ')
+          ..write('lengthMonths: $lengthMonths, ')
           ..write('repeats: $repeats, ')
           ..write('start: $start, ')
           ..write('amountCents: $amountCents, ')
@@ -2826,15 +2868,24 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, categoryId, unit, repeats, start, amountCents, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    categoryId,
+    lengthDays,
+    lengthMonths,
+    repeats,
+    start,
+    amountCents,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is BudgetLimitRow &&
           other.id == this.id &&
           other.categoryId == this.categoryId &&
-          other.unit == this.unit &&
+          other.lengthDays == this.lengthDays &&
+          other.lengthMonths == this.lengthMonths &&
           other.repeats == this.repeats &&
           other.start == this.start &&
           other.amountCents == this.amountCents &&
@@ -2844,7 +2895,8 @@ class BudgetLimitRow extends DataClass implements Insertable<BudgetLimitRow> {
 class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
   final Value<int> id;
   final Value<int?> categoryId;
-  final Value<BudgetUnit> unit;
+  final Value<int> lengthDays;
+  final Value<int> lengthMonths;
   final Value<bool> repeats;
   final Value<String> start;
   final Value<int?> amountCents;
@@ -2852,7 +2904,8 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
   const BudgetLimitsCompanion({
     this.id = const Value.absent(),
     this.categoryId = const Value.absent(),
-    this.unit = const Value.absent(),
+    this.lengthDays = const Value.absent(),
+    this.lengthMonths = const Value.absent(),
     this.repeats = const Value.absent(),
     this.start = const Value.absent(),
     this.amountCents = const Value.absent(),
@@ -2861,18 +2914,20 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
   BudgetLimitsCompanion.insert({
     this.id = const Value.absent(),
     this.categoryId = const Value.absent(),
-    required BudgetUnit unit,
+    required int lengthDays,
+    this.lengthMonths = const Value.absent(),
     this.repeats = const Value.absent(),
     required String start,
     this.amountCents = const Value.absent(),
     required DateTime createdAt,
-  }) : unit = Value(unit),
+  }) : lengthDays = Value(lengthDays),
        start = Value(start),
        createdAt = Value(createdAt);
   static Insertable<BudgetLimitRow> custom({
     Expression<int>? id,
     Expression<int>? categoryId,
-    Expression<String>? unit,
+    Expression<int>? lengthDays,
+    Expression<int>? lengthMonths,
     Expression<bool>? repeats,
     Expression<String>? start,
     Expression<int>? amountCents,
@@ -2881,7 +2936,8 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (categoryId != null) 'category_id': categoryId,
-      if (unit != null) 'unit': unit,
+      if (lengthDays != null) 'length_days': lengthDays,
+      if (lengthMonths != null) 'length_months': lengthMonths,
       if (repeats != null) 'repeats': repeats,
       if (start != null) 'start': start,
       if (amountCents != null) 'amount_cents': amountCents,
@@ -2892,7 +2948,8 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
   BudgetLimitsCompanion copyWith({
     Value<int>? id,
     Value<int?>? categoryId,
-    Value<BudgetUnit>? unit,
+    Value<int>? lengthDays,
+    Value<int>? lengthMonths,
     Value<bool>? repeats,
     Value<String>? start,
     Value<int?>? amountCents,
@@ -2901,7 +2958,8 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
     return BudgetLimitsCompanion(
       id: id ?? this.id,
       categoryId: categoryId ?? this.categoryId,
-      unit: unit ?? this.unit,
+      lengthDays: lengthDays ?? this.lengthDays,
+      lengthMonths: lengthMonths ?? this.lengthMonths,
       repeats: repeats ?? this.repeats,
       start: start ?? this.start,
       amountCents: amountCents ?? this.amountCents,
@@ -2918,10 +2976,11 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
     if (categoryId.present) {
       map['category_id'] = Variable<int>(categoryId.value);
     }
-    if (unit.present) {
-      map['unit'] = Variable<String>(
-        $BudgetLimitsTable.$converterunit.toSql(unit.value),
-      );
+    if (lengthDays.present) {
+      map['length_days'] = Variable<int>(lengthDays.value);
+    }
+    if (lengthMonths.present) {
+      map['length_months'] = Variable<int>(lengthMonths.value);
     }
     if (repeats.present) {
       map['repeats'] = Variable<bool>(repeats.value);
@@ -2943,7 +3002,8 @@ class BudgetLimitsCompanion extends UpdateCompanion<BudgetLimitRow> {
     return (StringBuffer('BudgetLimitsCompanion(')
           ..write('id: $id, ')
           ..write('categoryId: $categoryId, ')
-          ..write('unit: $unit, ')
+          ..write('lengthDays: $lengthDays, ')
+          ..write('lengthMonths: $lengthMonths, ')
           ..write('repeats: $repeats, ')
           ..write('start: $start, ')
           ..write('amountCents: $amountCents, ')
@@ -5087,7 +5147,8 @@ typedef $$BudgetLimitsTableCreateCompanionBuilder =
     BudgetLimitsCompanion Function({
       Value<int> id,
       Value<int?> categoryId,
-      required BudgetUnit unit,
+      required int lengthDays,
+      Value<int> lengthMonths,
       Value<bool> repeats,
       required String start,
       Value<int?> amountCents,
@@ -5097,7 +5158,8 @@ typedef $$BudgetLimitsTableUpdateCompanionBuilder =
     BudgetLimitsCompanion Function({
       Value<int> id,
       Value<int?> categoryId,
-      Value<BudgetUnit> unit,
+      Value<int> lengthDays,
+      Value<int> lengthMonths,
       Value<bool> repeats,
       Value<String> start,
       Value<int?> amountCents,
@@ -5140,11 +5202,15 @@ class $$BudgetLimitsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnWithTypeConverterFilters<BudgetUnit, BudgetUnit, String> get unit =>
-      $composableBuilder(
-        column: $table.unit,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
+  ColumnFilters<int> get lengthDays => $composableBuilder(
+    column: $table.lengthDays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lengthMonths => $composableBuilder(
+    column: $table.lengthMonths,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get repeats => $composableBuilder(
     column: $table.repeats,
@@ -5204,8 +5270,13 @@ class $$BudgetLimitsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get unit => $composableBuilder(
-    column: $table.unit,
+  ColumnOrderings<int> get lengthDays => $composableBuilder(
+    column: $table.lengthDays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lengthMonths => $composableBuilder(
+    column: $table.lengthMonths,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -5265,8 +5336,15 @@ class $$BudgetLimitsTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumnWithTypeConverter<BudgetUnit, String> get unit =>
-      $composableBuilder(column: $table.unit, builder: (column) => column);
+  GeneratedColumn<int> get lengthDays => $composableBuilder(
+    column: $table.lengthDays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lengthMonths => $composableBuilder(
+    column: $table.lengthMonths,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get repeats =>
       $composableBuilder(column: $table.repeats, builder: (column) => column);
@@ -5336,7 +5414,8 @@ class $$BudgetLimitsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int?> categoryId = const Value.absent(),
-                Value<BudgetUnit> unit = const Value.absent(),
+                Value<int> lengthDays = const Value.absent(),
+                Value<int> lengthMonths = const Value.absent(),
                 Value<bool> repeats = const Value.absent(),
                 Value<String> start = const Value.absent(),
                 Value<int?> amountCents = const Value.absent(),
@@ -5344,7 +5423,8 @@ class $$BudgetLimitsTableTableManager
               }) => BudgetLimitsCompanion(
                 id: id,
                 categoryId: categoryId,
-                unit: unit,
+                lengthDays: lengthDays,
+                lengthMonths: lengthMonths,
                 repeats: repeats,
                 start: start,
                 amountCents: amountCents,
@@ -5354,7 +5434,8 @@ class $$BudgetLimitsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int?> categoryId = const Value.absent(),
-                required BudgetUnit unit,
+                required int lengthDays,
+                Value<int> lengthMonths = const Value.absent(),
                 Value<bool> repeats = const Value.absent(),
                 required String start,
                 Value<int?> amountCents = const Value.absent(),
@@ -5362,7 +5443,8 @@ class $$BudgetLimitsTableTableManager
               }) => BudgetLimitsCompanion.insert(
                 id: id,
                 categoryId: categoryId,
-                unit: unit,
+                lengthDays: lengthDays,
+                lengthMonths: lengthMonths,
                 repeats: repeats,
                 start: start,
                 amountCents: amountCents,

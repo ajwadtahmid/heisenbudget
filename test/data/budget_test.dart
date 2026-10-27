@@ -59,7 +59,13 @@ void main() {
       await set(d(2026, 10, 1), cat: food.id, cents: 20000);
       final row = (await all()).single;
       expect(
-        (row.categoryId, row.unit, row.repeats, row.start, row.amountCents),
+        (
+          row.categoryId,
+          row.entry.unit,
+          row.repeats,
+          row.start,
+          row.amountCents,
+        ),
         (food.id, BudgetUnit.month, true, '2026-10-01', 20000),
       );
     });
@@ -78,7 +84,7 @@ void main() {
         cents: 5000,
       );
       final row = (await all()).single;
-      expect((row.unit, row.repeats), (BudgetUnit.week, false));
+      expect((row.entry.unit, row.repeats), (BudgetUnit.week, false));
     });
 
     test(
@@ -94,7 +100,7 @@ void main() {
         final rows = await all();
         expect(rows, hasLength(1));
         expect(
-          (rows.single.amountCents, rows.single.unit),
+          (rows.single.amountCents, rows.single.entry.unit),
           (25000, BudgetUnit.week),
         );
         await set(d(2026, 10, 1), cents: 1000);
@@ -168,7 +174,7 @@ void main() {
             .insert(
               BudgetLimitsCompanion.insert(
                 categoryId: Value(cat),
-                unit: BudgetUnit.month,
+                lengthDays: 0,
                 start: start,
                 amountCents: const Value(100),
                 createdAt: DateTime(2026, 10, 1),
@@ -336,11 +342,39 @@ void main() {
       final data = BackupData.parse(bytesOf(base()));
       expect(data.budgetLimits, hasLength(3));
       expect(
-        (data.budgetLimits[1].unit, data.budgetLimits[1].repeats),
+        (data.budgetLimits[1].entry.unit, data.budgetLimits[1].repeats),
         (BudgetUnit.week, false),
       );
       expect(data.budgetLimits[1].categoryId, isNull);
       expect(data.budgetLimits[2].amountCents, isNull);
+    });
+
+    test('reads a custom length in days', () {
+      final b = base();
+      limit(b)
+        ..remove('unit')
+        ..['lengthDays'] = 10;
+      final row = BackupData.parse(bytesOf(b)).budgetLimits.first;
+      expect((row.lengthDays, row.entry.unit), (10, const BudgetUnit.days(10)));
+    });
+
+    test('reads a custom length in months', () {
+      final b = base();
+      limit(b)
+        ..remove('unit')
+        ..['lengthDays'] = 0
+        ..['lengthMonths'] = 3;
+      final row = BackupData.parse(bytesOf(b)).budgetLimits.first;
+      expect((row.lengthMonths, row.entry.unit), (3, BudgetUnit.quarter));
+    });
+
+    test('zero days and no months, from the last build, is a month', () {
+      final b = base();
+      limit(b)
+        ..remove('unit')
+        ..['lengthDays'] = 0;
+      final row = BackupData.parse(bytesOf(b)).budgetLimits.first;
+      expect(row.entry.unit, BudgetUnit.month);
     });
 
     test('an older monthly-only limit reads as a repeating monthly one', () {
@@ -356,7 +390,7 @@ void main() {
       ];
       final row = BackupData.parse(bytesOf(b)).budgetLimits.single;
       expect(
-        (row.unit, row.repeats, row.start),
+        (row.entry.unit, row.repeats, row.start),
         (BudgetUnit.month, true, '2026-10-01'),
       );
     });
@@ -406,6 +440,25 @@ void main() {
     rejects('an unknown category', (b) => limit(b)['categoryId'] = 99);
     rejects('an income category', (b) => limit(b)['categoryId'] = 2);
     rejects('an unknown period', (b) => limit(b)['unit'] = 'decade');
+    rejects(
+      'a length over sixty months',
+      (b) => limit(b)
+        ..remove('unit')
+        ..['lengthMonths'] = 61,
+    );
+
+    rejects(
+      'a length over a year',
+      (b) => limit(b)
+        ..remove('unit')
+        ..['lengthDays'] = 366,
+    );
+    rejects(
+      'a length that is not a whole number',
+      (b) => limit(b)
+        ..remove('unit')
+        ..['lengthDays'] = 7.5,
+    );
     rejects(
       'no period at all',
       (b) => limit(b)
@@ -478,7 +531,7 @@ void main() {
         expect(back, hasLength(3));
         final overall = back.firstWhere((r) => r.categoryId == null);
         expect(
-          (overall.unit, overall.repeats, overall.start),
+          (overall.entry.unit, overall.repeats, overall.start),
           (BudgetUnit.fortnight, false, '2026-10-12'),
         );
         final entries = back.map((r) => r.entry).toList();

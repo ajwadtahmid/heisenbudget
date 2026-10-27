@@ -10,7 +10,9 @@ import '../database/app_database.dart';
 extension BudgetLimitEntry on BudgetLimitRow {
   LimitEntry get entry => LimitEntry(
     categoryId: categoryId,
-    unit: unit,
+    unit: lengthMonths > 0
+        ? BudgetUnit.months(lengthMonths)
+        : BudgetUnit.days(lengthDays),
     repeats: repeats,
     start: fromIsoDate(start),
     amountCents: amountCents,
@@ -57,6 +59,16 @@ class BudgetRepository {
     int? categoryId,
     int? amountCents,
   }) {
+    if (unit.inMonths) {
+      RangeError.checkValueInInterval(
+        unit.months,
+        1,
+        maxBudgetMonths,
+        'unit.months',
+      );
+    } else {
+      RangeError.checkValueInInterval(unit.days, 1, maxBudgetDays, 'unit.days');
+    }
     if (amountCents != null &&
         (amountCents < 1 || amountCents > maxAmountCents)) {
       throw RangeError.range(amountCents, 1, maxAmountCents, 'amountCents');
@@ -90,7 +102,8 @@ class BudgetRepository {
             .insert(
               BudgetLimitsCompanion.insert(
                 categoryId: Value(categoryId),
-                unit: unit,
+                lengthDays: unit.days,
+                lengthMonths: Value(unit.months),
                 repeats: Value(repeats),
                 start: day,
                 amountCents: Value(amountCents),
@@ -100,7 +113,8 @@ class BudgetRepository {
       } else {
         await (_db.update(_t)..where((l) => l.id.equals(existing.id))).write(
           BudgetLimitsCompanion(
-            unit: Value(unit),
+            lengthDays: Value(unit.days),
+            lengthMonths: Value(unit.months),
             repeats: Value(repeats),
             amountCents: Value(amountCents),
           ),

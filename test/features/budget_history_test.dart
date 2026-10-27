@@ -383,6 +383,25 @@ void main() {
       ); // Rent week 1: over
     }
 
+    testWidgets('Sort sits at the right edge, Filter at the left', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await setUpMixed(tester, env);
+      await openPastBudgets(tester, env);
+      final width =
+          tester.view.physicalSize.width / tester.view.devicePixelRatio;
+      final filter = tester.getRect(
+        find.byKey(const ValueKey('budget-filter-button')),
+      );
+      final sort = tester.getRect(
+        find.byKey(const ValueKey('budget-sort-button')),
+      );
+      expect(filter.left, 20);
+      expect(sort.right, width - 20);
+      await disposeEnv(tester, env);
+    });
+
     testWidgets('by period', (tester) async {
       final env = await createEnv(tester);
       await setUpMixed(tester, env);
@@ -398,7 +417,7 @@ void main() {
         await settle(tester);
       }
 
-      await choose('budget-filter-period-week');
+      await choose('budget-filter-period-custom');
       expect(rows(), 2);
       expect(find.text('Filter · 1'), findsOneWidget);
       await choose('budget-filter-period-month');

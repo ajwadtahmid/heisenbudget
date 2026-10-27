@@ -52,20 +52,22 @@ cloud, no analytics. Everything is stored on the device.
   the form with it and change it first. A favorite can leave the amount empty
   to be asked each time. Manage and reorder them under Settings > Quick add.
 - Budgets (its own tab): a limit for any expense category and, if you like,
-  one for all spending, **per month, every 2 weeks or per week** (monthly and
-  repeating by default, or "just this month/week/2 weeks"). The Budgets tab
+  one for all spending, **per month or a custom length** (1 to 365 days, or
+  1 to 60 months; quick picks for a week, a quarter, a year, or the rest of this
+  year; monthly and repeating by default, with a "Just this period" switch for
+  a one-time budget). The Budgets tab
   shows the current period of each: a bar, what is left (or "Over by"), the
   days left and about how much a day. A bar becomes striped and red when over,
   and "Almost" shows from 80 percent, so it never relies on colour. Changing a
   limit always applies from the current period on and never rewrites earlier
-  ones; "Stop this budget" ends it. "Use the average of the last 3 months,
-  weeks or 2-week periods" suggests an amount. Repeating transactions still due
+  ones; "Stop this budget" ends it. "Use the average of the last 3 months or
+  periods" suggests an amount. Repeating transactions still due
   in the period show as a lighter "planned" part. Saving an expense that takes
   a budget over its limit says so, and Home has one line ("2 over budget",
-  "All within budget"). Weeks start on your "Week starts on" day, and the
-  budget month can start on any day 1 to 28 (Settings > Money & dates).
+  "All within budget"). A custom length of whole weeks starts on your "Week
+  starts on" day, and the budget month can start on any day 1 to 28 (Settings > Money & dates).
 - Past budgets: History has a **Transactions | Budgets** switch. The Budgets
-  side lists every finished period (weekly, 2-week, monthly, one-time and
+  side lists every finished period (monthly, custom, one-time and
   stopped budgets), newest first, grouped by month, each showing the limit that
   was in force then and "Under by", "Over by" or "Used it all". It has its own
   Filter (period, result, which budget) and Sort, and "Show more". The Budgets

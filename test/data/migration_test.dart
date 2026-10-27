@@ -1,10 +1,9 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
-import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 // ignore: depend_on_referenced_packages
@@ -89,12 +88,12 @@ void main() {
     expect(txs.single.date, '2026-10-05');
   });
 
-  test('the upgraded database is at schema 2 and fully usable', () async {
+  test('the upgraded database is at schema 3 and fully usable', () async {
     final db = AppDatabase(NativeDatabase(file));
     addTearDown(db.close);
 
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 2);
+    expect(version.read<int>('user_version'), 3);
 
     // The case-insensitive unique index survived the upgrade.
     expect(
@@ -225,7 +224,7 @@ void main() {
         .insert(
           BudgetLimitsCompanion.insert(
             categoryId: Value(cat),
-            unit: BudgetUnit.month,
+            lengthDays: 0,
             start: month,
             amountCents: const Value(5000),
             createdAt: DateTime(2026, 10, 25),
@@ -236,5 +235,123 @@ void main() {
     expect(() => add(1, '2026-10-01'), throwsA(isA<Exception>()));
     expect(() => add(null, '2026-10-01'), throwsA(isA<Exception>()));
     await add(1, '2026-11-01');
+  });
+
+  group('budget limits from schema 2', () {
+    /// A schema-2 database as an earlier build left it, with the budget table
+    /// swapped for [oldTable] and [rows] inserted.
+    Future<File> olderBudgetDatabase(String oldTable, String rows) async {
+      final path = '${dir.path}/budgets.sqlite';
+      final fresh = AppDatabase(NativeDatabase(File(path)));
+      await fresh.customStatement('SELECT 1');
+      await fresh.close();
+      final raw = sqlite.sqlite3.open(path);
+      raw.execute('DROP TABLE budget_limits');
+      raw.execute(oldTable);
+      raw.execute(rows);
+      raw.execute('PRAGMA user_version = 2');
+      raw.close();
+      return File(path);
+    }
+
+    Future<List<(int?, int, int, bool, String, int?)>> read(
+      AppDatabase db,
+    ) async {
+      final all = await (db.select(
+        db.budgetLimits,
+      )..orderBy([(l) => OrderingTerm.asc(l.id)])).get();
+      return [
+        for (final r in all)
+          (
+            r.categoryId,
+            r.lengthDays,
+            r.lengthMonths,
+            r.repeats,
+            r.start,
+            r.amountCents,
+          ),
+      ];
+    }
+
+    test('the text period shape keeps every saved budget', () async {
+      final old = await olderBudgetDatabase(
+        'CREATE TABLE budget_limits (id INTEGER NOT NULL PRIMARY KEY '
+            'AUTOINCREMENT, category_id INTEGER NULL REFERENCES categories (id), '
+            'unit TEXT NOT NULL, repeats INTEGER NOT NULL DEFAULT 1, '
+            'start TEXT NOT NULL, amount_cents INTEGER NULL, '
+            'created_at INTEGER NOT NULL)',
+        "INSERT INTO budget_limits (category_id, unit, repeats, start, "
+            "amount_cents, created_at) VALUES "
+            "(1, 'month', 1, '2026-10-01', 20000, 0), "
+            "(NULL, 'week', 0, '2026-10-12', 90000, 0), "
+            "(1, 'fortnight', 1, '2026-11-02', NULL, 0)",
+      );
+      final db = AppDatabase(NativeDatabase(old));
+      addTearDown(db.close);
+
+      expect(await read(db), [
+        (1, 0, 1, true, '2026-10-01', 20000),
+        (null, 7, 0, false, '2026-10-12', 90000),
+        (1, 14, 0, true, '2026-11-02', null),
+      ]);
+      final version = await db.customSelect('PRAGMA user_version').getSingle();
+      expect(version.read<int>('user_version'), 3);
+      // The partial indexes were rebuilt.
+      Future<void> add(int? cat, String start) => db
+          .into(db.budgetLimits)
+          .insert(
+            BudgetLimitsCompanion.insert(
+              categoryId: Value(cat),
+              lengthDays: 7,
+              start: start,
+              amountCents: const Value(100),
+              createdAt: DateTime(2026, 10, 25),
+            ),
+          );
+      expect(() => add(1, '2026-10-01'), throwsA(isA<Exception>()));
+      expect(() => add(null, '2026-10-12'), throwsA(isA<Exception>()));
+      await add(null, '2026-10-13');
+    });
+
+    test('the days shape gains month lengths; zero days was a month', () async {
+      final old = await olderBudgetDatabase(
+        'CREATE TABLE budget_limits (id INTEGER NOT NULL PRIMARY KEY '
+            'AUTOINCREMENT, category_id INTEGER NULL REFERENCES categories (id), '
+            'length_days INTEGER NOT NULL CHECK (length_days BETWEEN 0 AND 365), '
+            'repeats INTEGER NOT NULL DEFAULT 1, start TEXT NOT NULL, '
+            'amount_cents INTEGER NULL, created_at INTEGER NOT NULL)',
+        "INSERT INTO budget_limits (category_id, length_days, repeats, start, "
+            "amount_cents, created_at) VALUES "
+            "(1, 0, 1, '2026-10-01', 20000, 0), "
+            "(NULL, 10, 1, '2026-10-15', 50000, 0)",
+      );
+      final db = AppDatabase(NativeDatabase(old));
+      addTearDown(db.close);
+
+      expect(await read(db), [
+        (1, 0, 1, true, '2026-10-01', 20000),
+        (null, 10, 0, true, '2026-10-15', 50000),
+      ]);
+    });
+
+    test('a database already at schema 3 is left alone', () async {
+      final path = '${dir.path}/current.sqlite';
+      final first = AppDatabase(NativeDatabase(File(path)));
+      await first
+          .into(first.budgetLimits)
+          .insert(
+            BudgetLimitsCompanion.insert(
+              lengthDays: 0,
+              lengthMonths: const Value(3),
+              start: '2026-10-01',
+              amountCents: const Value(100),
+              createdAt: DateTime(2026, 10, 25),
+            ),
+          );
+      await first.close();
+      final db = AppDatabase(NativeDatabase(File(path)));
+      addTearDown(db.close);
+      expect(await read(db), [(null, 0, 3, true, '2026-10-01', 100)]);
+    });
   });
 }

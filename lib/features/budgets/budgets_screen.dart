@@ -26,7 +26,8 @@ class BudgetsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final overview = ref.watch(budgetOverviewProvider);
+    final loaded = ref.watch(budgetOverviewProvider);
+    final overview = loaded.value;
     final startDay = ref.watch(monthStartDayProvider);
     final symbol = ref.watch(settingsProvider.select((s) => s.currencySymbol));
     final theme = Theme.of(context);
@@ -42,14 +43,22 @@ class BudgetsScreen extends ConsumerWidget {
     }
 
     final Widget body;
-    if (overview == null) {
+    if (loaded.hasError) {
+      body = EmptyState(
+        key: const ValueKey('budgets-error'),
+        icon: Icons.error_outline,
+        message: 'Could not load your budgets.',
+        actionLabel: 'Try again',
+        onAction: () => reloadBudgets(ref),
+      );
+    } else if (overview == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (!overview.hasAny) {
       body = EmptyState(
         icon: Icons.account_balance_wallet_outlined,
         message:
             'No budgets right now.\nSet a limit for a category, or for all '
-            'your spending, per month, every 2 weeks or per week.',
+            'your spending, per month or for a length you choose.',
         actionLabel: 'Set a limit',
         onAction: () => _showAddLimit(context, overview),
       );

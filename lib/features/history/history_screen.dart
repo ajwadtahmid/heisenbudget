@@ -159,8 +159,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (searchShown) _searchField(),
-                                Align(
-                                  alignment: Alignment.centerLeft,
+                                SizedBox(
+                                  width: double.infinity,
                                   child: Padding(
                                     padding: const EdgeInsets.fromLTRB(
                                       20,
@@ -169,6 +169,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                       8,
                                     ),
                                     child: Wrap(
+                                      alignment: WrapAlignment.spaceBetween,
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: [

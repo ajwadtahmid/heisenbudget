@@ -79,8 +79,14 @@ class BudgetLimits extends Table {
   IntColumn get categoryId =>
       integer().nullable().references(Categories, #id)();
 
-  /// Week, fortnight (every 2 weeks) or month.
-  TextColumn get unit => textEnum<BudgetUnit>()();
+  /// Days in one period (1 to 365); 0 when the period is counted in months.
+  IntColumn get lengthDays =>
+      integer().check(lengthDays.isBetweenValues(0, maxBudgetDays))();
+
+  /// Budget months in one period (1 to 60); 0 when counted in days.
+  IntColumn get lengthMonths => integer()
+      .withDefault(const Constant(0))
+      .check(lengthMonths.isBetweenValues(0, maxBudgetMonths))();
 
   /// False for a one-time budget (just its first period).
   BoolColumn get repeats => boolean().withDefault(const Constant(true))();

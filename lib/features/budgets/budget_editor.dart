@@ -34,12 +34,6 @@ Future<void> showBudgetEditor(
   );
 }
 
-String _plural(BudgetUnit unit) => switch (unit) {
-  BudgetUnit.week => 'weeks',
-  BudgetUnit.fortnight => '2-week periods',
-  BudgetUnit.month => 'months',
-};
-
 class _BudgetEditor extends ConsumerStatefulWidget {
   const _BudgetEditor({
     required this.categoryId,
@@ -58,11 +52,23 @@ class _BudgetEditor extends ConsumerStatefulWidget {
 class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _amount;
-  late BudgetUnit _unit;
+  late final TextEditingController _length;
+  late bool _custom;
+
+  /// Whether a custom length is counted in months rather than days.
+  late bool _inMonths;
   late bool _repeats;
 
-  /// The first day of the fortnight cycle, when picked by hand.
-  DateTime? _fortnightFirstDay;
+  /// True while "Just this period" is on only because Rest of this year
+  /// turned it on: choosing another length turns it back off. A switch the
+  /// person flipped themselves is left alone.
+  bool _onceFromRestOfYear = false;
+
+  /// The last valid length typed, so the preview holds while it is edited.
+  late int _lastCount;
+
+  /// The first day of a run of days, when picked by hand.
+  DateTime? _firstDay;
   bool _saving = false;
   int? _suggestion;
 
@@ -72,7 +78,14 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   void initState() {
     super.initState();
     final current = _current;
-    _unit = current?.unit ?? BudgetUnit.month;
+    _custom = current != null && !current.unit.isMonth;
+    _inMonths = _custom && current!.unit.inMonths;
+    _lastCount = !_custom
+        ? 7
+        : _inMonths
+        ? current!.unit.months
+        : current!.unit.days;
+    _length = TextEditingController(text: '$_lastCount');
     _repeats = current?.entry.repeats ?? true;
     _amount = TextEditingController(
       text: current == null ? '' : centsToInputText(current.status.limit),
@@ -83,7 +96,35 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   @override
   void dispose() {
     _amount.dispose();
+    _length.dispose();
     super.dispose();
+  }
+
+  BudgetUnit get _unit => !_custom
+      ? BudgetUnit.month
+      : _inMonths
+      ? BudgetUnit.months(_lastCount)
+      : BudgetUnit.days(_lastCount);
+
+  int get _largest => _inMonths ? maxBudgetMonths : maxBudgetDays;
+
+  String? _checkLength(String? text) {
+    final n = int.tryParse((text ?? '').trim());
+    if (n == null || n < 1 || n > _largest) {
+      return 'Enter 1 to $_largest ${_inMonths ? 'months' : 'days'}';
+    }
+    return null;
+  }
+
+  /// Days from today to the end of this year, today included.
+  int get _daysLeftInYear {
+    final today = dateOnly(ref.read(clockProvider));
+    return DateTime.utc(
+          today.year,
+          12,
+          31,
+        ).difference(DateTime.utc(today.year, today.month, today.day)).inDays +
+        1;
   }
 
   /// The period this change starts with: the current one of the existing
@@ -91,9 +132,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   /// otherwise the current period of the chosen kind.
   DateRange get _range {
     final current = _current;
-    if (current != null &&
-        current.unit == _unit &&
-        _fortnightFirstDay == null) {
+    if (current != null && current.unit == _unit && _firstDay == null) {
       return current.range;
     }
     return currentRangeFor(
@@ -101,7 +140,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
       ref.read(clockProvider),
       monthStartDay: ref.read(monthStartDayProvider),
       weekStartDay: ref.read(weekStartDayProvider),
-      anchor: _unit == BudgetUnit.fortnight ? _fortnightFirstDay : null,
+      anchor: _firstDay,
     );
   }
 
@@ -119,14 +158,59 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
     if (mounted && unit == _unit) setState(() => _suggestion = suggestion);
   }
 
-  void _setUnit(BudgetUnit unit) {
-    if (unit == _unit) return;
+  void _changeLength(void Function() change, {DateTime? firstDay}) {
     setState(() {
-      _unit = unit;
+      if (_onceFromRestOfYear) {
+        _repeats = true;
+        _onceFromRestOfYear = false;
+      }
+      change();
       _suggestion = null;
-      _fortnightFirstDay = null;
+      _firstDay = firstDay;
     });
     _loadSuggestion();
+  }
+
+  void _setCustom(bool custom) {
+    if (custom == _custom) return;
+    _changeLength(() => _custom = custom);
+  }
+
+  void _setLength(String text) {
+    final n = int.tryParse(text.trim());
+    if (_checkLength(text) != null || n == _lastCount) return;
+    _changeLength(() => _lastCount = n!);
+  }
+
+  void _setInMonths(bool months) {
+    if (months == _inMonths) return;
+    _changeLength(() {
+      _inMonths = months;
+      if (_lastCount > _largest) _lastCount = _largest;
+      _length.text = '$_lastCount';
+    });
+  }
+
+  void _quickPick(int count, {required bool months}) {
+    _length.text = '$count';
+    _changeLength(() {
+      _inMonths = months;
+      _lastCount = count;
+    });
+  }
+
+  /// From today to the end of this year, once: a one-time run of days.
+  void _restOfYear() {
+    final days = _daysLeftInYear;
+    // Already one-time because the person chose it: that stays theirs.
+    final chosenOnce = !_repeats && !_onceFromRestOfYear;
+    _length.text = '$days';
+    _changeLength(() {
+      _inMonths = false;
+      _lastCount = days;
+      _repeats = false;
+      _onceFromRestOfYear = !chosenOnce;
+    }, firstDay: dateOnly(ref.read(clockProvider)));
   }
 
   Future<void> _pickFirstDay() async {
@@ -134,13 +218,13 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _range.start,
-      firstDate: DateTime(today.year, today.month, today.day - 13),
+      firstDate: DateTime(today.year, today.month, today.day - _lastCount + 1),
       lastDate: today,
-      helpText: 'First day of a two-week period',
+      helpText: 'First day of the first period',
     );
     if (picked == null || !mounted) return;
     setState(() {
-      _fortnightFirstDay = dateOnly(picked);
+      _firstDay = dateOnly(picked);
       _suggestion = null;
     });
     _loadSuggestion();
@@ -180,8 +264,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
     final suggestion = _suggestion;
     final isNew = _current == null;
     final showFirstDay =
-        _unit == BudgetUnit.fortnight &&
-        (isNew || _current!.unit != BudgetUnit.fortnight);
+        _custom && !_inMonths && (isNew || _current!.unit != _unit);
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -249,35 +332,120 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                   Wrap(
                     spacing: Gap.m,
                     children: [
-                      for (final unit in BudgetUnit.values)
-                        ChoiceChip(
-                          key: ValueKey('budget-unit-${unit.name}'),
-                          showCheckmark: false,
-                          label: Text(unit.label),
-                          selected: _unit == unit,
-                          onSelected: (_) => _setUnit(unit),
-                        ),
+                      ChoiceChip(
+                        key: const ValueKey('budget-unit-month'),
+                        showCheckmark: false,
+                        label: const Text('Monthly'),
+                        selected: !_custom,
+                        onSelected: (_) => _setCustom(false),
+                      ),
+                      ChoiceChip(
+                        key: const ValueKey('budget-unit-custom'),
+                        showCheckmark: false,
+                        label: const Text('Custom'),
+                        selected: _custom,
+                        onSelected: (_) => _setCustom(true),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: Gap.m),
-                  Wrap(
-                    spacing: Gap.m,
-                    children: [
-                      ChoiceChip(
-                        key: const ValueKey('budget-repeats'),
-                        showCheckmark: false,
-                        label: const Text('Keeps repeating'),
-                        selected: _repeats,
-                        onSelected: (_) => setState(() => _repeats = true),
-                      ),
-                      ChoiceChip(
-                        key: const ValueKey('budget-once'),
-                        showCheckmark: false,
-                        label: Text('Just this ${_unit.noun}'),
-                        selected: !_repeats,
-                        onSelected: (_) => setState(() => _repeats = false),
-                      ),
-                    ],
+                  if (_custom) ...[
+                    const SizedBox(height: Gap.m),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            key: const ValueKey('budget-length'),
+                            controller: _length,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Length',
+                            ),
+                            validator: _checkLength,
+                            onChanged: _setLength,
+                          ),
+                        ),
+                        const SizedBox(width: Gap.m),
+                        Expanded(
+                          child: DropdownButtonFormField<bool>(
+                            key: ValueKey('budget-length-unit-$_inMonths'),
+                            isExpanded: true,
+                            initialValue: _inMonths,
+                            decoration: const InputDecoration(
+                              labelText: 'Unit',
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: false,
+                                child: Text('Days'),
+                              ),
+                              DropdownMenuItem(
+                                value: true,
+                                child: Text('Months'),
+                              ),
+                            ],
+                            onChanged: (months) => _setInMonths(months!),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: Gap.s),
+                    Wrap(
+                      spacing: Gap.m,
+                      children: [
+                        ChoiceChip(
+                          key: const ValueKey('budget-quick-week'),
+                          showCheckmark: false,
+                          label: const Text('1 week'),
+                          selected: !_inMonths && _lastCount == 7,
+                          onSelected: (_) => _quickPick(7, months: false),
+                        ),
+                        ChoiceChip(
+                          key: const ValueKey('budget-quick-quarter'),
+                          showCheckmark: false,
+                          label: const Text('Quarter (3 months)'),
+                          selected: _inMonths && _lastCount == 3,
+                          onSelected: (_) => _quickPick(3, months: true),
+                        ),
+                        ChoiceChip(
+                          key: const ValueKey('budget-quick-year'),
+                          showCheckmark: false,
+                          label: const Text('1 year'),
+                          selected: _inMonths && _lastCount == 12,
+                          onSelected: (_) => _quickPick(12, months: true),
+                        ),
+                        ChoiceChip(
+                          key: const ValueKey('budget-quick-rest'),
+                          showCheckmark: false,
+                          label: const Text('Rest of this year'),
+                          selected:
+                              !_inMonths &&
+                              !_repeats &&
+                              _lastCount == _daysLeftInYear &&
+                              _firstDay == dateOnly(ref.read(clockProvider)),
+                          onSelected: (_) => _restOfYear(),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: Gap.s),
+                  SwitchListTile(
+                    key: const ValueKey('budget-once'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Just this period'),
+                    subtitle: Text(
+                      _repeats
+                          ? 'Off: repeats every ${_unit.noun}.'
+                          : 'On: ends ${formatDate(range.end)}.',
+                    ),
+                    value: !_repeats,
+                    onChanged: (once) => setState(() {
+                      _repeats = !once;
+                      _onceFromRestOfYear = false;
+                    }),
                   ),
                   if (showFirstDay) ...[
                     const SizedBox(height: Gap.s),
@@ -285,7 +453,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                       key: const ValueKey('budget-first-day'),
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.event_outlined),
-                      title: const Text('First day of a two-week period'),
+                      title: const Text('First day'),
                       subtitle: Text(formatDate(range.start)),
                       onTap: _pickFirstDay,
                     ),
@@ -300,7 +468,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                           () => _amount.text = centsToInputText(suggestion),
                         ),
                         child: Text(
-                          'Use the average of the last 3 ${_plural(_unit)}: '
+                          'Use the average of the last 3 ${_unit.plural}: '
                           '${formatMoney(suggestion, symbol)}',
                         ),
                       ),
@@ -308,7 +476,8 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                   ],
                   const SizedBox(height: Gap.m),
                   Text(
-                    'Applies from this ${_unit.noun}: ${formatRange(range)}. '
+                    'Applies from this ${_unit.isMonth ? 'month' : 'period'}: '
+                    '${formatRange(range)}. '
                     'Earlier ones keep what they had.',
                     key: const ValueKey('budget-starts'),
                     style: theme.textTheme.bodySmall?.copyWith(color: c.dim),

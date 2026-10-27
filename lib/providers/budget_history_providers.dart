@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../domain/budget.dart';
 import 'budget_providers.dart';
 
 /// Which side of History is showing.
@@ -21,8 +20,7 @@ class HistoryModeNotifier extends Notifier<HistoryMode> {
 enum PeriodFilter {
   all('All'),
   month('Monthly'),
-  fortnight('Every 2 weeks'),
-  week('Weekly'),
+  custom('Custom'),
   oneTime('One-time');
 
   const PeriodFilter(this.label);
@@ -95,9 +93,8 @@ class BudgetHistoryFilter {
   bool accepts(PastBudget b) {
     final okPeriod = switch (period) {
       PeriodFilter.all => true,
-      PeriodFilter.month => b.unit == BudgetUnit.month,
-      PeriodFilter.fortnight => b.unit == BudgetUnit.fortnight,
-      PeriodFilter.week => b.unit == BudgetUnit.week,
+      PeriodFilter.month => b.unit.isMonth,
+      PeriodFilter.custom => !b.unit.isMonth,
       PeriodFilter.oneTime => b.isOneTime,
     };
     final okResult = switch (result) {

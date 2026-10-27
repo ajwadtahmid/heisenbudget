@@ -189,7 +189,8 @@ class BackupData {
           {
             'id': b.id,
             'categoryId': b.categoryId,
-            'unit': b.unit.name,
+            'lengthDays': b.lengthDays,
+            'lengthMonths': b.lengthMonths,
             'repeats': b.repeats,
             'start': b.start,
             'amountCents': b.amountCents,
@@ -433,7 +434,9 @@ List<BudgetLimitRow> _parseBudgetLimits(
     final legacyMonth = item['startMonth'];
     final BudgetUnit unit;
     final String start;
-    if (item['unit'] == null && legacyMonth != null) {
+    if (item['lengthDays'] == null &&
+        item['unit'] == null &&
+        legacyMonth != null) {
       if (legacyMonth is! String ||
           !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(legacyMonth)) {
         throw _damaged(where, 'bad month');
@@ -441,12 +444,31 @@ List<BudgetLimitRow> _parseBudgetLimits(
       unit = BudgetUnit.month;
       start = '$legacyMonth-${monthStartDay.toString().padLeft(2, '0')}';
     } else {
-      final name = item['unit'];
-      final parsed = name is String
-          ? BudgetUnit.values.asNameMap()[name]
-          : null;
-      if (parsed == null) throw _damaged(where, 'unknown period');
-      unit = parsed;
+      final days = item['lengthDays'];
+      final months = item['lengthMonths'];
+      // Backups made before custom lengths named the period instead.
+      final legacy = const {
+        'week': BudgetUnit.week,
+        'fortnight': BudgetUnit.fortnight,
+        'month': BudgetUnit.month,
+      }[item['unit']];
+      if (months != null &&
+          (months is! int || months < 0 || months > maxBudgetMonths)) {
+        throw _damaged(where, 'unknown period');
+      }
+      if (days != null && (days is! int || days < 0 || days > maxBudgetDays)) {
+        throw _damaged(where, 'unknown period');
+      }
+      if (months is int && months > 0) {
+        unit = BudgetUnit.months(months);
+      } else if (days is int) {
+        // Zero days was how a month was written before month lengths.
+        unit = days == 0 ? BudgetUnit.month : BudgetUnit.days(days);
+      } else if (legacy != null) {
+        unit = legacy;
+      } else {
+        throw _damaged(where, 'unknown period');
+      }
       final date = item['start'];
       if (date is! String || !_isRealDate(date)) {
         throw _damaged(where, 'start is not a real date');
@@ -472,7 +494,8 @@ List<BudgetLimitRow> _parseBudgetLimits(
       BudgetLimitRow(
         id: id,
         categoryId: categoryId as int?,
-        unit: unit,
+        lengthDays: unit.days,
+        lengthMonths: unit.months,
         repeats: repeats as bool? ?? true,
         start: start,
         amountCents: amount as int?,

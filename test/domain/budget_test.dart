@@ -119,6 +119,135 @@ void main() {
     });
   });
 
+  group('BudgetUnit', () {
+    test('names the length for people', () {
+      expect(BudgetUnit.month.label, 'Monthly');
+      expect(BudgetUnit.week.label, 'Weekly');
+      expect(BudgetUnit.fortnight.label, 'Every 2 weeks');
+      expect(const BudgetUnit.days(21).label, 'Every 3 weeks');
+      expect(const BudgetUnit.days(10).label, 'Every 10 days');
+      expect(const BudgetUnit.days(10).noun, '10 days');
+      expect(const BudgetUnit.days(10).plural, '10-day periods');
+      expect(const BudgetUnit.days(1).label, 'Daily');
+      expect(const BudgetUnit.days(1).noun, 'day');
+    });
+
+    test('a run of days without an anchor starts today unless whole weeks', () {
+      final today = d(2026, 10, 15); // a Thursday
+      DateRange of(int days) => currentRangeFor(
+        BudgetUnit.days(days),
+        today,
+        monthStartDay: 1,
+        weekStartDay: 1,
+      );
+      expect(of(10), DateRange(d(2026, 10, 15), d(2026, 10, 24)));
+      expect(of(7), DateRange(d(2026, 10, 12), d(2026, 10, 18)));
+      expect(of(21), DateRange(d(2026, 10, 12), d(2026, 11, 1)));
+    });
+
+    test('names month lengths for people', () {
+      expect(BudgetUnit.quarter.label, 'Quarterly');
+      expect(BudgetUnit.year.label, 'Yearly');
+      expect(const BudgetUnit.months(4).label, 'Every 4 months');
+      expect(const BudgetUnit.months(24).label, 'Every 2 years');
+      expect(BudgetUnit.year.noun, 'year');
+      expect(const BudgetUnit.months(4).noun, '4 months');
+      expect(const BudgetUnit.months(4).plural, '4-month periods');
+      expect(BudgetUnit.month.plural, 'months');
+      expect(BudgetUnit.month.isMonth, isTrue);
+      expect(BudgetUnit.quarter.isMonth, isFalse);
+      expect(BudgetUnit.quarter.inMonths, isTrue);
+    });
+
+    test('a quarter starts with the budget month that holds the date', () {
+      DateRange of(int startDay) => currentRangeFor(
+        BudgetUnit.quarter,
+        d(2026, 10, 15),
+        monthStartDay: startDay,
+        weekStartDay: 1,
+      );
+      expect(of(1), DateRange(d(2026, 10, 1), d(2026, 12, 31)));
+      // Oct 15 is still in the budget month that began Sep 25.
+      expect(of(25), DateRange(d(2026, 9, 25), d(2026, 12, 24)));
+    });
+
+    test('month blocks count from the entry start and stay adjacent', () {
+      final entry = LimitEntry(
+        categoryId: 1,
+        unit: BudgetUnit.quarter,
+        repeats: true,
+        start: d(2026, 10, 1),
+        amountCents: 100,
+      );
+      expect(
+        entry.rangeAt(d(2026, 12, 31), 1),
+        DateRange(d(2026, 10, 1), d(2026, 12, 31)),
+      );
+      expect(
+        entry.rangeAt(d(2027, 1, 5), 1),
+        DateRange(d(2027, 1, 1), d(2027, 3, 31)),
+      );
+      expect(
+        entry.rangeAt(d(2026, 9, 30), 1),
+        DateRange(d(2026, 7, 1), d(2026, 9, 30)),
+      );
+      final first = entry.firstRange(1);
+      expect(
+        nextRange(first, BudgetUnit.quarter, 1),
+        DateRange(d(2027, 1, 1), d(2027, 3, 31)),
+      );
+      expect(
+        previousRange(first, BudgetUnit.quarter, 1),
+        DateRange(d(2026, 7, 1), d(2026, 9, 30)),
+      );
+      final year = LimitEntry(
+        categoryId: null,
+        unit: BudgetUnit.year,
+        repeats: true,
+        start: d(2026, 10, 1),
+        amountCents: 100,
+      );
+      expect(
+        year.rangeAt(d(2027, 10, 1), 1),
+        DateRange(d(2027, 10, 1), d(2028, 9, 30)),
+      );
+    });
+
+    test('finished quarters are listed once each', () {
+      final entry = LimitEntry(
+        categoryId: 1,
+        unit: BudgetUnit.quarter,
+        repeats: true,
+        start: d(2026, 1, 1),
+        amountCents: 100,
+      );
+      final past = pastPeriods([entry], d(2026, 10, 15), monthStartDay: 1);
+      expect(past.map((p) => p.range.start), [
+        d(2026, 7, 1),
+        d(2026, 4, 1),
+        d(2026, 1, 1),
+      ]);
+    });
+
+    test('periods of an entry count from its first day', () {
+      final entry = LimitEntry(
+        categoryId: 1,
+        unit: const BudgetUnit.days(10),
+        repeats: true,
+        start: d(2026, 10, 1),
+        amountCents: 100,
+      );
+      expect(
+        entry.rangeAt(d(2026, 10, 25), 1),
+        DateRange(d(2026, 10, 21), d(2026, 10, 30)),
+      );
+      expect(
+        entry.rangeAt(d(2026, 10, 10), 1),
+        DateRange(d(2026, 10, 1), d(2026, 10, 10)),
+      );
+    });
+  });
+
   group('weekStartOf', () {
     test('Monday weeks', () {
       expect(weekStartOf(d(2026, 10, 15), 1), d(2026, 10, 12)); // Thursday
@@ -195,7 +324,12 @@ void main() {
     });
 
     test('neighbouring periods are exactly adjacent', () {
-      for (final unit in BudgetUnit.values) {
+      for (final unit in const [
+        BudgetUnit.week,
+        BudgetUnit.fortnight,
+        BudgetUnit.month,
+        BudgetUnit.days(10),
+      ]) {
         var r = range(unit, d(2026, 10, 15), month: 25);
         for (var i = 0; i < 30; i++) {
           final next = nextRange(r, unit, 25);
@@ -294,7 +428,12 @@ void main() {
     });
 
     test('a one-time limit applies to its first period only', () {
-      for (final unit in BudgetUnit.values) {
+      for (final unit in const [
+        BudgetUnit.week,
+        BudgetUnit.fortnight,
+        BudgetUnit.month,
+        BudgetUnit.days(10),
+      ]) {
         final start = unit == BudgetUnit.month
             ? d(2026, 10, 1)
             : d(2026, 10, 12);

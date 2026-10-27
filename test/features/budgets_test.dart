@@ -89,6 +89,14 @@ Future<void> startNewLimit(
   await settle(tester);
 }
 
+/// Chooses Days or Months in the editor's unit dropdown.
+Future<void> chooseLengthUnit(WidgetTester tester, String label) async {
+  await tester.tap(find.byType(DropdownButtonFormField<bool>));
+  await tester.pump();
+  await tester.tap(find.text(label).last);
+  await tester.pump();
+}
+
 Future<void> saveEditor(WidgetTester tester, String amount) async {
   await tester.enterText(find.byKey(const ValueKey('budget-amount')), amount);
   await tester.tap(find.byKey(const ValueKey('budget-save')));
@@ -126,6 +134,45 @@ void main() {
     });
   });
 
+  group('when the budgets cannot be read', () {
+    testWidgets('shows an error with Try again instead of waiting forever', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      // A table from an older build: it has a saved row but no length column.
+      await tester.runAsync(() async {
+        await env.db.customStatement('DROP TABLE budget_limits');
+        await env.db.customStatement(
+          'CREATE TABLE budget_limits (id INTEGER PRIMARY KEY AUTOINCREMENT, '
+          'category_id INTEGER NULL, unit TEXT NOT NULL, '
+          'repeats INTEGER NOT NULL DEFAULT 1, start TEXT NOT NULL, '
+          'amount_cents INTEGER NULL, created_at INTEGER NOT NULL)',
+        );
+        await env.db.customStatement(
+          "INSERT INTO budget_limits (unit, start, amount_cents, created_at) "
+          "VALUES ('month', '2026-10-01', 50000, 0)",
+        );
+      });
+      await openBudgets(tester, env);
+      await settle(tester);
+
+      expect(find.byKey(const ValueKey('budgets-error')), findsOneWidget);
+      expect(find.text('Could not load your budgets.'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      // Once the table is right again, Try again loads it.
+      await tester.runAsync(() async {
+        await env.db.customStatement('DROP TABLE budget_limits');
+        await env.db.createMigrator().createTable(env.db.budgetLimits);
+      });
+      await tester.tap(find.text('Try again'));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('budgets-error')), findsNothing);
+      expect(find.textContaining('No budgets right now'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+  });
+
   group('setting a limit', () {
     testWidgets('the editor defaults to monthly and repeating', (tester) async {
       final env = await createEnv(tester);
@@ -135,11 +182,15 @@ void main() {
       ChoiceChip chip(String key) =>
           tester.widget<ChoiceChip>(find.byKey(ValueKey(key)));
       expect(chip('budget-unit-month').selected, isTrue);
-      expect(chip('budget-unit-week').selected, isFalse);
-      expect(chip('budget-unit-fortnight').selected, isFalse);
-      expect(chip('budget-repeats').selected, isTrue);
-      expect(chip('budget-once').selected, isFalse);
-      expect(find.text('Just this month'), findsOneWidget);
+      expect(chip('budget-unit-custom').selected, isFalse);
+      expect(find.byKey(const ValueKey('budget-length')), findsNothing);
+      expect(
+        tester
+            .widget<SwitchListTile>(find.byKey(const ValueKey('budget-once')))
+            .value,
+        isFalse,
+      );
+      expect(find.text('Just this period'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('budget-from-this')),
         findsNothing,
@@ -180,7 +231,13 @@ void main() {
         expect(find.text('Monthly · October 2026'), findsOneWidget);
         final row = (await limitRows(tester, env)).single;
         expect(
-          (row.categoryId, row.unit, row.repeats, row.start, row.amountCents),
+          (
+            row.categoryId,
+            row.entry.unit,
+            row.repeats,
+            row.start,
+            row.amountCents,
+          ),
           (food, BudgetUnit.month, true, '2026-10-01', 20000),
         );
         await disposeEnv(tester, env);
@@ -191,17 +248,17 @@ void main() {
       final env = await createEnv(tester);
       await openBudgets(tester, env);
       await startNewLimit(tester, env, 'Food');
-      await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
       await tester.pump();
       expect(
-        find.textContaining('Applies from this week: Oct 12 – Oct 18, 2026'),
+        find.textContaining('Applies from this period: Oct 12 – Oct 18, 2026'),
         findsOneWidget,
       );
       await saveEditor(tester, '50');
 
       final row = (await limitRows(tester, env)).single;
       expect(
-        (row.unit, row.repeats, row.start),
+        (row.entry.unit, row.repeats, row.start),
         (BudgetUnit.week, true, '2026-10-12'),
       );
       expect(find.text('Weekly · Oct 12 – Oct 18, 2026'), findsOneWidget);
@@ -219,7 +276,7 @@ void main() {
       ); // Sunday
       await openBudgets(tester, env);
       await startNewLimit(tester, env, 'Food');
-      await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
       await tester.pump();
       await saveEditor(tester, '50');
       expect((await limitRows(tester, env)).single.start, '2026-10-11');
@@ -232,7 +289,7 @@ void main() {
       final env = await createEnv(tester, prefs: {'week_mode': 'fixed'});
       await openBudgets(tester, env);
       await startNewLimit(tester, env, 'Food');
-      await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
       await tester.pump();
       await saveEditor(tester, '50');
       expect((await limitRows(tester, env)).single.start, '2026-10-12');
@@ -246,14 +303,22 @@ void main() {
         await openBudgets(tester, env);
         await startNewLimit(tester, env, 'Food');
         expect(find.byKey(const ValueKey('budget-first-day')), findsNothing);
-        await tester.tap(find.byKey(const ValueKey('budget-unit-fortnight')));
+        await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+        await tester.pump();
+        await tester.enterText(
+          find.byKey(const ValueKey('budget-length')),
+          '14',
+        );
         await tester.pump();
         expect(find.byKey(const ValueKey('budget-first-day')), findsOneWidget);
         expect(find.text('Oct 12, 2026'), findsOneWidget);
         await saveEditor(tester, '90');
 
         final row = (await limitRows(tester, env)).single;
-        expect((row.unit, row.start), (BudgetUnit.fortnight, '2026-10-12'));
+        expect(
+          (row.entry.unit, row.start),
+          (BudgetUnit.fortnight, '2026-10-12'),
+        );
         expect(
           find.text('Every 2 weeks · Oct 12 – Oct 25, 2026'),
           findsOneWidget,
@@ -268,12 +333,17 @@ void main() {
         final env = await createEnv(tester);
         await openBudgets(tester, env);
         await startNewLimit(tester, env, 'Food');
-        await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+        await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
         await tester.pump();
-        expect(find.text('Just this week'), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('budget-unit-fortnight')));
+        expect(find.text('Off: repeats every week.'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
         await tester.pump();
-        expect(find.text('Just this 2 weeks'), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('budget-length')),
+          '14',
+        );
+        await tester.pump();
+        expect(find.text('Off: repeats every 2 weeks.'), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('budget-unit-month')));
         await tester.pump();
         await tester.tap(find.byKey(const ValueKey('budget-once')));
@@ -281,11 +351,249 @@ void main() {
         await saveEditor(tester, '200');
 
         final row = (await limitRows(tester, env)).single;
-        expect((row.unit, row.repeats), (BudgetUnit.month, false));
+        expect((row.entry.unit, row.repeats), (BudgetUnit.month, false));
         expect(find.text('Just this month · October 2026'), findsOneWidget);
         await disposeEnv(tester, env);
       },
     );
+
+    testWidgets('a custom length in days, counted from today', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('budget-length')), findsOneWidget);
+      expect(find.text('Off: repeats every week.'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('budget-length')), '10');
+      await tester.pump();
+      expect(find.text('Off: repeats every 10 days.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('budget-first-day')), findsOneWidget);
+      expect(
+        find.textContaining('Applies from this period: Oct 15 – Oct 24, 2026'),
+        findsOneWidget,
+      );
+      await saveEditor(tester, '100');
+
+      final row = (await limitRows(tester, env)).single;
+      expect(
+        (row.lengthDays, row.repeats, row.start),
+        (10, true, '2026-10-15'),
+      );
+      expect(
+        find.text('Every 10 days · Oct 15 – Oct 24, 2026'),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('quarter, year and months lengths', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('budget-quick-quarter')));
+      await tester.pump();
+      expect(find.text('Off: repeats every 3 months.'), findsOneWidget);
+      expect(
+        find.textContaining('Applies from this period: Oct 1 – Dec 31, 2026'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('budget-first-day')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('budget-quick-year')));
+      await tester.pump();
+      expect(find.text('Off: repeats every year.'), findsOneWidget);
+
+      await chooseLengthUnit(tester, 'Days');
+      await chooseLengthUnit(tester, 'Months');
+      await tester.enterText(find.byKey(const ValueKey('budget-length')), '4');
+      await tester.pump();
+      expect(find.text('Off: repeats every 4 months.'), findsOneWidget);
+      await saveEditor(tester, '400');
+
+      final row = (await limitRows(tester, env)).single;
+      expect(
+        (row.lengthDays, row.lengthMonths, row.repeats, row.start),
+        (0, 4, true, '2026-10-01'),
+      );
+      expect(find.textContaining('Every 4 months · '), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('Rest of this year is one run of days to Dec 31', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('budget-quick-rest')));
+      await tester.pump();
+      // Oct 15 to Dec 31 is 17 + 30 + 31 days.
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('budget-length')))
+            .controller!
+            .text,
+        '78',
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(find.byKey(const ValueKey('budget-once')))
+            .value,
+        isTrue,
+        reason: 'it cannot repeat',
+      );
+      expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(const ValueKey('budget-quick-rest')))
+            .selected,
+        isTrue,
+      );
+      await saveEditor(tester, '300');
+
+      final row = (await limitRows(tester, env)).single;
+      expect(
+        (row.lengthDays, row.lengthMonths, row.repeats, row.start),
+        (78, 0, false, '2026-10-15'),
+      );
+      expect(
+        find.text('Just this period · Oct 15 – Dec 31, 2026'),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('Rest of this year turns the switch back off with any other '
+        'length, but never one the person turned on', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      bool once() => tester
+          .widget<SwitchListTile>(find.byKey(const ValueKey('budget-once')))
+          .value;
+      Future<void> pick(String key) async {
+        await tester.tap(find.byKey(ValueKey(key)));
+        await tester.pump();
+      }
+
+      await pick('budget-unit-custom');
+      expect(once(), isFalse);
+      for (final other in [
+        'budget-quick-week',
+        'budget-quick-quarter',
+        'budget-quick-year',
+      ]) {
+        await pick('budget-quick-rest');
+        expect(once(), isTrue, reason: 'rest of the year is one-time');
+        await pick(other);
+        expect(once(), isFalse, reason: '$other goes back to repeating');
+      }
+
+      // Typing a length or going back to Monthly also restores it.
+      await pick('budget-quick-rest');
+      await tester.enterText(find.byKey(const ValueKey('budget-length')), '10');
+      await tester.pump();
+      expect(once(), isFalse);
+      await pick('budget-quick-rest');
+      await pick('budget-unit-month');
+      expect(once(), isFalse);
+
+      // A switch the person turned on stays on.
+      await pick('budget-once');
+      expect(once(), isTrue);
+      await pick('budget-unit-custom');
+      await pick('budget-quick-rest');
+      await pick('budget-quick-quarter');
+      expect(once(), isTrue, reason: 'their own choice');
+
+      // Turning it off by hand after Rest of this year sticks, too.
+      await pick('budget-once'); // off
+      await pick('budget-quick-rest'); // on, from the pick
+      await pick('budget-once'); // off by hand
+      await pick('budget-quick-week');
+      expect(once(), isFalse);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the length and its unit sit on one row', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      final field = tester.getRect(find.byKey(const ValueKey('budget-length')));
+      final unit = tester.getRect(find.byType(DropdownButtonFormField<bool>));
+      expect(unit.left, greaterThan(field.right));
+      expect((unit.top - field.top).abs(), lessThan(1));
+      await chooseLengthUnit(tester, 'Months');
+      expect(find.text('Off: repeats every 7 months.'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a length in months is limited to 60', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      await chooseLengthUnit(tester, 'Months');
+      await tester.enterText(find.byKey(const ValueKey('budget-length')), '61');
+      await tester.enterText(
+        find.byKey(const ValueKey('budget-amount')),
+        '100',
+      );
+      await tester.tap(find.byKey(const ValueKey('budget-save')));
+      await settle(tester);
+      expect(find.text('Enter 1 to 60 months'), findsOneWidget);
+      expect(await limitRows(tester, env), isEmpty);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a custom length must be 1 to 365 days', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      for (final bad in ['', '0', '366']) {
+        await tester.enterText(
+          find.byKey(const ValueKey('budget-length')),
+          bad,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('budget-amount')),
+          '100',
+        );
+        await tester.tap(find.byKey(const ValueKey('budget-save')));
+        await settle(tester);
+        expect(find.text('Enter 1 to 365 days'), findsOneWidget, reason: bad);
+      }
+      expect(await limitRows(tester, env), isEmpty);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the Just this period switch is off until turned on', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+      SwitchListTile toggle() =>
+          tester.widget(find.byKey(const ValueKey('budget-once')));
+      expect(toggle().value, isFalse);
+      await tester.tap(find.byKey(const ValueKey('budget-once')));
+      await tester.pump();
+      expect(toggle().value, isTrue);
+      expect(find.text('On: ends Oct 31, 2026.'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('budget-once')));
+      await tester.pump();
+      expect(toggle().value, isFalse);
+      await disposeEnv(tester, env);
+    });
 
     testWidgets('a limit on all spending', (tester) async {
       final env = await createEnv(tester);
@@ -591,7 +899,7 @@ void main() {
         await openBudgets(tester, env);
         await tester.tap(find.byKey(ValueKey('gauge-$food')));
         await settle(tester);
-        await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+        await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
         await tester.pump();
         await saveEditor(tester, '60');
 
@@ -599,11 +907,11 @@ void main() {
         final rows = await limitRows(tester, env);
         expect(rows, hasLength(2));
         expect(
-          (rows.last.unit, rows.last.start),
+          (rows.last.entry.unit, rows.last.start),
           (BudgetUnit.week, '2026-10-12'),
         );
         expect(
-          (rows.first.unit, rows.first.start),
+          (rows.first.entry.unit, rows.first.start),
           (BudgetUnit.month, '2026-09-01'),
         );
         await disposeEnv(tester, env);
@@ -723,7 +1031,7 @@ void main() {
         await openBudgets(tester, env);
         await tester.tap(find.byKey(ValueKey('gauge-$food')));
         await settle(tester);
-        await tester.tap(find.byKey(const ValueKey('budget-unit-week')));
+        await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
         await settle(tester);
         expect(
           find.textContaining('average of the last 3 weeks: \$200.00'),
@@ -1170,12 +1478,24 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('gauge-overall')));
       await settle(tester);
       expect(tester.takeException(), isNull, reason: 'the editor');
-      await tester.tap(find.byKey(const ValueKey('budget-unit-fortnight')));
+      await tester.tap(find.byKey(const ValueKey('budget-unit-custom')));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('budget-quick-week')),
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byType(Form),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(find.byKey(const ValueKey('budget-quick-week')));
       await settle(tester);
       expect(
         tester.takeException(),
         isNull,
-        reason: 'the editor with a fortnight',
+        reason: 'the editor with a custom length',
       );
       await disposeEnv(tester, env);
     });
