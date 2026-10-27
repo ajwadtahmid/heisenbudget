@@ -98,46 +98,91 @@ class HistoryFilterNotifier extends Notifier<HistoryFilter> {
   void clear() => state = state.cleared();
 }
 
-/// The filtered, sorted History list.
-final historyListProvider = StreamProvider<List<TransactionWithCategory>>((
-  ref,
-) {
+/// How many rows History reads at a time. Scrolling near the end reads
+/// another page.
+const historyPageSize = 100;
+
+/// One page of History: the rows to show and whether more follow.
+class HistoryPage {
+  const HistoryPage(this.rows, {required this.hasMore});
+
+  final List<TransactionWithCategory> rows;
+  final bool hasMore;
+}
+
+/// How many rows are loaded. It starts again whenever the filter, the sort or
+/// the search changes, because the list then starts again from the top.
+final historyLimitProvider = NotifierProvider<HistoryLimit, int>(
+  HistoryLimit.new,
+);
+
+class HistoryLimit extends Notifier<int> {
+  @override
+  int build() {
+    ref.watch(historyFilterProvider);
+    return historyPageSize;
+  }
+
+  void more() => state += historyPageSize;
+}
+
+/// The rows to show out of [rows], which holds up to one more than [limit] so
+/// that "is there more?" is known without a second query. In a date-ordered
+/// list a day is never cut in half: if the next page continues the last day,
+/// that day waits for the next page, so its total on the day header is right.
+HistoryPage historyPageOf(
+  List<TransactionWithCategory> rows,
+  int limit, {
+  required bool byDate,
+}) {
+  if (rows.length <= limit) return HistoryPage(rows, hasMore: false);
+  var shown = rows.sublist(0, limit);
+  final lastDate = shown.last.transaction.date;
+  if (byDate && rows[limit].transaction.date == lastDate) {
+    final cut = shown.lastIndexWhere((r) => r.transaction.date != lastDate);
+    // A single day longer than a whole page has to be shown cut.
+    if (cut >= 0) shown = shown.sublist(0, cut + 1);
+  }
+  return HistoryPage(shown, hasMore: true);
+}
+
+/// The filtered, sorted, searched History list, one page at a time.
+final historyListProvider = StreamProvider<HistoryPage>((ref) {
+  final repo = ref.watch(transactionRepositoryProvider);
+  final filter = ref.watch(historyFilterProvider);
+  final settings = ref.watch(settingsProvider);
+  final limit = ref.watch(historyLimitProvider);
+  final period = filter.period;
+  return repo
+      .watchFiltered(
+        type: filter.type,
+        categoryIds: filter.categoryIds,
+        range: period == null ? null : rangeOf(period, settings),
+        sort: filter.sort,
+        search: filter.query.trim(),
+        limit: limit + 1,
+      )
+      .map((rows) => historyPageOf(rows, limit, byDate: filter.sort.isByDate));
+});
+
+/// How many transactions the filter and search match in all, and their net:
+/// the "12 results · net -$84.20" line. Only watched while searching.
+final historyTotalsProvider = StreamProvider<FilteredTotals>((ref) {
   final repo = ref.watch(transactionRepositoryProvider);
   final filter = ref.watch(historyFilterProvider);
   final settings = ref.watch(settingsProvider);
   final period = filter.period;
-  return repo.watchFiltered(
+  return repo.watchFilteredTotals(
     type: filter.type,
     categoryIds: filter.categoryIds,
     range: period == null ? null : rangeOf(period, settings),
-    sort: filter.sort,
+    search: filter.query.trim(),
   );
 });
 
-/// The words in the search box, parsed once for matching and highlighting.
+/// The words in the search box, parsed once for highlighting.
 final searchQueryProvider = Provider<SearchQuery>(
   (ref) => SearchQuery.parse(
     ref.watch(historyFilterProvider.select((f) => f.query)),
   ),
 );
-
-/// What History shows: the filtered list, narrowed by the search words.
-/// Typing does not touch the database; it only narrows the list in memory.
-final historyResultsProvider =
-    Provider<AsyncValue<List<TransactionWithCategory>>>((ref) {
-      final list = ref.watch(historyListProvider);
-      final query = ref.watch(searchQueryProvider);
-      if (query.isEmpty) return list;
-      return list.whenData(
-        (rows) => [
-          for (final row in rows)
-            if (query.matches(
-              category: row.category.name,
-              note: row.transaction.note,
-              title: row.transaction.title,
-              amountCents: row.transaction.amountCents,
-            ))
-              row,
-        ],
-      );
-    });

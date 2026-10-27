@@ -30,17 +30,23 @@ class HistoryModePill extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(24),
                 onTap: () => ref.read(historyModeProvider.notifier).set(value),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 44),
+                  constraints: const BoxConstraints(minHeight: 48),
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        label,
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: selected ? c.onAccent : c.dim,
-                          fontWeight: FontWeight.w700,
+                      // One line that shrinks at large text, rather than a word
+                      // broken across two lines.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: selected ? c.onAccent : c.dim,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ),
                     ),

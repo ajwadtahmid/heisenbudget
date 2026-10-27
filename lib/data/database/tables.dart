@@ -1,7 +1,6 @@
 // ignore_for_file: recursive_getters
 import 'package:drift/drift.dart';
 
-import '../../core/category_icons.dart';
 import '../../domain/budget.dart';
 import '../../domain/recurrence.dart';
 import '../../domain/transaction_type.dart';
@@ -19,8 +18,9 @@ class Categories extends Table {
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
   /// A key from `categoryIcons` (e.g. `restaurant`), added in schema 2.
-  TextColumn get icon =>
-      text().withDefault(const Constant(defaultCategoryIconKey))();
+  // The literal is `defaultCategoryIconKey` (a test checks they match); the
+  // frozen schema files cannot import it.
+  TextColumn get icon => text().withDefault(const Constant('category'))();
 }
 
 @DataClassName('TransactionRow')

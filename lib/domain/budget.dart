@@ -184,7 +184,9 @@ DateRange _monthsRange(BudgetMonth first, int count, int startDay) => DateRange(
 
 /// The period of [unit] that contains [date], for a budget that has not
 /// been created yet (or has no anchor). Months start with the budget month
-/// for [monthStartDay] that holds [date]. A run of days counts from [anchor];
+/// for [monthStartDay] that holds [date], or the one that holds [anchor] (so a
+/// quarter can start in a month already under way). A run of days counts from
+/// [anchor];
 /// without one it counts from the start of the week (starting on
 /// [weekStartDay]) when the length is whole weeks, and from [date] itself
 /// otherwise.
@@ -197,7 +199,7 @@ DateRange currentRangeFor(
 }) {
   if (unit.inMonths) {
     return _monthsRange(
-      BudgetMonth.containing(date, monthStartDay),
+      BudgetMonth.containing(anchor ?? date, monthStartDay),
       unit.months,
       monthStartDay,
     );
@@ -321,16 +323,24 @@ class PastPeriod {
     required this.entry,
     required this.range,
     required this.limit,
+    this.endedEarly = false,
   });
 
   final LimitEntry entry;
+
+  /// Its days. Shorter than the period when [endedEarly].
   final DateRange range;
   final int limit;
+
+  /// A later change (or stopping the budget) cut this period short, so
+  /// [range] ends the day before that change.
+  final bool endedEarly;
 }
 
 /// The finished periods of one budget's [entries] (all for the same
 /// category, or all for all spending), newest first, at most [limit].
-/// Each period shows the amount in force then: a later change never rewrites it.
+/// Each period shows the amount in force then: a later change never rewrites
+/// it. A period that a later change cut short is listed up to that change.
 List<PastPeriod> pastPeriods(
   Iterable<LimitEntry> entries,
   DateTime today, {
@@ -346,10 +356,20 @@ List<PastPeriod> pastPeriods(
     if (amount == null) continue; // stopped
     final nextStart = i + 1 < rows.length ? rows[i + 1].start : null;
     var range = row.firstRange(monthStartDay);
-    // A period belongs to this row if it starts before the next row does.
-    while (range.end.isBefore(day) &&
-        (nextStart == null || range.start.isBefore(nextStart))) {
-      out.add(PastPeriod(entry: row, range: range, limit: amount));
+    // A period belongs to this row if it starts before the next row does. One
+    // that the next row cuts short is listed up to the day before it.
+    while (nextStart == null || range.start.isBefore(nextStart)) {
+      final cutShort = nextStart != null && !range.end.isBefore(nextStart);
+      final end = cutShort ? _addDays(nextStart, -1) : range.end;
+      if (!end.isBefore(day)) break; // not finished yet
+      out.add(
+        PastPeriod(
+          entry: row,
+          range: DateRange(range.start, end),
+          limit: amount,
+          endedEarly: cutShort,
+        ),
+      );
       if (!row.repeats) break;
       range = nextRange(range, row.unit, monthStartDay);
     }

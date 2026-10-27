@@ -10,6 +10,7 @@ import '../../providers/category_providers.dart';
 import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/category_tile.dart';
+import '../shared/recurring_catch_up.dart';
 import '../shared/empty_state.dart';
 import 'recurring_editor_screen.dart';
 
@@ -46,29 +47,81 @@ class RecurringScreen extends ConsumerWidget {
         return a.id.compareTo(b.id);
       });
 
+    final failed = ref.watch(recurringCatchUpFailuresProvider) > 0;
+    final content = sorted.isEmpty
+        ? const EmptyState(
+            icon: Icons.repeat,
+            message:
+                'Nothing repeats yet.\nTurn on Repeat when you add a '
+                'transaction, such as rent or a salary.',
+          )
+        : ListView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
+            children: [
+              for (final rule in sorted)
+                _RuleTile(
+                  key: ValueKey('rule-${rule.id}'),
+                  rule: rule,
+                  category: categoryOf(rule),
+                  symbol: symbol,
+                  colors: c,
+                  theme: theme,
+                ),
+            ],
+          );
+
     return Scaffold(
       appBar: AppBar(title: const Text('Repeating transactions')),
-      body: sorted.isEmpty
-          ? const EmptyState(
-              icon: Icons.repeat,
-              message:
-                  'Nothing repeats yet.\nTurn on Repeat when you add a '
-                  'transaction, such as rent or a salary.',
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
+      body: failed
+          ? Column(
               children: [
-                for (final rule in sorted)
-                  _RuleTile(
-                    key: ValueKey('rule-${rule.id}'),
-                    rule: rule,
-                    category: categoryOf(rule),
-                    symbol: symbol,
-                    colors: c,
-                    theme: theme,
-                  ),
+                _CatchUpNotice(
+                  onRetry: () => runRecurringCatchUp(ref),
+                  colors: c,
+                ),
+                Expanded(child: content),
               ],
+            )
+          : content,
+    );
+  }
+}
+
+/// Shown while the check for due repeating transactions is failing.
+class _CatchUpNotice extends StatelessWidget {
+  const _CatchUpNotice({required this.onRetry, required this.colors});
+
+  final VoidCallback onRetry;
+  final AppColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('recurring-notice'),
+      margin: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: colors.error),
+        borderRadius: BorderRadius.circular(Radii.input),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Repeating transactions could not be added the last time the app '
+            'checked. Nothing was lost.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              key: const ValueKey('recurring-retry'),
+              onPressed: onRetry,
+              child: const Text('Try again'),
             ),
+          ),
+        ],
+      ),
     );
   }
 }

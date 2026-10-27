@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/category_icons.dart';
+import '../../core/constants.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/category_repository.dart';
 import '../../domain/transaction_type.dart';
@@ -104,7 +105,7 @@ class _CategoryDialogState extends ConsumerState<_CategoryDialog> {
               controller: _controller,
               autofocus: !protected,
               enabled: !protected,
-              maxLength: 30,
+              maxLength: categoryNameFieldLength,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
                 labelText: 'Name',

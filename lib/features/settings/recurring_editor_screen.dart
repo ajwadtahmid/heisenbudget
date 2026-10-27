@@ -120,7 +120,7 @@ class _EditorState extends ConsumerState<_Editor> {
       context: context,
       initialDate: shown != null && !shown.isBefore(today) ? shown : today,
       firstDate: today,
-      lastDate: DateTime(2100),
+      lastDate: latestDate,
       helpText: 'Next transaction on',
     );
     if (picked != null && mounted) {

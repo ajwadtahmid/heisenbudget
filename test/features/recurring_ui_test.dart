@@ -801,4 +801,57 @@ void main() {
       await disposeEnv(tester, env);
     });
   });
+
+  group('when the check for due repeating transactions keeps failing', () {
+    Future<void> setTrigger(WidgetTester tester, TestEnv env, bool on) async {
+      await tester.runAsync(
+        () => env.db.customStatement(
+          on
+              ? 'CREATE TRIGGER block_tx BEFORE INSERT ON transactions '
+                    "BEGIN SELECT RAISE(ABORT, 'blocked'); END"
+              : 'DROP TRIGGER block_tx',
+        ),
+      );
+    }
+
+    testWidgets('the Repeating page says so, a second failure says so here '
+        'too, and success clears it', (tester) async {
+      final env = await createEnv(tester);
+      await addRentRule(tester, env, d(2026, 9, 15)); // Oct 15 is due
+      await setTrigger(tester, env, true);
+
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      // One failure is quiet.
+      expect(find.textContaining('Could not add repeating'), findsNothing);
+
+      await openRecurringList(tester);
+      expect(find.byKey(const ValueKey('recurring-notice')), findsOneWidget);
+
+      await tapKey(tester, 'recurring-retry');
+      expect(
+        find.textContaining('Could not add repeating transactions'),
+        findsOneWidget,
+        reason: 'the second failure in a row',
+      );
+      expect(find.byKey(const ValueKey('recurring-notice')), findsOneWidget);
+
+      await setTrigger(tester, env, false);
+      await tapKey(tester, 'recurring-retry');
+      expect(find.byKey(const ValueKey('recurring-notice')), findsNothing);
+      expect(find.text('Added 1 recurring transaction.'), findsOneWidget);
+      expect(await allTx(tester, env), hasLength(2));
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('no notice when it works', (tester) async {
+      final env = await createEnv(tester);
+      await addRentRule(tester, env, d(2026, 9, 15));
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await openRecurringList(tester);
+      expect(find.byKey(const ValueKey('recurring-notice')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+  });
 }

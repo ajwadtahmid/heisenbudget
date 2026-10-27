@@ -65,11 +65,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setMonthStartDay(int day) =>
       _save(() => _repo.setMonthStartDay(day));
 
+  Future<void> setFavoriteShortcut(bool value) =>
+      _save(() => _repo.setFavoriteShortcut(value));
+
   Future<void> setLastBackupAt(DateTime when) =>
       _save(() => _repo.setLastBackupAt(when));
-
-  /// Forgets every setting and goes back to the defaults.
-  Future<void> eraseAll() => _save(_repo.clearAll);
 
   Future<void> setLastCategory(TransactionType type, int categoryId) =>
       _save(() => _repo.setLastCategory(type, categoryId));

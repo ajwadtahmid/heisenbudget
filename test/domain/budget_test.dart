@@ -541,6 +541,61 @@ void main() {
       int limit = 12,
     }) => pastPeriods(entries, today, monthStartDay: 1, limit: limit);
 
+    group('a period that a later change cut short', () {
+      test('is listed up to the day before the change, marked ended early', () {
+        final p = past([
+          e(d(2026, 10, 1), 30000, unit: BudgetUnit.quarter),
+          e(d(2026, 11, 1), 10000),
+        ], d(2026, 11, 20));
+        expect(p, hasLength(1));
+        expect(p.single.range, DateRange(d(2026, 10, 1), d(2026, 10, 31)));
+        expect((p.single.limit, p.single.endedEarly), (30000, true));
+      });
+
+      test('weekly then monthly: the straddling week is clipped', () {
+        final p = past([
+          e(d(2026, 9, 7), 5000, unit: BudgetUnit.week),
+          e(d(2026, 9, 10), 20000),
+        ], d(2026, 10, 15));
+        // Sep 7 - 13 is cut at Sep 9 (newest start first); the month follows.
+        expect(p.map((x) => (x.range, x.endedEarly)).toList(), [
+          (DateRange(d(2026, 9, 7), d(2026, 9, 9)), true),
+          (DateRange(d(2026, 9, 1), d(2026, 9, 30)), false),
+        ]);
+      });
+
+      test('stopping mid-period lists the part that ran', () {
+        final p = past([
+          e(d(2026, 10, 5), 5000, unit: BudgetUnit.week),
+          e(d(2026, 10, 14), null, unit: BudgetUnit.week), // stopped
+        ], d(2026, 10, 20));
+        expect(p.map((x) => (x.range, x.endedEarly)).toList(), [
+          (DateRange(d(2026, 10, 12), d(2026, 10, 13)), true),
+          (DateRange(d(2026, 10, 5), d(2026, 10, 11)), false),
+        ]);
+      });
+
+      test('a one-time budget cut short is listed once', () {
+        final p = past([
+          e(d(2026, 10, 1), 30000, unit: BudgetUnit.quarter, repeats: false),
+          e(d(2026, 11, 15), 10000),
+        ], d(2026, 11, 20));
+        expect(p, hasLength(1));
+        expect(p.single.range, DateRange(d(2026, 10, 1), d(2026, 11, 14)));
+        expect(p.single.endedEarly, isTrue);
+      });
+
+      test('a change that has not happened yet cuts nothing', () {
+        final p = past([
+          e(d(2026, 9, 1), 30000),
+          e(d(2026, 12, 1), 10000), // starts in the future
+        ], d(2026, 10, 15));
+        expect(p.map((x) => (x.range.start, x.endedEarly)).toList(), [
+          (d(2026, 9, 1), false),
+        ]);
+      });
+    });
+
     test(
       'lists finished monthly periods, newest first, not the current one',
       () {
@@ -909,6 +964,42 @@ void main() {
     test('nothing spent, or no months, gives no suggestion', () {
       expect(suggestLimit([0, 0, 0]), isNull);
       expect(suggestLimit(const []), isNull);
+    });
+  });
+
+  group('a multi-month period with an anchor', () {
+    DateRange of(DateTime anchor, {int startDay = 1}) => currentRangeFor(
+      BudgetUnit.quarter,
+      d(2026, 11, 20),
+      monthStartDay: startDay,
+      weekStartDay: 1,
+      anchor: anchor,
+    );
+
+    test('starts in the budget month that holds the anchor', () {
+      expect(of(d(2026, 10, 1)), DateRange(d(2026, 10, 1), d(2026, 12, 31)));
+      expect(of(d(2026, 9, 1)), DateRange(d(2026, 9, 1), d(2026, 11, 30)));
+      expect(of(d(2026, 11, 7)), DateRange(d(2026, 11, 1), d(2027, 1, 31)));
+    });
+
+    test('follows the budget month start day', () {
+      // Starting on the 25th, Sep 25 begins "September".
+      expect(
+        of(d(2026, 9, 25), startDay: 25),
+        DateRange(d(2026, 9, 25), d(2026, 12, 24)),
+      );
+    });
+
+    test('no anchor still means the month that holds today', () {
+      expect(
+        currentRangeFor(
+          BudgetUnit.quarter,
+          d(2026, 11, 20),
+          monthStartDay: 1,
+          weekStartDay: 1,
+        ),
+        DateRange(d(2026, 11, 1), d(2027, 1, 31)),
+      );
     });
   });
 }

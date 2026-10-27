@@ -14,5 +14,6 @@ final backupServiceProvider = Provider<BackupService>(
   (ref) => BackupService(
     ref.watch(appDatabaseProvider),
     ref.watch(settingsRepositoryProvider),
+    files: ref.watch(databaseFilesProvider),
   ),
 );

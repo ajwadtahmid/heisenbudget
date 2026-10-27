@@ -99,8 +99,8 @@ class MoneyDatesScreen extends ConsumerWidget {
             decoration: InputDecoration(
               labelText: 'Week starts on',
               helperText: isCalendar
-                  ? 'Also where weekly and 2-week budgets start'
-                  : 'Home uses fixed blocks; weekly and 2-week budgets '
+                  ? 'Also where budgets of whole weeks start'
+                  : 'Home uses fixed blocks; budgets of whole weeks '
                         'still start on this day',
               helperMaxLines: 3,
             ),

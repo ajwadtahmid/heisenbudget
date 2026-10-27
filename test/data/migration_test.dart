@@ -1,357 +1,171 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' show OrderingTerm, Value;
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
+import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
+import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 // ignore: depend_on_referenced_packages
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
-/// Builds a database exactly as the first release (schema 1, no icon column)
-/// created it, so the upgrade path is tested on real old data.
-void createSchemaOneDatabase(String path) {
-  final raw = sqlite.sqlite3.open(path);
-  raw.execute('''
-    CREATE TABLE categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
-      is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
-      is_protected INTEGER NOT NULL DEFAULT 0 CHECK (is_protected IN (0, 1)),
-      sort_order INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE UNIQUE INDEX categories_type_name
-      ON categories (type, name COLLATE NOCASE);
-    CREATE TABLE transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-      type TEXT NOT NULL,
-      date TEXT NOT NULL,
-      category_id INTEGER NOT NULL REFERENCES categories (id),
-      note TEXT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE INDEX transactions_date ON transactions (date);
-    CREATE INDEX transactions_category ON transactions (category_id);
-    INSERT INTO categories (name, type, is_default, is_protected, sort_order) VALUES
-      ('Food', 'expense', 1, 0, 0),
-      ('Other', 'expense', 1, 1, 1),
-      ('Salary', 'income', 1, 0, 0),
-      ('Other', 'income', 1, 1, 1);
-    INSERT INTO categories (name, type, is_default, sort_order)
-      VALUES ('Coffee', 'expense', 0, 2);
-    INSERT INTO transactions
-      (amount_cents, type, date, category_id, note, created_at, updated_at)
-      VALUES (1250, 'expense', '2026-10-05', 1, 'lunch', 0, 0);
-    PRAGMA user_version = 1;
-  ''');
-  raw.close();
+import '../generated_migrations/schema.dart';
+
+/// Every table, index and column of a database, as text, so two databases can
+/// be compared.
+Future<List<String>> shapeOf(AppDatabase db) async {
+  final out = <String>[];
+  final master = await db
+      .customSelect(
+        'SELECT type, name FROM sqlite_master '
+        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
+      )
+      .get();
+  for (final row in master) {
+    final type = row.read<String>('type');
+    final name = row.read<String>('name');
+    out.add('$type $name');
+    if (type != 'table') continue;
+    final columns = await db.customSelect('PRAGMA table_info($name)').get();
+    for (final c in columns) {
+      out.add(
+        '  ${c.read<String>('name')} ${c.read<String>('type')} '
+        'notnull=${c.read<int>('notnull')} '
+        'default=${c.data['dflt_value']} pk=${c.read<int>('pk')}',
+      );
+    }
+  }
+  return out;
 }
 
 void main() {
-  late Directory dir;
-  late File file;
-
-  setUp(() async {
-    dir = await Directory.systemTemp.createTemp('heisenbudget_migration');
-    file = File('${dir.path}/old.sqlite');
-    createSchemaOneDatabase(file.path);
-  });
-
-  tearDown(() => dir.delete(recursive: true));
-
-  test('upgrading from schema 1 adds icons and keeps all data', () async {
-    final db = AppDatabase(NativeDatabase(file));
-    addTearDown(db.close);
-
-    final rows = await db.select(db.categories).get();
-    String icon(String name, TransactionType type) =>
-        rows.firstWhere((c) => c.name == name && c.type == type).icon;
-
-    // Default categories get their icons...
-    expect(icon('Food', TransactionType.expense), 'restaurant');
-    expect(icon('Salary', TransactionType.income), 'salary');
-    expect(icon('Other', TransactionType.expense), 'category');
-    // ...a custom one keeps the general icon.
-    expect(icon('Coffee', TransactionType.expense), 'category');
-
-    // Nothing was lost.
-    expect(rows, hasLength(5));
-    final txs = await db.select(db.transactions).get();
-    expect(txs, hasLength(1));
-    expect(txs.single.amountCents, 1250);
-    expect(txs.single.note, 'lunch');
-    expect(txs.single.date, '2026-10-05');
-  });
-
-  test('the upgraded database is at schema 3 and fully usable', () async {
-    final db = AppDatabase(NativeDatabase(file));
-    addTearDown(db.close);
-
-    final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 3);
-
-    // The case-insensitive unique index survived the upgrade.
-    expect(
-      () => db
-          .into(db.categories)
-          .insert(
-            CategoriesCompanion.insert(
-              name: 'food',
-              type: TransactionType.expense,
-            ),
-          ),
-      throwsA(isA<Exception>()),
+  group('schema 3, the first public schema', () {
+    test(
+      'a new database has exactly the shape frozen in drift_schemas',
+      () async {
+        final verifier = SchemaVerifier(GeneratedHelper());
+        final frozen = AppDatabase(await verifier.startAt(3));
+        final fresh = AppDatabase.memory();
+        addTearDown(frozen.close);
+        addTearDown(fresh.close);
+        expect(await shapeOf(fresh), await shapeOf(frozen));
+      },
     );
-    // New rows accept an icon.
-    await db
-        .into(db.categories)
-        .insert(
-          CategoriesCompanion.insert(
-            name: 'Pets',
-            type: TransactionType.expense,
-            icon: const Value('pets'),
-          ),
-        );
-  });
 
-  test('opening an upgraded database again changes nothing', () async {
-    var db = AppDatabase(NativeDatabase(file));
-    await db.select(db.categories).get();
-    await db.close();
-
-    db = AppDatabase(NativeDatabase(file));
-    addTearDown(db.close);
-    final rows = await db.select(db.categories).get();
-    expect(rows, hasLength(5));
-    expect(rows.firstWhere((c) => c.name == 'Food').icon, 'restaurant');
-  });
-
-  test(
-    'the upgrade also creates repeating rules, linked to transactions',
-    () async {
-      final db = AppDatabase(NativeDatabase(file));
+    test('the code agrees with the frozen schema', () async {
+      final verifier = SchemaVerifier(GeneratedHelper());
+      final db = AppDatabase(await verifier.startAt(3));
       addTearDown(db.close);
+      await verifier.migrateAndValidate(db, 3);
+    });
 
-      final rule = await db
-          .into(db.recurringRules)
-          .insert(
-            RecurringRulesCompanion.insert(
-              amountCents: 120000,
-              type: TransactionType.expense,
-              categoryId: 1,
-              unit: RecurrenceUnit.month,
-              startDate: '2026-11-01',
-              createdAt: DateTime(2026, 10, 25),
-            ),
-          );
-      // The old transaction is untouched and has no rule.
-      final old = await db.select(db.transactions).getSingle();
-      expect(old.recurringRuleId, isNull);
+    test(
+      'the version is 3 and new databases start with default categories',
+      () async {
+        final db = AppDatabase.memory();
+        addTearDown(db.close);
+        final version = await db
+            .customSelect('PRAGMA user_version')
+            .getSingle();
+        expect(version.read<int>('user_version'), currentSchemaVersion);
+        expect(currentSchemaVersion, 3);
+        expect(await db.select(db.categories).get(), isNotEmpty);
+      },
+    );
 
-      Future<void> addLinked(String date) => db
-          .into(db.transactions)
-          .insert(
-            TransactionsCompanion.insert(
-              amountCents: 100,
-              type: TransactionType.expense,
-              date: date,
-              categoryId: 1,
-              createdAt: DateTime(2026, 10, 25),
-              updatedAt: DateTime(2026, 10, 25),
-              recurringRuleId: Value(rule),
-            ),
-          );
-      await addLinked('2026-11-01');
-      // The same rule cannot make two transactions on one day.
-      expect(() => addLinked('2026-11-01'), throwsA(isA<Exception>()));
-      // Plain transactions are not limited by that index.
-      for (var i = 0; i < 2; i++) {
-        await db
-            .into(db.transactions)
-            .insert(
-              TransactionsCompanion.insert(
-                amountCents: 100,
-                type: TransactionType.expense,
-                date: '2026-11-01',
-                categoryId: 1,
-                createdAt: DateTime(2026, 10, 25),
-                updatedAt: DateTime(2026, 10, 25),
-              ),
-            );
-      }
-
-      // Deleting the rule keeps its transactions and clears the link.
-      await (db.delete(
-        db.recurringRules,
-      )..where((r) => r.id.equals(rule))).go();
-      final linked = await (db.select(
-        db.transactions,
-      )..where((t) => t.date.equals('2026-11-01'))).get();
-      expect(linked, hasLength(3));
-      expect(linked.every((t) => t.recurringRuleId == null), isTrue);
-    },
-  );
-
-  test('the upgrade also creates favorites', () async {
-    final db = AppDatabase(NativeDatabase(file));
-    addTearDown(db.close);
-    final id = await db
-        .into(db.favorites)
-        .insert(
-          FavoritesCompanion.insert(
-            label: 'Coffee',
-            type: TransactionType.expense,
-            categoryId: 1,
-            createdAt: DateTime(2026, 10, 25),
-          ),
-        );
-    final row = await (db.select(
-      db.favorites,
-    )..where((f) => f.id.equals(id))).getSingle();
-    expect(row.amountCents, isNull, reason: 'a favorite may have no amount');
-  });
-
-  test('the upgrade also creates budget limits with their indexes', () async {
-    final db = AppDatabase(NativeDatabase(file));
-    addTearDown(db.close);
-    Future<void> add(int? cat, String month) => db
-        .into(db.budgetLimits)
-        .insert(
-          BudgetLimitsCompanion.insert(
-            categoryId: Value(cat),
-            lengthDays: 0,
-            start: month,
-            amountCents: const Value(5000),
-            createdAt: DateTime(2026, 10, 25),
-          ),
-        );
-    await add(1, '2026-10-01');
-    await add(null, '2026-10-01');
-    expect(() => add(1, '2026-10-01'), throwsA(isA<Exception>()));
-    expect(() => add(null, '2026-10-01'), throwsA(isA<Exception>()));
-    await add(1, '2026-11-01');
-  });
-
-  group('budget limits from schema 2', () {
-    /// A schema-2 database as an earlier build left it, with the budget table
-    /// swapped for [oldTable] and [rows] inserted.
-    Future<File> olderBudgetDatabase(String oldTable, String rows) async {
-      final path = '${dir.path}/budgets.sqlite';
-      final fresh = AppDatabase(NativeDatabase(File(path)));
-      await fresh.customStatement('SELECT 1');
-      await fresh.close();
-      final raw = sqlite.sqlite3.open(path);
-      raw.execute('DROP TABLE budget_limits');
-      raw.execute(oldTable);
-      raw.execute(rows);
-      raw.execute('PRAGMA user_version = 2');
-      raw.close();
-      return File(path);
-    }
-
-    Future<List<(int?, int, int, bool, String, int?)>> read(
-      AppDatabase db,
-    ) async {
-      final all = await (db.select(
-        db.budgetLimits,
-      )..orderBy([(l) => OrderingTerm.asc(l.id)])).get();
-      return [
-        for (final r in all)
-          (
-            r.categoryId,
-            r.lengthDays,
-            r.lengthMonths,
-            r.repeats,
-            r.start,
-            r.amountCents,
-          ),
-      ];
-    }
-
-    test('the text period shape keeps every saved budget', () async {
-      final old = await olderBudgetDatabase(
-        'CREATE TABLE budget_limits (id INTEGER NOT NULL PRIMARY KEY '
-            'AUTOINCREMENT, category_id INTEGER NULL REFERENCES categories (id), '
-            'unit TEXT NOT NULL, repeats INTEGER NOT NULL DEFAULT 1, '
-            'start TEXT NOT NULL, amount_cents INTEGER NULL, '
-            'created_at INTEGER NOT NULL)',
-        "INSERT INTO budget_limits (category_id, unit, repeats, start, "
-            "amount_cents, created_at) VALUES "
-            "(1, 'month', 1, '2026-10-01', 20000, 0), "
-            "(NULL, 'week', 0, '2026-10-12', 90000, 0), "
-            "(1, 'fortnight', 1, '2026-11-02', NULL, 0)",
+    test('category names are unique per type, ignoring case', () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      Future<void> add(String name, TransactionType type) => db
+          .into(db.categories)
+          .insert(CategoriesCompanion.insert(name: name, type: type));
+      await add('Pets', TransactionType.expense);
+      expect(
+        () => add('PETS', TransactionType.expense),
+        throwsA(isA<Exception>()),
       );
-      final db = AppDatabase(NativeDatabase(old));
-      addTearDown(db.close);
+      await add('Pets', TransactionType.income); // another type is fine
+    });
 
-      expect(await read(db), [
-        (1, 0, 1, true, '2026-10-01', 20000),
-        (null, 7, 0, false, '2026-10-12', 90000),
-        (1, 14, 0, true, '2026-11-02', null),
-      ]);
-      final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 3);
-      // The partial indexes were rebuilt.
+    test('budget limits are unique per category and first day', () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
       Future<void> add(int? cat, String start) => db
           .into(db.budgetLimits)
           .insert(
             BudgetLimitsCompanion.insert(
               categoryId: Value(cat),
-              lengthDays: 7,
-              start: start,
-              amountCents: const Value(100),
-              createdAt: DateTime(2026, 10, 25),
-            ),
-          );
-      expect(() => add(1, '2026-10-01'), throwsA(isA<Exception>()));
-      expect(() => add(null, '2026-10-12'), throwsA(isA<Exception>()));
-      await add(null, '2026-10-13');
-    });
-
-    test('the days shape gains month lengths; zero days was a month', () async {
-      final old = await olderBudgetDatabase(
-        'CREATE TABLE budget_limits (id INTEGER NOT NULL PRIMARY KEY '
-            'AUTOINCREMENT, category_id INTEGER NULL REFERENCES categories (id), '
-            'length_days INTEGER NOT NULL CHECK (length_days BETWEEN 0 AND 365), '
-            'repeats INTEGER NOT NULL DEFAULT 1, start TEXT NOT NULL, '
-            'amount_cents INTEGER NULL, created_at INTEGER NOT NULL)',
-        "INSERT INTO budget_limits (category_id, length_days, repeats, start, "
-            "amount_cents, created_at) VALUES "
-            "(1, 0, 1, '2026-10-01', 20000, 0), "
-            "(NULL, 10, 1, '2026-10-15', 50000, 0)",
-      );
-      final db = AppDatabase(NativeDatabase(old));
-      addTearDown(db.close);
-
-      expect(await read(db), [
-        (1, 0, 1, true, '2026-10-01', 20000),
-        (null, 10, 0, true, '2026-10-15', 50000),
-      ]);
-    });
-
-    test('a database already at schema 3 is left alone', () async {
-      final path = '${dir.path}/current.sqlite';
-      final first = AppDatabase(NativeDatabase(File(path)));
-      await first
-          .into(first.budgetLimits)
-          .insert(
-            BudgetLimitsCompanion.insert(
               lengthDays: 0,
-              lengthMonths: const Value(3),
-              start: '2026-10-01',
-              amountCents: const Value(100),
+              lengthMonths: const Value(1),
+              start: start,
+              amountCents: const Value(5000),
               createdAt: DateTime(2026, 10, 25),
             ),
           );
-      await first.close();
-      final db = AppDatabase(NativeDatabase(File(path)));
+      await add(1, '2026-10-01');
+      await add(null, '2026-10-01');
+      expect(() => add(1, '2026-10-01'), throwsA(isA<Exception>()));
+      expect(() => add(null, '2026-10-01'), throwsA(isA<Exception>()));
+      await add(1, '2026-11-01');
+      expect(BudgetUnit.month.months, 1);
+    });
+
+    test('a repeating rule makes at most one transaction a day', () async {
+      final db = AppDatabase.memory();
       addTearDown(db.close);
-      expect(await read(db), [(null, 0, 3, true, '2026-10-01', 100)]);
+      final cats = await db.select(db.categories).get();
+      final food = cats.firstWhere((c) => c.type == TransactionType.expense);
+      final ruleId = await db
+          .into(db.recurringRules)
+          .insert(
+            RecurringRulesCompanion.insert(
+              amountCents: 100,
+              type: TransactionType.expense,
+              categoryId: food.id,
+              unit: RecurrenceUnit.week,
+              startDate: '2026-10-05',
+              createdAt: DateTime(2026, 10, 5),
+            ),
+          );
+      Future<void> tx() => db
+          .into(db.transactions)
+          .insert(
+            TransactionsCompanion.insert(
+              amountCents: 100,
+              type: TransactionType.expense,
+              date: '2026-10-05',
+              categoryId: food.id,
+              createdAt: DateTime(2026, 10, 5),
+              updatedAt: DateTime(2026, 10, 5),
+              recurringRuleId: Value(ruleId),
+            ),
+          );
+      await tx();
+      expect(tx, throwsA(isA<Exception>()));
+    });
+
+    test('a database at another version is refused, not guessed at', () async {
+      final dir = await Directory.systemTemp.createTemp('hb_versions');
+      addTearDown(() => dir.delete(recursive: true));
+      for (final version in [2, 4]) {
+        final file = File('${dir.path}/v$version.sqlite');
+        final first = AppDatabase(NativeDatabase(file));
+        await first.customSelect('SELECT 1').get();
+        await first.close();
+        final raw = sqlite.sqlite3.open(file.path);
+        raw.execute('PRAGMA user_version = $version');
+        raw.close();
+
+        final db = AppDatabase(NativeDatabase(file));
+        await expectLater(
+          db.customSelect('SELECT 1').get(),
+          throwsA(isA<Object>()),
+          reason: 'schema $version',
+        );
+        await db.close();
+      }
     });
   });
 }

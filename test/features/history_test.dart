@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/sort_option.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/history/history_screen.dart';
@@ -600,5 +601,127 @@ void main() {
       expect(find.byKey(const ValueKey('sort-button')), findsOneWidget);
       await disposeEnv(tester, env);
     });
+  });
+
+  group('reading a page at a time', () {
+    /// 250 transactions, five a day, the oldest 40 noted "coffee".
+    Future<void> many(WidgetTester tester, TestEnv env) async {
+      final food = await categoryId(
+        tester,
+        env,
+        'Food',
+        TransactionType.expense,
+      );
+      await tester.runAsync(() async {
+        for (var i = 0; i < 250; i++) {
+          await env.txs.add(
+            TransactionInput(
+              amountCents: 100 + i,
+              type: TransactionType.expense,
+              // Oldest first: i = 0 is the oldest day, five to a day.
+              date: DateTime(2026, 1, 1).add(Duration(days: i ~/ 5)),
+              categoryId: food,
+              note: i < 40 ? 'coffee' : null,
+            ),
+          );
+        }
+      });
+    }
+
+    HistoryPage page(WidgetTester tester) =>
+        _container(tester).read(historyListProvider).value!;
+
+    testWidgets('reads 100 first, more as the end is reached, then stops', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await many(tester, env);
+      await pumpHistory(tester, env);
+      expect(page(tester).rows, hasLength(historyPageSize));
+      expect(page(tester).hasMore, isTrue);
+
+      for (var i = 0; i < 14 && page(tester).hasMore; i++) {
+        await tester.drag(
+          find.byType(CustomScrollView),
+          const Offset(0, -8000),
+        );
+        await settle(tester);
+      }
+      expect(page(tester).hasMore, isFalse);
+      expect(page(tester).rows, hasLength(250));
+      expect(find.byKey(const ValueKey('history-more')), findsNothing);
+      expect(find.byKey(const ValueKey('history-loading-more')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a day on a page boundary shows its whole total', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await many(tester, env);
+      await pumpHistory(tester, env);
+      // 100 rows are exactly 20 whole days of five: nothing is cut.
+      final days = page(tester).rows.map((r) => r.transaction.date).toSet();
+      expect(days, hasLength(20));
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets(
+      'changing the sort or a filter starts again at the first page',
+      (tester) async {
+        final env = await createEnv(tester);
+        await many(tester, env);
+        await pumpHistory(tester, env);
+        final container = _container(tester);
+        container.read(historyLimitProvider.notifier).more();
+        await settle(tester);
+        expect(container.read(historyLimitProvider), historyPageSize * 2);
+
+        container
+            .read(historyFilterProvider.notifier)
+            .setSort(SortOption.highestAmount);
+        await settle(tester);
+        expect(container.read(historyLimitProvider), historyPageSize);
+        expect(page(tester).rows.first.transaction.amountCents, 349);
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('a search finds matches far beyond the first page and counts '
+        'them all', (tester) async {
+      final env = await createEnv(tester);
+      await many(tester, env);
+      await pumpHistory(tester, env);
+
+      await tester.tap(find.byKey(const ValueKey('search-button')));
+      await settle(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('search-field')),
+        'coffee',
+      );
+      await settle(tester);
+      await settle(tester);
+
+      expect(page(tester).rows, hasLength(40));
+      expect(page(tester).hasMore, isFalse);
+      expect(find.textContaining('40 results'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  testWidgets('the empty message leaves room for the + button at large text', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    tester.view.physicalSize = const Size(360, 640);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpHistory(tester, env);
+    final room = tester.widget<Padding>(
+      find.byKey(const ValueKey('history-empty')),
+    );
+    expect((room.padding as EdgeInsets).bottom, greaterThan(0));
+    expect(tester.takeException(), isNull);
+    await disposeEnv(tester, env);
   });
 }

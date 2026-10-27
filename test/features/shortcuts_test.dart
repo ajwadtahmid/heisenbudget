@@ -8,6 +8,8 @@ import 'package:heisenbudget/features/shell/app_shell.dart';
 
 import 'test_helpers.dart';
 
+import 'package:heisenbudget/providers/settings_providers.dart';
+
 Future<int> addFavorite(
   WidgetTester tester,
   TestEnv env, {
@@ -345,6 +347,70 @@ void main() {
     );
     expect(container.read(addSheetCountProvider), 0);
     await disposeEnv(tester, env);
+  });
+
+  group('the favorite launcher shortcut can be switched off', () {
+    ProviderContainer containerOf(WidgetTester tester) =>
+        ProviderScope.containerOf(tester.element(find.byType(AppShell)));
+
+    testWidgets('off drops it from the launcher, on brings it back', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await addFavorite(tester, env);
+      await start(tester, env);
+      expect(env.shortcuts.items, hasLength(3));
+
+      await containerOf(tester)
+          .read(settingsProvider.notifier)
+          .setFavoriteShortcut(false);
+      await settle(tester);
+      expect(env.shortcuts.items.map((s) => s.type), [
+        'add_expense',
+        'add_income',
+      ]);
+      expect(
+        env.shortcuts.items.any((s) => s.title.contains('Coffee')),
+        isFalse,
+        reason: 'the name is no longer on the launcher',
+      );
+
+      await containerOf(tester)
+          .read(settingsProvider.notifier)
+          .setFavoriteShortcut(true);
+      await settle(tester);
+      expect(env.shortcuts.items.last.title, 'Add Coffee');
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the Quick add page has the switch, on by default', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await addFavorite(tester, env);
+      await start(tester, env);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Settings'),
+        ),
+      );
+      await settle(tester);
+      final manage = find.byKey(const ValueKey('manage-favorites'));
+      await tester.ensureVisible(manage);
+      await tester.pump();
+      await tester.tap(manage);
+      await settle(tester);
+
+      final tile = find.byKey(const ValueKey('favorite-shortcut'));
+      expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+      await tester.tap(tile);
+      await settle(tester);
+      expect(tester.widget<SwitchListTile>(tile).value, isFalse);
+      expect(env.prefs.getBool('favorite_shortcut'), isFalse);
+      expect(env.shortcuts.items, hasLength(2));
+      await disposeEnv(tester, env);
+    });
   });
 }
 

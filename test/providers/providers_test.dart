@@ -303,6 +303,7 @@ void main() {
     List<int> amounts() => container
         .read(historyListProvider)
         .value!
+        .rows
         .map((t) => t.transaction.amountCents)
         .toList();
 

@@ -2,11 +2,10 @@ import 'package:flutter/foundation.dart'
     show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'app.dart';
-import 'providers/settings_providers.dart';
+import 'app_bootstrap.dart';
+import 'core/error_handling.dart';
 
 /// Adds the bundled fonts' licences to the app's licence page.
 void _registerFontLicences() {
@@ -27,12 +26,9 @@ void _registerFontLicences() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  installErrorHandlers();
   _registerFontLicences();
   final prefs = await SharedPreferences.getInstance();
-  runApp(
-    ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-      child: const HeisenbudgetApp(),
-    ),
-  );
+  // Opens the data first; if that fails, a recovery screen runs instead.
+  runApp(AppBootstrap(prefs: prefs));
 }

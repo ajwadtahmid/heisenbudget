@@ -106,6 +106,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   int? _categoryId;
   String? _categoryError;
   bool _saving = false;
+  String? _saveError;
 
   /// How this new (or not yet repeating) transaction repeats; null = once.
   RepeatChoice? _repeat;
@@ -172,8 +173,8 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      firstDate: earliestDate,
+      lastDate: latestDate,
     );
     if (picked != null) setState(() => _date = dateOnly(picked));
   }
@@ -245,7 +246,10 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       return;
     }
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     final repo = ref.read(transactionRepositoryProvider);
     final input = TransactionInput(
       amountCents: parseMoney(_amount.text).cents!,
@@ -258,39 +262,67 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     final existing = widget.existing;
     final repeat = _canSetRepeat ? _repeat : null;
     final rules = ref.read(recurringRepositoryProvider);
-    if (existing == null) {
-      if (repeat == null) {
-        await repo.add(input);
+    try {
+      if (existing == null) {
+        if (repeat == null) {
+          await repo.add(input);
+        } else {
+          await rules.addWithRule(
+            input,
+            RecurringInput(
+              amountCents: input.amountCents,
+              type: _type,
+              categoryId: categoryId,
+              note: _note.text,
+              title: _title.text,
+              unit: repeat.unit,
+              interval: repeat.interval,
+              start: _date,
+              end: repeat.end,
+            ),
+          );
+        }
       } else {
-        await rules.addWithRule(
-          input,
-          RecurringInput(
-            amountCents: input.amountCents,
-            type: _type,
-            categoryId: categoryId,
-            note: _note.text,
-            title: _title.text,
-            unit: repeat.unit,
-            interval: repeat.interval,
-            start: _date,
-            end: repeat.end,
-          ),
-        );
+        final tx = existing.transaction;
+        // Moving a rule's transaction to another day takes it out of the rule.
+        final unlink =
+            tx.recurringRuleId != null && tx.date != toIsoDate(_date);
+        // One step: the edit and the new repeat are saved together or not at all.
+        await ref.read(appDatabaseProvider).transaction(() async {
+          await repo.update(tx.id, input, unlinkRule: unlink);
+          if (repeat != null) {
+            await rules.makeRecurring(
+              tx.id,
+              unit: repeat.unit,
+              interval: repeat.interval,
+              end: repeat.end,
+            );
+          }
+        });
       }
-    } else {
-      final tx = existing.transaction;
-      // Moving a rule's transaction to another day takes it out of the rule.
-      final unlink = tx.recurringRuleId != null && tx.date != toIsoDate(_date);
-      await repo.update(tx.id, input, unlinkRule: unlink);
-      if (repeat != null) {
-        await rules.makeRecurring(
-          tx.id,
-          unit: repeat.unit,
-          interval: repeat.interval,
-          end: repeat.end,
-        );
+    } catch (_) {
+      // Stay open with Save available again, so nothing typed is lost.
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError = 'Could not save. Try again.';
+        });
       }
+      return;
     }
+    // Saved. What follows is extra and must never keep the sheet open.
+    try {
+      await _afterSave(categoryId, input, repeat, existing == null);
+    } catch (_) {}
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _afterSave(
+    int categoryId,
+    TransactionInput input,
+    RepeatChoice? repeat,
+    bool isNew,
+  ) async {
     await ref
         .read(settingsProvider.notifier)
         .setLastCategory(_type, categoryId);
@@ -298,7 +330,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     // A rule that starts in the past fills in the days since.
     if (repeat != null) await runRecurringCatchUp(ref);
     // A new expense that took a budget over its limit says so.
-    if (existing == null && _type == TransactionType.expense && mounted) {
+    if (isNew && _type == TransactionType.expense && mounted) {
       // Read before waiting: the sheet may be gone by the time it is done.
       final messenger = ref.read(rootMessengerKeyProvider);
       final message = await overBudgetMessage(
@@ -311,7 +343,6 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
         messenger.currentState?.showSnackBar(SnackBar(content: Text(message)));
       }
     }
-    if (mounted) Navigator.of(context).pop();
   }
 
   /// The Quick add row shows when adding a plain new transaction: not when
@@ -714,6 +745,16 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (_saveError != null) ...[
+                    Text(
+                      _saveError!,
+                      key: const ValueKey('save-error'),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   FilledButton(
                     key: const ValueKey('save-button'),
                     onPressed: _saving ? null : () => _save(active),

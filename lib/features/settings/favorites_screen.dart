@@ -77,6 +77,22 @@ class FavoritesScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                SwitchListTile(
+                  key: const ValueKey('favorite-shortcut'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                  title: const Text('Launcher shortcut'),
+                  subtitle: const Text(
+                    'Show the first favorite when you press and hold the app '
+                    'icon. Its name is visible there, so turn this off to '
+                    'keep it private.',
+                  ),
+                  value: ref.watch(
+                    settingsProvider.select((s) => s.favoriteShortcut),
+                  ),
+                  onChanged: (on) => ref
+                      .read(settingsProvider.notifier)
+                      .setFavoriteShortcut(on),
+                ),
                 Expanded(
                   child: ReorderableListView.builder(
                     padding: const EdgeInsets.fromLTRB(20, 0, 8, 40),

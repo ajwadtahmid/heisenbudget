@@ -20,7 +20,8 @@ class BudgetHistoryView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(budgetHistoryFilterProvider);
-    final rows = ref.watch(budgetHistoryProvider);
+    final loading = ref.watch(budgetHistoryProvider);
+    final page = loading.value;
     final symbol = ref.watch(settingsProvider.select((s) => s.currencySymbol));
     final startDay = ref.watch(monthStartDayProvider);
     final theme = Theme.of(context);
@@ -85,15 +86,15 @@ class BudgetHistoryView extends ConsumerWidget {
             ),
           ),
           Expanded(
-            child: rows.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) => const EmptyState(
-                icon: Icons.error_outline,
-                message: 'Could not load past budgets.',
-              ),
-              data: (list) {
-                if (list.isEmpty) {
-                  return filter.hasFilters
+            child: page == null
+                ? (loading.hasError
+                      ? const EmptyState(
+                          icon: Icons.error_outline,
+                          message: 'Could not load past budgets.',
+                        )
+                      : const Center(child: CircularProgressIndicator()))
+                : page.rows.isEmpty
+                ? (filter.hasFilters
                       ? EmptyState(
                           icon: Icons.search_off,
                           message: 'No results for these filters.',
@@ -105,17 +106,16 @@ class BudgetHistoryView extends ConsumerWidget {
                           message:
                               'No past budgets yet.\nFinished weeks, months '
                               'and one-time budgets appear here.',
-                        );
-                }
-                return _List(
-                  rows: list,
-                  symbol: symbol,
-                  startDay: startDay,
-                  theme: theme,
-                  colors: c,
-                );
-              },
-            ),
+                        ))
+                : _List(
+                    rows: page.rows,
+                    hasMore: page.hasMore,
+                    loadingMore: loading.isLoading,
+                    symbol: symbol,
+                    startDay: startDay,
+                    theme: theme,
+                    colors: c,
+                  ),
           ),
         ],
       ),
@@ -126,6 +126,8 @@ class BudgetHistoryView extends ConsumerWidget {
 class _List extends ConsumerWidget {
   const _List({
     required this.rows,
+    required this.hasMore,
+    required this.loadingMore,
     required this.symbol,
     required this.startDay,
     required this.theme,
@@ -133,6 +135,8 @@ class _List extends ConsumerWidget {
   });
 
   final List<PastBudget> rows;
+  final bool hasMore;
+  final bool loadingMore;
   final String symbol;
   final int startDay;
   final ThemeData theme;
@@ -174,7 +178,12 @@ class _List extends ConsumerWidget {
         iconKey: b.category == null
             ? null
             : categoryIconFor(b.category!.icon).key,
-        periodLabel: budgetPeriodLabel(b.entry, b.range, startDay),
+        periodLabel: budgetPeriodLabel(
+          b.entry,
+          b.range,
+          startDay,
+          endedEarly: b.endedEarly,
+        ),
         status: status,
         range: b.range,
         symbol: symbol,
@@ -228,35 +237,41 @@ class _List extends ConsumerWidget {
       }
     }
 
-    // "Show more" when any budget has as many periods loaded as were asked for.
-    final perBudget = ref.watch(budgetHistoryCountProvider);
-    final counts = <int?, int>{};
-    for (final b
-        in ref.watch(pastBudgetsProvider(perBudget)).value ??
-            const <PastBudget>[]) {
-      counts[b.categoryId] = (counts[b.categoryId] ?? 0) + 1;
-    }
-    final mayHaveMore = counts.values.any((n) => n >= perBudget);
+    // More periods follow: reading starts a little before the end is reached;
+    // a button stands in for people who cannot scroll to trigger it.
+    void loadMore() => ref.read(budgetHistoryCountProvider.notifier).more();
     slivers.add(
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-          child: mayHaveMore
-              ? Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Center(
+            child: !hasMore
+                ? const SizedBox(height: 24)
+                : loadingMore
+                ? const SizedBox(
+                    key: ValueKey('budget-history-loading-more'),
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : TextButton(
                     key: const ValueKey('budget-history-more'),
-                    onPressed: ref
-                        .read(budgetHistoryCountProvider.notifier)
-                        .more,
+                    onPressed: loadMore,
                     child: const Text('Show more'),
                   ),
-                )
-              : const SizedBox.shrink(),
+          ),
         ),
       ),
     );
-    return CustomScrollView(slivers: slivers);
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (hasMore && !loadingMore && n.metrics.extentAfter < 600) {
+          loadMore();
+        }
+        return false;
+      },
+      child: CustomScrollView(slivers: slivers),
+    );
   }
 }
 
@@ -268,7 +283,7 @@ class _ActiveChips extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(budgetHistoryFilterProvider);
     final notifier = ref.read(budgetHistoryFilterProvider.notifier);
-    final names = ref.watch(_budgetNamesProvider);
+    final names = ref.watch(budgetHistoryTargetsProvider);
 
     Widget chip(String key, String label, VoidCallback onDeleted) => Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -313,19 +328,6 @@ class _ActiveChips extends ConsumerWidget {
   }
 }
 
-/// Names for the budgets that have history, keyed by target id.
-final _budgetNamesProvider = Provider<Map<int, String>>((ref) {
-  final all =
-      ref
-          .watch(pastBudgetsProvider(ref.watch(budgetHistoryCountProvider)))
-          .value ??
-      const [];
-  return {
-    for (final b in all)
-      b.categoryId ?? overallTargetId: b.category?.name ?? 'All spending',
-  };
-});
-
 /// The filter sheet for past budgets: period, result and which budgets.
 Future<void> showBudgetHistoryFilterSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -343,7 +345,7 @@ class _BudgetFilterSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(budgetHistoryFilterProvider);
     final notifier = ref.read(budgetHistoryFilterProvider.notifier);
-    final names = ref.watch(_budgetNamesProvider);
+    final names = ref.watch(budgetHistoryTargetsProvider);
     final theme = Theme.of(context);
 
     // "All spending" first, then categories by name.

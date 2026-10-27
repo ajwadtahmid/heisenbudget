@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../core/category_icons.dart';
+import '../../core/constants.dart';
 import '../../domain/transaction_type.dart';
 import '../database/app_database.dart';
 
@@ -25,12 +26,17 @@ class ProtectedCategoryException implements Exception {
   String toString() => '"Other" cannot be archived or renamed';
 }
 
-/// Thrown for an empty (or whitespace-only) category name.
+/// Thrown for an empty (or whitespace-only) category name, or one longer
+/// than [maxCategoryNameLength].
 class InvalidCategoryNameException implements Exception {
-  const InvalidCategoryNameException();
+  const InvalidCategoryNameException({this.tooLong = false});
+
+  final bool tooLong;
 
   @override
-  String toString() => 'Category name cannot be empty';
+  String toString() => tooLong
+      ? 'Category name cannot be longer than $maxCategoryNameLength characters'
+      : 'Category name cannot be empty';
 }
 
 class CategoryRepository {
@@ -148,6 +154,9 @@ class CategoryRepository {
   String _cleanName(String name) {
     final clean = name.trim();
     if (clean.isEmpty) throw const InvalidCategoryNameException();
+    if (clean.length > maxCategoryNameLength) {
+      throw const InvalidCategoryNameException(tooLong: true);
+    }
     return clean;
   }
 

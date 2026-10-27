@@ -25,6 +25,7 @@ class AppSettings {
     required this.lastExpenseCategoryId,
     required this.lastIncomeCategoryId,
     this.lastBackupAt,
+    this.favoriteShortcut = true,
   });
 
   final Currency currency;
@@ -55,6 +56,10 @@ class AppSettings {
 
   /// The day of the month budget months start on, 1 to 28.
   final int monthStartDay;
+
+  /// Whether the first favorite is offered on the launcher's long-press menu.
+  /// Its name shows there, so people can switch it off.
+  final bool favoriteShortcut;
   final int? lastExpenseCategoryId;
   final int? lastIncomeCategoryId;
 
@@ -104,6 +109,7 @@ class SettingsRepository {
   static const _lastExpenseKey = 'last_category_expense';
   static const _lastIncomeKey = 'last_category_income';
   static const _lastBackupKey = 'last_backup_at';
+  static const _favoriteShortcutKey = 'favorite_shortcut';
 
   AppSettings load() {
     final storedDay = _prefs.getInt(_weekStartDayKey) ?? 1;
@@ -128,6 +134,7 @@ class SettingsRepository {
       lastExpenseCategoryId: _prefs.getInt(_lastExpenseKey),
       lastIncomeCategoryId: _prefs.getInt(_lastIncomeKey),
       lastBackupAt: DateTime.tryParse(_prefs.getString(_lastBackupKey) ?? ''),
+      favoriteShortcut: _prefs.getBool(_favoriteShortcutKey) ?? true,
     );
   }
 
@@ -168,6 +175,9 @@ class SettingsRepository {
     return _prefs.setInt(_monthStartDayKey, day);
   }
 
+  Future<void> setFavoriteShortcut(bool value) =>
+      _prefs.setBool(_favoriteShortcutKey, value);
+
   Future<void> setLastBackupAt(DateTime when) =>
       _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());
 
@@ -195,6 +205,7 @@ class SettingsRepository {
       weekMode: s.weekMode.name,
       weekStartDay: s.weekStartDay,
       monthStartDay: s.monthStartDay,
+      favoriteShortcut: s.favoriteShortcut,
     );
   }
 
@@ -218,6 +229,9 @@ class SettingsRepository {
     }
     if (b.monthStartDay != null) {
       await _prefs.setInt(_monthStartDayKey, b.monthStartDay!);
+    }
+    if (b.favoriteShortcut != null) {
+      await _prefs.setBool(_favoriteShortcutKey, b.favoriteShortcut!);
     }
     await _prefs.remove(_lastExpenseKey);
     await _prefs.remove(_lastIncomeKey);

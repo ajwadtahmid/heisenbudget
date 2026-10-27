@@ -10,6 +10,7 @@ import '../../data/backup/csv_export.dart';
 import '../../domain/iso_date.dart';
 import '../../domain/backup_status.dart';
 import '../../providers/backup_providers.dart';
+import '../../providers/budget_history_providers.dart';
 import '../../providers/navigation_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../providers/history_providers.dart';
@@ -125,7 +126,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
         .shareFile(
           fileName: 'heisenbudget-backup-$_today.json',
           mimeType: 'application/json',
-          bytes: Uint8List.fromList(utf8.encode(data.encode())),
+          bytes: await data.toBytes(),
           origin: origin,
         );
     // Remembered for the "Last backup file" line (on this phone only).
@@ -154,17 +155,30 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
   Future<void> _restore() async {
     final bytes = await ref.read(fileExchangeProvider).pickFile();
     if (bytes == null) return;
-    final data = BackupData.parse(bytes);
-    if (!mounted) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => _ConfirmRestoreDialog(data: data),
-    );
-    if (ok != true) return;
-    await ref.read(backupServiceProvider).restore(data);
-    // Screens that show data update by themselves; these two held old state.
-    ref.invalidate(settingsProvider);
-    ref.invalidate(historyFilterProvider);
+    final data = await BackupData.parseInBackground(bytes);
+    // The dialog offers a backup of what is here now first; after it, the
+    // question is asked again.
+    while (true) {
+      if (!mounted) return;
+      final choice = await showDialog<_RestoreChoice>(
+        context: context,
+        builder: (_) => _ConfirmRestoreDialog(data: data),
+      );
+      if (choice == _RestoreChoice.backupFirst) {
+        await _exportBackup();
+        continue;
+      }
+      if (choice != _RestoreChoice.restore) return;
+      break;
+    }
+    try {
+      await ref.read(backupServiceProvider).restore(data);
+    } finally {
+      // Even when only the settings step failed the data was replaced, so
+      // whatever held old state starts fresh either way. Screens that show
+      // data update by themselves; filters hold ids that may no longer exist.
+      _forgetOldState();
+    }
     _say('Backup restored.');
     // Repeating transactions that fell due since the backup was made.
     await runRecurringCatchUp(ref);
@@ -190,13 +204,23 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     await ref.read(backupServiceProvider).eraseEverything();
     await ref.read(fileExchangeProvider).clearTemporaryFiles();
     // Everything that held old state starts fresh; the welcome tour returns.
-    ref.invalidate(settingsProvider);
-    ref.invalidate(historyFilterProvider);
+    _forgetOldState();
     ref.invalidate(selectedPeriodProvider);
     ref.invalidate(shellTabProvider);
     ref.invalidate(needsWelcomeProvider);
   }
+
+  /// State that points at data a restore or an erase just replaced.
+  void _forgetOldState() {
+    ref.invalidate(settingsProvider);
+    ref.invalidate(historyFilterProvider);
+    ref.invalidate(historyModeProvider);
+    ref.invalidate(budgetHistoryFilterProvider);
+    ref.invalidate(budgetHistoryCountProvider);
+  }
 }
+
+enum _RestoreChoice { cancel, backupFirst, restore }
 
 class _ConfirmRestoreDialog extends StatelessWidget {
   const _ConfirmRestoreDialog({required this.data});
@@ -222,12 +246,18 @@ class _ConfirmRestoreDialog extends StatelessWidget {
       actions: [
         TextButton(
           key: const ValueKey('restore-cancel'),
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(context).pop(_RestoreChoice.cancel),
           child: const Text('Cancel'),
+        ),
+        TextButton(
+          key: const ValueKey('restore-backup-first'),
+          onPressed: () =>
+              Navigator.of(context).pop(_RestoreChoice.backupFirst),
+          child: const Text('Back up current data first'),
         ),
         FilledButton(
           key: const ValueKey('restore-confirm'),
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(context).pop(_RestoreChoice.restore),
           child: const Text('Restore'),
         ),
       ],

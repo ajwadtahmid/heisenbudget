@@ -47,13 +47,77 @@ void main() {
       BudgetUnit unit = BudgetUnit.month,
       bool repeats = true,
       int? cents,
+      DateTime? today,
     }) => budgets.setLimit(
       start: start,
       unit: unit,
       repeats: repeats,
       categoryId: cat,
       amountCents: cents,
+      today: today ?? d(2026, 10, 15),
     );
+
+    test('a change that starts earlier replaces rows that began inside '
+        'that period', () async {
+      // Weekly from Oct 12, then monthly from Oct 1 (this month's start).
+      await set(
+        d(2026, 10, 12),
+        cat: food.id,
+        unit: BudgetUnit.week,
+        cents: 5000,
+      );
+      await set(d(2026, 10, 1), cat: food.id, cents: 20000);
+
+      final rows = await all();
+      expect(rows, hasLength(1));
+      expect(
+        (rows.single.start, rows.single.entry.unit),
+        ('2026-10-01', BudgetUnit.month),
+      );
+      final inForce = resolveBudget(
+        rows.map((r) => r.entry),
+        food.id,
+        d(2026, 10, 15),
+        monthStartDay: 1,
+      )!;
+      expect((inForce.entry.unit, inForce.limit), (BudgetUnit.month, 20000));
+    });
+
+    test('earlier rows, other budgets and later rows are kept', () async {
+      await set(d(2026, 9, 1), cat: food.id, cents: 10000); // earlier
+      await set(
+        d(2026, 10, 12),
+        cat: transport.id,
+        unit: BudgetUnit.week,
+        cents: 3000,
+      ); // another category
+      await set(d(2026, 12, 1), cat: food.id, cents: null); // in the future
+      await set(
+        d(2026, 10, 12),
+        cat: food.id,
+        unit: BudgetUnit.week,
+        cents: 5000,
+      );
+      await set(d(2026, 10, 1), cat: food.id, cents: 20000);
+
+      final starts = [for (final r in await all()) (r.categoryId, r.start)];
+      expect(starts, [
+        (food.id, '2026-09-01'),
+        (food.id, '2026-10-01'),
+        (transport.id, '2026-10-12'),
+        (food.id, '2026-12-01'),
+      ]);
+    });
+
+    test('the overall limit is replaced the same way', () async {
+      await set(d(2026, 10, 12), unit: BudgetUnit.week, cents: 5000);
+      await set(d(2026, 10, 1), cents: 90000);
+      final row = (await all()).single;
+      expect(
+        (row.categoryId, row.start, row.amountCents),
+        (null, '2026-10-01', 90000),
+      );
+    });
 
     test('adds a limit for a category', () async {
       await set(d(2026, 10, 1), cat: food.id, cents: 20000);
@@ -501,18 +565,21 @@ void main() {
         final service = BackupService(db, settings);
         await budgets.setLimit(
           start: d(2026, 10, 1),
+          today: d(2026, 10, 15),
           unit: BudgetUnit.month,
           categoryId: food.id,
           amountCents: 20000,
         );
         await budgets.setLimit(
           start: d(2026, 10, 12),
+          today: d(2026, 10, 15),
           unit: BudgetUnit.fortnight,
           repeats: false,
           amountCents: 90000,
         );
         await budgets.setLimit(
           start: d(2026, 12, 1),
+          today: d(2026, 10, 15),
           unit: BudgetUnit.month,
           categoryId: food.id,
           amountCents: null,
@@ -559,6 +626,7 @@ void main() {
       );
       await budgets.setLimit(
         start: d(2026, 10, 1),
+        today: d(2026, 10, 15),
         unit: BudgetUnit.month,
         categoryId: food.id,
         amountCents: 20000,

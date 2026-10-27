@@ -7,4 +7,7 @@ enum SortOption {
 
   const SortOption(this.label);
   final String label;
+
+  /// Ordered by date, so rows of one day sit together (History groups them).
+  bool get isByDate => this == newestFirst || this == oldestFirst;
 }

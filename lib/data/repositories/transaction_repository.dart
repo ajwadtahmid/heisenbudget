@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 
 import '../../core/constants.dart';
@@ -8,6 +10,7 @@ import '../../domain/sort_option.dart';
 import '../../domain/summary.dart';
 import '../../domain/transaction_type.dart';
 import '../database/app_database.dart';
+import '../database/sql_functions.dart';
 
 /// A transaction together with its category (archived or not).
 class TransactionWithCategory {
@@ -59,6 +62,28 @@ class TransactionInput {
     }
   }
 }
+
+/// What a filtered History list adds up to: how many transactions, and the
+/// totals, counted over the whole list (not just the part loaded).
+class FilteredTotals {
+  const FilteredTotals({
+    required this.count,
+    required this.receivedCents,
+    required this.spentCents,
+  });
+
+  final int count;
+  final int receivedCents;
+  final int spentCents;
+
+  int get netCents => receivedCents - spentCents;
+}
+
+/// One thing to total spending for: a date range and one category (null = all).
+typedef SpendKey = (DateRange range, int? categoryId);
+
+/// SQLite allows 2000 columns in one query; stay well under it.
+const _spendKeysPerQuery = 500;
 
 class TransactionRepository {
   TransactionRepository(this._db);
@@ -136,20 +161,75 @@ class TransactionRepository {
   }
 
   /// History list. Every filter is optional; an empty [categoryIds] means
-  /// "all categories" and a null [range] means "all time".
+  /// "all categories" and a null [range] means "all time". [search] keeps
+  /// rows that match every word (see `SearchQuery`), and [limit] returns only
+  /// the first rows in the chosen order, so a long history is read a page at
+  /// a time.
   Stream<List<TransactionWithCategory>> watchFiltered({
     TransactionType? type,
     Set<int> categoryIds = const {},
     DateRange? range,
     SortOption sort = SortOption.newestFirst,
+    String search = '',
+    int? limit,
   }) {
     final query = _joined();
-    if (type != null) query.where(_t.type.equalsValue(type));
-    if (categoryIds.isNotEmpty) query.where(_t.categoryId.isIn(categoryIds));
-    if (range != null) query.where(_inRange(range));
+    for (final condition in _filter(type, categoryIds, range, search)) {
+      query.where(condition);
+    }
     query.orderBy(_ordering(sort));
+    if (limit != null) query.limit(limit);
     return query.watch().map((rows) => rows.map(_toModel).toList());
   }
+
+  /// How many transactions the same filter matches and what they add up to,
+  /// over the whole list.
+  Stream<FilteredTotals> watchFilteredTotals({
+    TransactionType? type,
+    Set<int> categoryIds = const {},
+    DateRange? range,
+    String search = '',
+  }) {
+    final count = _t.id.count();
+    final received = _t.amountCents.sum(
+      filter: _t.type.equalsValue(TransactionType.income),
+    );
+    final spent = _t.amountCents.sum(
+      filter: _t.type.equalsValue(TransactionType.expense),
+    );
+    final query = _db.selectOnly(_t).join([
+      innerJoin(_c, _c.id.equalsExp(_t.categoryId)),
+    ])..addColumns([count, received, spent]);
+    for (final condition in _filter(type, categoryIds, range, search)) {
+      query.where(condition);
+    }
+    return query.watchSingle().map(
+      (row) => FilteredTotals(
+        count: row.read(count) ?? 0,
+        receivedCents: row.read(received) ?? 0,
+        spentCents: row.read(spent) ?? 0,
+      ),
+    );
+  }
+
+  List<Expression<bool>> _filter(
+    TransactionType? type,
+    Set<int> categoryIds,
+    DateRange? range,
+    String search,
+  ) => [
+    if (type != null) _t.type.equalsValue(type),
+    if (categoryIds.isNotEmpty) _t.categoryId.isIn(categoryIds),
+    if (range != null) _inRange(range),
+    if (search.trim().isNotEmpty)
+      FunctionCallExpression<int>(searchFunctionName, [
+        _c.name,
+        _t.note,
+        _t.title,
+        _t.amountCents,
+        Variable<String>(search),
+      ]).equals(1),
+  ];
 
   /// Every transaction, oldest first (for the CSV export).
   Future<List<TransactionWithCategory>> getAll() async {
@@ -235,6 +315,94 @@ class TransactionRepository {
                 : _t.categoryId.equals(categoryId)),
       );
     return query.watchSingle().map((row) => row.read(total) ?? 0);
+  }
+
+  /// Expenses for each of [keys] (a range and a category, or null for all),
+  /// in the same order. One query for many figures, so a whole page of past
+  /// budgets is counted at once.
+  Future<List<int>> spentForKeys(List<SpendKey> keys) async {
+    final out = <int>[];
+    for (var i = 0; i < keys.length; i += _spendKeysPerQuery) {
+      final chunk = keys.sublist(
+        i,
+        i + _spendKeysPerQuery > keys.length
+            ? keys.length
+            : i + _spendKeysPerQuery,
+      );
+      final columns = _spendColumns(chunk);
+      final row = await _spendQuery(chunk, columns).getSingle();
+      out.addAll([for (final c in columns) row.read(c) ?? 0]);
+    }
+    return out;
+  }
+
+  /// [spentForKeys], kept up to date as transactions change: one stream for
+  /// all the budgets on screen, not one per budget. Up to
+  /// [_spendKeysPerQuery] keys.
+  Stream<List<int>> watchSpentForKeys(List<SpendKey> keys) {
+    if (keys.isEmpty) return Stream.value(const []);
+    if (keys.length > _spendKeysPerQuery) {
+      throw ArgumentError.value(
+        keys.length,
+        'keys',
+        'too many to watch at once',
+      );
+    }
+    final columns = _spendColumns(keys);
+    return _spendQuery(
+      keys,
+      columns,
+    ).watchSingle().map((row) => [for (final c in columns) row.read(c) ?? 0]);
+  }
+
+  List<Expression<int>> _spendColumns(List<SpendKey> keys) => [
+    for (final (range, categoryId) in keys)
+      _t.amountCents.sum(
+        filter:
+            _t.type.equalsValue(TransactionType.expense) &
+            _inRange(range) &
+            (categoryId == null
+                ? const Constant(true)
+                : _t.categoryId.equals(categoryId)),
+      ),
+  ];
+
+  JoinedSelectStatement<$TransactionsTable, TransactionRow> _spendQuery(
+    List<SpendKey> keys,
+    List<Expression<int>> columns,
+  ) {
+    var from = keys.first.$1.start;
+    var to = keys.first.$1.end;
+    for (final (range, _) in keys) {
+      if (range.start.isBefore(from)) from = range.start;
+      if (range.end.isAfter(to)) to = range.end;
+    }
+    // Only rows that can count, so the date index narrows the scan.
+    return _db.selectOnly(_t)
+      ..addColumns(columns)
+      ..where(
+        _t.type.equalsValue(TransactionType.expense) &
+            _inRange(DateRange(from, to)),
+      );
+  }
+
+  /// A number that goes up each time any transaction is added, changed or
+  /// removed (and starts at 0): a cheap "something changed" signal.
+  Stream<int> watchChangeCount() {
+    // A controller, not `async*`: cancelling must stop listening at once.
+    late final StreamController<int> controller;
+    StreamSubscription<void>? updates;
+    var n = 0;
+    controller = StreamController<int>(
+      onListen: () {
+        controller.add(n);
+        updates = _db
+            .tableUpdates(TableUpdateQuery.onTable(_t))
+            .listen((_) => controller.add(++n));
+      },
+      onCancel: () => updates?.cancel(),
+    );
+    return controller.stream;
   }
 
   /// Totals for everything dated on or before [date]; feeds the balance.

@@ -192,9 +192,7 @@ void main() {
       );
       expect(dropdown.onChanged, isNotNull);
       expect(
-        find.textContaining(
-          'weekly and 2-week budgets still start on this day',
-        ),
+        find.textContaining('budgets of whole weeks still start on this day'),
         findsOneWidget,
       );
       await disposeEnv(tester, env);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/constants.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../domain/iso_date.dart';
@@ -147,7 +148,7 @@ class _RepeatSheetState extends State<_RepeatSheet> {
       context: context,
       initialDate: initial,
       firstDate: start,
-      lastDate: DateTime(2100),
+      lastDate: latestDate,
       helpText: 'Stop repeating after',
     );
     if (picked != null) setState(() => _end = dateOnly(picked));

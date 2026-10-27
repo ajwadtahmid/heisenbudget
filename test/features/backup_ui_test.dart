@@ -11,6 +11,8 @@ import 'package:heisenbudget/providers/backup_providers.dart';
 
 import 'test_helpers.dart';
 
+import 'package:heisenbudget/providers/budget_history_providers.dart';
+
 /// Stands in for the share sheet and the file picker.
 class FakeFileExchange extends FileExchange {
   FakeFileExchange({this.toPick, this.shareFails = false});
@@ -32,6 +34,11 @@ class FakeFileExchange extends FileExchange {
 
   @override
   Future<Uint8List?> pickFile() async => toPick;
+
+  int sweeps = 0;
+
+  @override
+  Future<void> clearOldExports() async => sweeps++;
 }
 
 Uint8List backupBytes() => Uint8List.fromList(
@@ -247,6 +254,79 @@ void main() {
 
     expect(find.text('Restore this backup?'), findsNothing);
     expect(find.byType(SnackBar), findsNothing);
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('restoring forgets History filters that held old ids', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final exchange = FakeFileExchange(toPick: backupBytes());
+    await openSettings(tester, env, exchange);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NavigationBar)),
+    );
+    container.listen(budgetHistoryFilterProvider, (_, _) {});
+    container.listen(historyModeProvider, (_, _) {});
+    container.read(budgetHistoryFilterProvider.notifier).setTargets({7, 99});
+    container.read(historyModeProvider.notifier).set(HistoryMode.budgets);
+
+    await tapTile(tester, 'restore-backup');
+    await tester.tap(find.byKey(const ValueKey('restore-confirm')));
+    await settle(tester);
+
+    expect(container.read(budgetHistoryFilterProvider).hasFilters, isFalse);
+    expect(container.read(historyModeProvider), HistoryMode.transactions);
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('Restore offers a backup of what is here first, then asks '
+      'again', (tester) async {
+    final env = await createEnv(tester);
+    await addExpense(tester, env, 1250, DateTime(2026, 10, 5), note: 'Old');
+    final exchange = FakeFileExchange(toPick: backupBytes());
+    await openSettings(tester, env, exchange);
+
+    await tapTile(tester, 'restore-backup');
+    expect(find.text('Restore this backup?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('restore-backup-first')));
+    await settle(tester);
+
+    // The current data was shared as a backup file...
+    expect(exchange.shared, hasLength(1));
+    expect(exchange.shared.single.name, startsWith('heisenbudget-backup-'));
+    // ...nothing was replaced yet, and the question is asked again.
+    expect(
+      (await savedTransactions(tester, env)).single.transaction.note,
+      'Old',
+    );
+    expect(find.text('Restore this backup?'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('restore-confirm')));
+    await settle(tester);
+    expect(
+      (await savedTransactions(tester, env)).single.transaction.note,
+      'From backup',
+    );
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('old exports are swept when the app starts and when it returns', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final exchange = FakeFileExchange();
+    await openSettings(tester, env, exchange);
+    expect(exchange.sweeps, 1);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(exchange.sweeps, 1, reason: 'leaving the app does not sweep');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settle(tester);
+    expect(exchange.sweeps, 2);
     await disposeEnv(tester, env);
   });
 }

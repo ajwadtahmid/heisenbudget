@@ -118,6 +118,25 @@ void main() {
     rejects('a day that does not exist', (b) => txOf(b)['date'] = '2026-02-31');
     rejects('a date in the wrong shape', (b) => txOf(b)['date'] = '5/10/2026');
     rejects('a year out of range', (b) => txOf(b)['date'] = '0001-01-01');
+    rejects('a year before 1900', (b) => txOf(b)['date'] = '1899-12-31');
+    rejects('a year after 2999', (b) => txOf(b)['date'] = '3000-01-01');
+    test('accepts the first and last days of the allowed years', () {
+      for (final date in ['1900-01-01', '2999-12-31']) {
+        final b = validBackup();
+        txOf(b)['date'] = date;
+        expect(BackupData.parse(bytesOf(b)).transactions.single.date, date);
+      }
+    });
+    rejects(
+      'a category name over the stored limit',
+      (b) => catOf(b)['name'] = 'x' * (maxCategoryNameLength + 1),
+    );
+    test('accepts a category name at the stored limit', () {
+      final b = validBackup();
+      catOf(b)['name'] = 'x' * maxCategoryNameLength;
+      final data = BackupData.parse(bytesOf(b));
+      expect(data.categories.first.name, hasLength(maxCategoryNameLength));
+    });
     rejects('unknown category id', (b) => txOf(b)['categoryId'] = 99);
     rejects('category of the other type', (b) => txOf(b)['categoryId'] = 2);
     rejects('note over the limit', (b) {
@@ -190,6 +209,29 @@ void main() {
     test('a missing settings block is fine', () {
       final b = validBackup()..remove('settings');
       expect(BackupData.parse(bytesOf(b)).settings.currency, isNull);
+    });
+  });
+
+  group('restore when only the settings step fails', () {
+    test('says the data was restored, and it was', () async {
+      SharedPreferences.setMockInitialValues({});
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final service = BackupService(
+        db,
+        _FailingSettings(await SharedPreferences.getInstance()),
+      );
+      await expectLater(
+        service.restore(BackupData.parse(bytesOf(validBackup()))),
+        throwsA(
+          isA<BackupFormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('Your data was restored'),
+          ),
+        ),
+      );
+      expect(await TransactionRepository(db).getAll(), hasLength(1));
     });
   });
 
@@ -458,6 +500,38 @@ void main() {
     }
 
     rejects('rules that are not a list', (b) => b['recurringRules'] = 5);
+    rejects('two transactions of one rule on one day', (b) {
+      (b['transactions']! as List).add({...txOf(b), 'id': 2});
+    });
+    rejects(
+      'a schedule position thousands of years away',
+      (b) => ruleOf(b)['nextIndex'] = 100000000,
+    );
+    rejects('a negative schedule position', (b) => ruleOf(b)['nextIndex'] = -1);
+    test('a far but valid schedule position is accepted', () {
+      final b = withRule();
+      ruleOf(b)['nextIndex'] = 2000; // every 2 weeks, about 77 years
+      expect(
+        BackupData.parse(bytesOf(b)).recurringRules.single.nextIndex,
+        2000,
+      );
+    });
+    test('the schedule limit keeps every date representable', () {
+      for (final unit in RecurrenceUnit.values) {
+        var k = 0;
+        while (scheduleIndexInRange(unit, 365, k + 1)) {
+          k++;
+          if (k > 100000) break;
+        }
+        final rule = Recurrence(
+          unit: unit,
+          interval: 365,
+          start: DateTime(2999, 12, 31),
+        );
+        // The last allowed position still builds a real date.
+        expect(rule.rawOccurrence(k).year, lessThan(300000));
+      }
+    });
     rejects('a repeated rule id', (b) {
       (b['recurringRules']! as List).add(Map.of(ruleOf(b)));
     });
@@ -737,4 +811,86 @@ void main() {
       expect(back.first.amountCents, isNull);
     });
   });
+  group('big backups', () {
+    Map<String, Object?> bigBackup(int n) {
+      final b = validBackup();
+      final txs = b['transactions']! as List;
+      for (var i = 2; i <= n; i++) {
+        txs.add({...txOf(b), 'id': i, 'note': 'Lunch number $i, with a note'});
+      }
+      return b;
+    }
+
+    test('the cap is 32 MB', () {
+      expect(maxBackupBytes, 32 * 1024 * 1024);
+      expect(
+        () => BackupData.parse(Uint8List(maxBackupBytes + 1)),
+        throwsA(isA<BackupFormatException>()),
+      );
+    });
+
+    test(
+      'a big file is parsed off the main thread, with the same result',
+      () async {
+        final bytes = bytesOf(bigBackup(3000));
+        expect(bytes.length, greaterThan(backgroundBackupBytes));
+        final data = await BackupData.parseInBackground(bytes);
+        expect(data.transactions, hasLength(3000));
+        expect(data.transactions.last.note, 'Lunch number 3000, with a note');
+        expect(data.categories, hasLength(2));
+      },
+    );
+
+    test(
+      'a bad big file still says what is wrong, in the same exception',
+      () async {
+        final bytes = Uint8List(backgroundBackupBytes + 10)
+          ..fillRange(0, 100, 65);
+        await expectLater(
+          BackupData.parseInBackground(bytes),
+          throwsA(
+            isA<BackupFormatException>().having(
+              (e) => e.message,
+              'message',
+              'That file is not a Heisenbudget backup.',
+            ),
+          ),
+        );
+        final damaged = bigBackup(3000);
+        txOf(damaged)['amountCents'] = 0;
+        await expectLater(
+          BackupData.parseInBackground(bytesOf(damaged)),
+          throwsA(isA<BackupFormatException>()),
+        );
+      },
+    );
+
+    test('a small file is parsed in place', () async {
+      final data = await BackupData.parseInBackground(bytesOf(validBackup()));
+      expect(data.transactions, hasLength(1));
+    });
+
+    test(
+      'writing a big backup in the background gives the same bytes',
+      () async {
+        final data = BackupData.parse(bytesOf(bigBackup(2000)));
+        final bytes = await data.toBytes();
+        expect(utf8.decode(bytes), data.encode());
+        final small = BackupData.parse(bytesOf(validBackup()));
+        expect(utf8.decode(await small.toBytes()), small.encode());
+        // And it reads back.
+        expect(BackupData.parse(bytes).transactions, hasLength(2000));
+      },
+    );
+  });
+}
+
+/// Settings storage that cannot be written, to test a restore that gets as far
+/// as replacing the data.
+class _FailingSettings extends SettingsRepository {
+  _FailingSettings(super.prefs) : super(defaultCurrency: 'USD');
+
+  @override
+  Future<void> applyBackup(BackupSettings b) =>
+      Future.error(StateError('disk full'));
 }

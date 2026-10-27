@@ -435,6 +435,109 @@ void main() {
     expect(find.text('Food'), findsOneWidget);
     await disposeEnv(tester, env);
   });
+
+  group('when saving fails', () {
+    Future<void> blockInserts(
+      WidgetTester tester,
+      TestEnv env,
+      String table,
+    ) async {
+      await tester.runAsync(
+        () => env.db.customStatement(
+          'CREATE TRIGGER block_$table BEFORE INSERT ON $table '
+          "BEGIN SELECT RAISE(ABORT, 'blocked'); END",
+        ),
+      );
+    }
+
+    Future<void> allowInserts(
+      WidgetTester tester,
+      TestEnv env,
+      String table,
+    ) async {
+      await tester.runAsync(
+        () => env.db.customStatement('DROP TRIGGER block_$table'),
+      );
+    }
+
+    testWidgets('the sheet stays open, says so, and Save can be tried again', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openForm(tester, env);
+      final food = await categoryId(
+        tester,
+        env,
+        'Food',
+        TransactionType.expense,
+      );
+      await tester.enterText(_amountField, '12');
+      await tester.tap(find.byKey(ValueKey('category-$food')));
+      await tester.pump();
+
+      await blockInserts(tester, env, 'transactions');
+      await tapSave(tester);
+      expect(find.byKey(const ValueKey('save-error')), findsOneWidget);
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(_saveButton).onPressed,
+        isNotNull,
+        reason: 'Save is available again',
+      );
+      expect(await savedTransactions(tester, env), isEmpty);
+
+      await allowInserts(tester, env, 'transactions');
+      await tapSave(tester);
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(await savedTransactions(tester, env), hasLength(1));
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('an edit that also makes it repeat is saved whole or not at '
+        'all', (tester) async {
+      final env = await createEnv(tester);
+      final id = await addExpense(tester, env, 1250, DateTime(2026, 10, 5));
+      await openForm(tester, env, editId: id);
+      await tester.enterText(_amountField, '99');
+      await tester.tap(find.byKey(const ValueKey('repeat-tile')));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('repeat-weekly')));
+      await tester.tap(find.byKey(const ValueKey('repeat-done')));
+      await settle(tester);
+
+      await blockInserts(tester, env, 'recurring_rules');
+      await tapSave(tester);
+      expect(find.byKey(const ValueKey('save-error')), findsOneWidget);
+      final saved = (await savedTransactions(tester, env)).single.transaction;
+      expect(saved.amountCents, 1250, reason: 'the edit was rolled back');
+      expect(saved.recurringRuleId, isNull);
+
+      await allowInserts(tester, env, 'recurring_rules');
+      await tapSave(tester);
+      final after = (await savedTransactions(tester, env)).first.transaction;
+      expect(after.amountCents, 9900);
+      expect(after.recurringRuleId, isNotNull);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('dates the backup accepts can always be edited', () {
+    testWidgets('a transaction from 1950 opens the date picker', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      final id = await addExpense(tester, env, 1250, DateTime(1950, 6, 15));
+      await openForm(tester, env, editId: id);
+      await tester.ensureVisible(find.byKey(const ValueKey('date-tile')));
+      await tester.tap(find.byKey(const ValueKey('date-tile')));
+      await settle(tester);
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      await disposeEnv(tester, env);
+    });
+  });
 }
 
 Finder _amount() => _amountField;

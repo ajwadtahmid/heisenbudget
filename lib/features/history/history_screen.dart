@@ -112,7 +112,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   Widget build(BuildContext context) {
     final filter = ref.watch(historyFilterProvider);
     final symbol = ref.watch(settingsProvider.select((s) => s.currencySymbol));
-    final items = (ref.watch(historyResultsProvider).value ?? const [])
+    final page = ref.watch(historyListProvider);
+    final loaded = page.value;
+    final items = (loaded?.rows ?? const <TransactionWithCategory>[])
         .where((i) => !_dismissed.contains(i.transaction.id))
         .toList();
     final searchShown = _searchOpen || filter.isSearching;
@@ -217,18 +219,22 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                     onClearSearch: _clearSearch,
                                   ),
                                 if (filter.isSearching && items.isNotEmpty)
-                                  _searchSummary(items, symbol),
+                                  _searchSummary(symbol),
                               ],
                             ),
                           ),
                         ),
                         Expanded(
-                          child: items.isEmpty
+                          child: loaded == null
+                              ? const SizedBox.shrink()
+                              : items.isEmpty
                               ? _emptyState(filter)
                               : _list(
                                   items,
                                   symbol,
-                                  groupByDay: _isDateSort(filter.sort),
+                                  groupByDay: filter.sort.isByDate,
+                                  hasMore: loaded.hasMore,
+                                  loadingMore: page.isLoading,
                                 ),
                         ),
                       ],
@@ -239,9 +245,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       ),
     );
   }
-
-  bool _isDateSort(SortOption sort) =>
-      sort == SortOption.newestFirst || sort == SortOption.oldestFirst;
 
   Widget _searchField() {
     return Padding(
@@ -280,9 +283,12 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   }
 
   /// "12 results · net -$84.20" under the controls while searching.
-  Widget _searchSummary(List<TransactionWithCategory> items, String symbol) {
-    final net = items.fold<int>(0, (sum, i) => sum + _signed(i));
-    final n = items.length;
+  Widget _searchSummary(String symbol) {
+    // Over every match, not just the pages loaded so far.
+    final totals = ref.watch(historyTotalsProvider).value;
+    if (totals == null) return const SizedBox.shrink();
+    final net = totals.netCents;
+    final n = totals.count;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
       child: Align(
@@ -298,7 +304,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
   }
 
-  Widget _emptyState(HistoryFilter filter) {
+  /// The empty message sits above the + button, which would cover it at large
+  /// text.
+  Widget _emptyState(HistoryFilter filter) => Padding(
+    key: const ValueKey('history-empty'),
+    padding: const EdgeInsets.only(bottom: 64),
+    child: _emptyMessage(filter),
+  );
+
+  Widget _emptyMessage(HistoryFilter filter) {
     if (filter.isSearching) {
       return EmptyState(
         icon: Icons.search_off,
@@ -327,6 +341,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     List<TransactionWithCategory> items,
     String symbol, {
     required bool groupByDay,
+    required bool hasMore,
+    required bool loadingMore,
   }) {
     final c = context.appColors;
     final theme = Theme.of(context);
@@ -403,10 +419,46 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         start = end;
       }
     }
+    // More rows follow: reading starts a little before the end is reached, and
+    // this shows that it is happening (a button stands in for people who
+    // cannot scroll to trigger it).
+    if (hasMore) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: loadingMore
+                  ? const SizedBox(
+                      key: ValueKey('history-loading-more'),
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton(
+                      key: const ValueKey('history-more'),
+                      onPressed: _loadMore,
+                      child: const Text('Show more'),
+                    ),
+            ),
+          ),
+        ),
+      );
+    }
     // Room to scroll the last row clear of the add key.
     slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 96)));
-    return CustomScrollView(slivers: slivers);
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (hasMore && !loadingMore && n.metrics.extentAfter < 600) {
+          _loadMore();
+        }
+        return false;
+      },
+      child: CustomScrollView(slivers: slivers),
+    );
   }
+
+  void _loadMore() => ref.read(historyLimitProvider.notifier).more();
 
   int _signed(TransactionWithCategory i) =>
       i.transaction.type == TransactionType.income

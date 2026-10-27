@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:intl/intl.dart';
 
+import '../../core/constants.dart';
 import '../../core/design/tick_ruler.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
@@ -21,8 +22,8 @@ Future<void> _pickCustomRange(
 ) async {
   final result = await showDateRangePicker(
     context: context,
-    firstDate: DateTime(2000),
-    lastDate: DateTime(2100),
+    firstDate: earliestDate,
+    lastDate: latestDate,
     initialDateRange: current is Custom
         ? DateTimeRange(start: current.range.start, end: current.range.end)
         : null,

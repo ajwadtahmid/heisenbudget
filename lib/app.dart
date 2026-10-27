@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
 import 'core/constants.dart';
@@ -9,6 +10,7 @@ import 'features/shell/app_shell.dart';
 import 'features/welcome/welcome_flow.dart';
 import 'domain/quick_add.dart';
 import 'data/shortcuts/shortcut_service.dart';
+import 'providers/backup_providers.dart';
 import 'providers/budget_providers.dart';
 import 'providers/comparison_providers.dart';
 import 'providers/favorite_providers.dart';
@@ -32,7 +34,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   balanceProvider,
   comparisonViewProvider,
   comingUpProvider,
-  historyResultsProvider,
+  historyListProvider,
   budgetOverviewProvider,
   copyProvider,
 ];
@@ -49,11 +51,16 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
   @override
   void initState() {
     super.initState();
+    // The app is in English only: dates and numbers read the same on every
+    // phone, whatever language it is set to.
+    Intl.defaultLocale = appLocale.toString();
     WidgetsBinding.instance.addObserver(this);
     // Repeating transactions that came due while the app was closed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) runRecurringCatchUp(ref);
       if (mounted) _startShortcuts();
+      // Backup and CSV files made last time are readable copies of the data.
+      ref.read(fileExchangeProvider).clearOldExports();
     });
   }
 
@@ -73,7 +80,9 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
   /// Add expense, Add income and the first favorite, if any.
   void _syncShortcuts() {
     final favorites = ref.read(favoritesProvider).value ?? const [];
-    final top = favorites.isEmpty ? null : favorites.first;
+    // Its name shows on the launcher, so it can be switched off.
+    final on = ref.read(settingsProvider).favoriteShortcut;
+    final top = favorites.isEmpty || !on ? null : favorites.first;
     ref
         .read(shortcutServiceProvider)
         .setShortcuts(
@@ -92,6 +101,7 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(clockProvider.notifier).refresh();
+      ref.read(fileExchangeProvider).clearOldExports();
     }
   }
 
@@ -102,6 +112,10 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
     }
     // The favorite shortcut follows the first favorite.
     ref.listen(favoritesProvider, (_, _) => _syncShortcuts());
+    ref.listen(
+      settingsProvider.select((s) => s.favoriteShortcut),
+      (_, _) => _syncShortcuts(),
+    );
     // A new day may bring repeating transactions due.
     ref.listen(clockProvider, (_, _) => runRecurringCatchUp(ref));
     // Only the look-and-feel settings rebuild the whole app.
@@ -114,6 +128,8 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
       theme: lightTheme(accent: look.$1, font: look.$2),
       darkTheme: darkTheme(accent: look.$1, font: look.$2),
       themeMode: look.$3,
+      locale: appLocale,
+      supportedLocales: const [appLocale],
       home: const _Root(),
     );
   }

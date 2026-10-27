@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart' show ThemeMode;
@@ -22,9 +23,17 @@ const backupAppId = 'heisenbudget';
 /// Newer apps must keep reading every older version.
 const backupFormatVersion = 1;
 
-/// A real backup is far smaller; this only stops a wrong, huge file from being
-/// loaded into memory.
-const maxBackupBytes = 50 * 1024 * 1024;
+/// A real backup is far smaller (about 330 bytes a transaction, so this is
+/// roughly 100,000 of them); this stops a wrong, huge file from being loaded
+/// into memory, where reading it takes several times its size.
+const maxBackupBytes = 32 * 1024 * 1024;
+
+/// Backups bigger than this are read and written in a background isolate, so
+/// the screen does not freeze. Smaller ones are quicker done in place.
+const backgroundBackupBytes = 512 * 1024;
+
+/// Roughly how many transactions make a backup [backgroundBackupBytes] big.
+const _backgroundTransactions = 1500;
 
 /// A backup file that cannot be restored. [message] is safe to show.
 class BackupFormatException implements Exception {
@@ -50,6 +59,7 @@ class BackupSettings {
     this.weekMode,
     this.weekStartDay,
     this.monthStartDay,
+    this.favoriteShortcut,
   });
 
   final String? currency;
@@ -61,6 +71,7 @@ class BackupSettings {
   final String? weekMode;
   final int? weekStartDay;
   final int? monthStartDay;
+  final bool? favoriteShortcut;
 
   Map<String, Object?> toJson() => {
     'currency': currency,
@@ -72,6 +83,7 @@ class BackupSettings {
     'weekMode': weekMode,
     'weekStartDay': weekStartDay,
     'monthStartDay': monthStartDay,
+    'favoriteShortcut': favoriteShortcut,
   };
 
   /// Reads whatever it understands and ignores the rest.
@@ -87,6 +99,7 @@ class BackupSettings {
     final opening = m['openingBalanceCents'];
     final day = m['weekStartDay'];
     final monthDay = m['monthStartDay'];
+    final shortcut = m['favoriteShortcut'];
     final lab = m['labFlavor'];
     return BackupSettings(
       currency: currency is String && currencyByCode(currency) != null
@@ -104,6 +117,7 @@ class BackupSettings {
           : null,
       weekMode: oneOf('weekMode', WeekMode.values.asNameMap().keys),
       weekStartDay: day is int && day >= 1 && day <= 7 ? day : null,
+      favoriteShortcut: shortcut is bool ? shortcut : null,
       monthStartDay: monthDay is int && monthDay >= 1 && monthDay <= 28
           ? monthDay
           : null,
@@ -215,6 +229,22 @@ class BackupData {
     });
   }
 
+  /// The file as bytes, ready to share. Big backups are written in a
+  /// background isolate.
+  Future<Uint8List> toBytes() async {
+    if (transactions.length < _backgroundTransactions) {
+      return Uint8List.fromList(utf8.encode(encode()));
+    }
+    return Isolate.run(() => Uint8List.fromList(utf8.encode(encode())));
+  }
+
+  /// [BackupData.parse], but a big file is read in a background isolate. A
+  /// [BackupFormatException] still comes out the same way.
+  static Future<BackupData> parseInBackground(Uint8List bytes) async {
+    if (bytes.length < backgroundBackupBytes) return BackupData.parse(bytes);
+    return Isolate.run(() => BackupData.parse(bytes));
+  }
+
   /// Reads and checks a backup file. Throws [BackupFormatException] with a
   /// plain-language reason and never returns half-valid data.
   factory BackupData.parse(Uint8List bytes) {
@@ -296,6 +326,9 @@ List<CategoryRow> _parseCategories(Object? json) {
     if (name is! String || name.trim().isEmpty) {
       throw _damaged(where, 'no name');
     }
+    if (name.trim().length > maxCategoryNameLength) {
+      throw _damaged(where, 'name too long');
+    }
     final type = _type(item['type']);
     if (type == null) throw _damaged(where, 'unknown type');
     if (!names.add('${type.name}:${name.trim().toLowerCase()}')) {
@@ -365,7 +398,7 @@ List<RecurringRuleRow> _parseRules(
       throw _damaged(where, 'end date is not valid');
     }
     final next = item['nextIndex'];
-    if (next is! int || next < 0 || next > 100000000) {
+    if (next is! int || !scheduleIndexInRange(unit, interval, next)) {
       throw _damaged(where, 'bad schedule position');
     }
     final note = item['note'];
@@ -658,5 +691,7 @@ DateTime? _time(Object? v) => v is String ? DateTime.tryParse(v) : null;
 bool _isRealDate(String s) {
   if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s)) return false;
   final year = int.parse(s.substring(0, 4));
-  return year >= 1900 && year <= 2999 && toIsoDate(fromIsoDate(s)) == s;
+  return year >= minDataYear &&
+      year <= maxDataYear &&
+      toIsoDate(fromIsoDate(s)) == s;
 }

@@ -351,12 +351,18 @@ class _FillPainter extends CustomPainter {
 
 /// "Monthly · October 2026", "Weekly · Oct 12 – 18, 2026", "Every 10 days ·
 /// Oct 12 – 21, 2026", or for a one-time budget "Just this month · October 2026".
-String budgetPeriodLabel(LimitEntry entry, DateRange range, int monthStartDay) {
-  final dates = entry.unit.isMonth && monthStartDay == 1
+/// A period a change cut short shows its real dates and "Ended early".
+String budgetPeriodLabel(
+  LimitEntry entry,
+  DateRange range,
+  int monthStartDay, {
+  bool endedEarly = false,
+}) {
+  final dates = entry.unit.isMonth && monthStartDay == 1 && !endedEarly
       ? formatMonth(range.start)
       : formatRange(range);
   final what = entry.repeats
       ? entry.unit.label
       : 'Just this ${entry.unit.isMonth ? 'month' : 'period'}';
-  return '$what · $dates';
+  return '$what · $dates${endedEarly ? ' · Ended early' : ''}';
 }

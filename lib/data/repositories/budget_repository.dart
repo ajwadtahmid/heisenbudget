@@ -50,14 +50,18 @@ class BudgetRepository {
   /// budget from this period on".
   ///
   /// This adds a row, or replaces the row that already starts on [start] for
-  /// the same category. Rows for other days are left alone, so a change never
-  /// rewrites an earlier period.
+  /// the same category. Earlier rows are left alone, so a change never
+  /// rewrites an earlier period. Rows that start after [start] but no later
+  /// than [today] sit inside the period this change replaces (a weekly budget
+  /// set this week, then changed to monthly), so they are removed: otherwise
+  /// the later-starting row would keep winning and the change would not show.
   Future<void> setLimit({
     required DateTime start,
     required BudgetUnit unit,
     bool repeats = true,
     int? categoryId,
     int? amountCents,
+    required DateTime today,
   }) {
     if (unit.inMonths) {
       RangeError.checkValueInInterval(
@@ -74,6 +78,7 @@ class BudgetRepository {
       throw RangeError.range(amountCents, 1, maxAmountCents, 'amountCents');
     }
     final day = toIsoDate(dateOnly(start));
+    final through = toIsoDate(dateOnly(today));
     return _db.transaction(() async {
       if (categoryId != null) {
         final category = await (_db.select(
@@ -87,6 +92,15 @@ class BudgetRepository {
           );
         }
       }
+      await (_db.delete(_t)..where(
+            (l) =>
+                l.start.isBiggerThanValue(day) &
+                l.start.isSmallerOrEqualValue(through) &
+                (categoryId == null
+                    ? l.categoryId.isNull()
+                    : l.categoryId.equals(categoryId)),
+          ))
+          .go();
       final existing =
           await (_db.select(_t)..where(
                 (l) =>

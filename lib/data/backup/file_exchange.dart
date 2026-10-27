@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
@@ -11,7 +12,19 @@ import 'backup_data.dart';
 /// The only place that talks to the phone's share sheet and file picker.
 /// Tests replace it with a fake.
 class FileExchange {
-  const FileExchange();
+  const FileExchange({this.temporaryDirectory = getTemporaryDirectory});
+
+  /// The phone's cache folder. Tests point it at a folder of their own.
+  final Future<Directory> Function() temporaryDirectory;
+
+  /// How long an export is left in place after it was made. The app it was
+  /// handed to (a cloud drive, a mail app) may still be reading it once the
+  /// share sheet has closed, and the sheet does not say when it is done.
+  static const exportKeep = Duration(minutes: 10);
+
+  Future<Directory> _exportsDirectory() async => Directory(
+    '${(await temporaryDirectory()).path}${Platform.pathSeparator}exports',
+  );
 
   /// Writes [bytes] to a temporary file and opens the share sheet, where the
   /// user chooses where it goes (Files, Drive, email, ...). Nothing is sent
@@ -22,9 +35,7 @@ class FileExchange {
     required Uint8List bytes,
     Rect? origin,
   }) async {
-    final dir = Directory(
-      '${(await getTemporaryDirectory()).path}${Platform.pathSeparator}exports',
-    );
+    final dir = await _exportsDirectory();
     // Drop earlier exports so old financial data does not pile up in cache.
     if (await dir.exists()) await dir.delete(recursive: true);
     await dir.create(recursive: true);
@@ -37,16 +48,33 @@ class FileExchange {
         sharePositionOrigin: origin,
       ),
     );
+    // The copy has done its job once the other app has had time to take it.
+    // (If the app is closed before then, the next start removes it.)
+    Timer(exportKeep + const Duration(seconds: 5), clearOldExports);
   }
 
-  /// Deletes the temporary copies made for sharing (they hold financial
+  /// Deletes every temporary copy made for sharing (they hold financial
   /// data). Best effort: a failure here is not worth showing.
   Future<void> clearTemporaryFiles() async {
     try {
-      final dir = Directory(
-        '${(await getTemporaryDirectory()).path}${Platform.pathSeparator}exports',
-      );
+      final dir = await _exportsDirectory();
       if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (_) {}
+  }
+
+  /// Deletes the temporary copies that are older than [exportKeep]. Run when
+  /// the app starts and each time it is opened again. Best effort.
+  Future<void> clearOldExports() async {
+    try {
+      final dir = await _exportsDirectory();
+      if (!await dir.exists()) return;
+      final cutoff = DateTime.now().subtract(exportKeep);
+      await for (final entry in dir.list()) {
+        if (entry is File && (await entry.lastModified()).isBefore(cutoff)) {
+          await entry.delete();
+        }
+      }
+      if (await dir.list().isEmpty) await dir.delete();
     } catch (_) {}
   }
 
@@ -61,6 +89,12 @@ class FileExchange {
         'That file is too large to be a backup.',
       );
     }
-    return file.readAsBytes();
+    final bytes = await file.readAsBytes();
+    // On Android the picker works on a copy in the app's cache; it holds the
+    // whole backup, so it goes once the bytes are read.
+    try {
+      await FilePicker.clearTemporaryFiles();
+    } catch (_) {}
+    return bytes;
   }
 }

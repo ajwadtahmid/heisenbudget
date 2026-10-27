@@ -1,16 +1,20 @@
 import 'package:drift/drift.dart' show OrderingTerm;
 
 import '../database/app_database.dart';
+import '../database/database_files.dart';
 import '../database/seed.dart';
 import '../repositories/settings_repository.dart';
 import 'backup_data.dart';
 
 /// Reads everything the app stores into a [BackupData] and puts one back.
 class BackupService {
-  BackupService(this._db, this._settings);
+  BackupService(this._db, this._settings, {this._files});
 
   final AppDatabase _db;
   final SettingsRepository _settings;
+
+  /// Where the pre-update safety copy is kept, if the app has one.
+  final DatabaseFiles? _files;
 
   /// A consistent copy of all categories, transactions and portable settings.
   Future<BackupData> snapshot({required DateTime now}) {
@@ -44,7 +48,8 @@ class BackupService {
 
   /// Replaces all categories and transactions with [data], then applies its
   /// settings. The database part is one transaction: if anything fails, the
-  /// existing data is left exactly as it was.
+  /// existing data is left exactly as it was. If only the settings step fails
+  /// afterwards, a [BackupFormatException] says the data was restored.
   Future<void> restore(BackupData data) async {
     await _db.transaction(() async {
       // Out in the order that respects references: transactions, then the
@@ -63,7 +68,15 @@ class BackupService {
         batch.insertAll(_db.transactions, data.transactions);
       });
     });
-    await _settings.applyBackup(data.settings);
+    try {
+      await _settings.applyBackup(data.settings);
+    } catch (_) {
+      // The data is already replaced, so say that rather than "nothing changed".
+      throw const BackupFormatException(
+        'Your data was restored, but some settings could not be saved. '
+        'Check Appearance and Money & dates.',
+      );
+    }
   }
 
   /// Wipes everything: transactions, repeating rules, favorites, every
@@ -79,5 +92,7 @@ class BackupService {
       await seedDefaultCategories(_db);
     });
     await _settings.clearAll();
+    // The safety copy holds the same financial data, so it goes too.
+    await _files?.deleteCopies();
   }
 }

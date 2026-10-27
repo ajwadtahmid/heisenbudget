@@ -7,6 +7,8 @@ import 'package:heisenbudget/features/settings/settings_screen.dart';
 
 import 'test_helpers.dart';
 
+import 'package:intl/intl.dart';
+
 int selectedTab(WidgetTester tester) =>
     tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
 
@@ -71,5 +73,26 @@ void main() {
       );
     }
     await disposeEnv(tester, env);
+  });
+
+  group('the app is English only', () {
+    testWidgets('dates and numbers read the same whatever the phone speaks', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      Intl.defaultLocale = 'de';
+      tester.platformDispatcher.localesTestValue = const [Locale('bn', 'BD')];
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+
+      expect(Intl.defaultLocale, 'en_US');
+      expect(
+        Localizations.localeOf(tester.element(find.byType(NavigationBar))),
+        const Locale('en', 'US'),
+      );
+      expect(find.textContaining('Oct 1 – Oct 31, 2026'), findsWidgets);
+      await disposeEnv(tester, env);
+    });
   });
 }

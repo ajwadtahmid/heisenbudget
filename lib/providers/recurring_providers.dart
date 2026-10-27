@@ -25,6 +25,26 @@ final recurringRulesProvider = StreamProvider<List<RecurringRuleRow>>((ref) {
   return ref.watch(recurringRepositoryProvider).watchAll();
 });
 
+/// How many times in a row the check for repeating transactions that are due
+/// has failed (0 = it last worked, or has not run). It never throws at the
+/// person; this is how a failure that keeps happening gets noticed.
+final recurringCatchUpFailuresProvider = NotifierProvider<CatchUpFailures, int>(
+  CatchUpFailures.new,
+);
+
+class CatchUpFailures extends Notifier<int> {
+  @override
+  int build() {
+    ref.keepAlive();
+    return 0;
+  }
+
+  /// Records a failure and returns how many in a row there have been.
+  int failed() => ++state;
+
+  void worked() => state = 0;
+}
+
 /// The app-wide snackbar host, so work that finishes after a screen has been
 /// closed (the recurring catch-up) can still show its message.
 final rootMessengerKeyProvider = Provider<GlobalKey<ScaffoldMessengerState>>(

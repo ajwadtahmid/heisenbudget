@@ -15,15 +15,31 @@ Future<void> runRecurringCatchUp(WidgetRef ref) async {
   final transactions = ref.read(transactionRepositoryProvider);
   final messenger = ref.read(rootMessengerKeyProvider);
   final today = ref.read(clockProvider);
+  final failures = ref.read(recurringCatchUpFailuresProvider.notifier);
 
   final CatchUpResult result;
   try {
     result = await service.catchUp(today);
   } catch (_) {
     // A failed catch-up changed nothing (it is one database transaction) and
-    // will be tried again next time the app opens.
+    // will be tried again next time the app opens. One failure stays quiet;
+    // the Repeating transactions page shows a notice after any, and a second
+    // in a row says so here too.
+    if (failures.failed() == 2) {
+      messenger.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not add repeating transactions. Nothing was lost; check '
+              'Settings > Repeating transactions.',
+            ),
+          ),
+        );
+    }
     return;
   }
+  failures.worked();
   if (result.isEmpty) return;
 
   final n = result.count;

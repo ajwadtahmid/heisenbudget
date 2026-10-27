@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/core/category_icons.dart';
@@ -14,6 +15,7 @@ import 'package:heisenbudget/features/shared/icon_picker.dart';
 import 'package:heisenbudget/features/shared/empty_state.dart';
 import 'package:heisenbudget/features/shared/period_selector.dart';
 import 'package:heisenbudget/features/shared/transaction_tile.dart';
+import 'package:heisenbudget/core/design/section_label.dart';
 
 TransactionWithCategory _item({
   TransactionType type = TransactionType.expense,
@@ -816,6 +818,68 @@ void main() {
       expect(mid.received, isNot(AppColors.light.received));
       expect(AppColors.light.copyWith(spent: Colors.black).spent, Colors.black);
       expect(AppColors.light.lerp(null, 0.5), AppColors.light);
+    });
+  });
+
+  group('SectionLabel', () {
+    Widget host(String text, {required double width, double scale = 1}) =>
+        MaterialApp(
+          theme: lightTheme(),
+          home: MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(width: width, child: SectionLabel(text)),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('draws its hairline when the label leaves room for it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host('Manage', width: 320));
+      expect(find.byType(Divider), findsOneWidget);
+    });
+
+    testWidgets('at large text a long label keeps the whole line and wraps '
+        'between words, with no hairline', (tester) async {
+      await tester.pumpWidget(
+        host('Appearance and numbers', width: 320, scale: 2),
+      );
+      expect(find.byType(Divider), findsNothing);
+      expect(tester.takeException(), isNull);
+      // Every word is whole: none is wider than the line it sits on.
+      final label = tester.renderObject<RenderParagraph>(
+        find.textContaining('APPEARANCE'),
+      );
+      expect(label.size.width, lessThanOrEqualTo(320));
+      final lineHeight = label.text.style!.fontSize! * 2;
+      expect(
+        label.size.height / lineHeight,
+        lessThan(3.5),
+        reason: 'two or three lines, not a word split per line',
+      );
+    });
+
+    testWidgets('an action is still kept on the line', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: lightTheme(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              child: SectionLabel(
+                'Spectrum',
+                trailing: TextButton(onPressed: () {}, child: const Text('Go')),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Go'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -5,6 +5,7 @@ import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/domain/week_mode.dart';
 import 'package:heisenbudget/providers/settings_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:heisenbudget/data/backup/backup_data.dart';
 
 Future<SettingsRepository> makeRepo([
   Map<String, Object> initial = const {},
@@ -131,6 +132,48 @@ void main() {
       addTearDown(second.dispose);
       expect(second.read(settingsProvider).weekMode, WeekMode.fixed);
       expect(second.read(settingsProvider).currency.code, 'BDT');
+    });
+  });
+
+  group('the favorite launcher shortcut setting', () {
+    Future<SettingsRepository> repo([
+      Map<String, Object> values = const {},
+    ]) async {
+      SharedPreferences.setMockInitialValues(values);
+      return SettingsRepository(
+        await SharedPreferences.getInstance(),
+        defaultCurrency: 'USD',
+      );
+    }
+
+    test('is on by default, and can be turned off and on', () async {
+      final r = await repo();
+      expect(r.load().favoriteShortcut, isTrue);
+      await r.setFavoriteShortcut(false);
+      expect(r.load().favoriteShortcut, isFalse);
+      await r.setFavoriteShortcut(true);
+      expect(r.load().favoriteShortcut, isTrue);
+    });
+
+    test('travels in a backup, and an older backup leaves it alone', () async {
+      final r = await repo({'favorite_shortcut': false});
+      final saved = r.toBackup();
+      expect(saved.favoriteShortcut, isFalse);
+      expect(saved.toJson()['favoriteShortcut'], isFalse);
+
+      final other = await repo();
+      await other.applyBackup(BackupSettings.fromJson(saved.toJson()));
+      expect(other.load().favoriteShortcut, isFalse);
+
+      // A backup from before the setting existed changes nothing.
+      final kept = await repo({'favorite_shortcut': false});
+      await kept.applyBackup(BackupSettings.fromJson({'currency': 'USD'}));
+      expect(kept.load().favoriteShortcut, isFalse);
+      // Something that is not true or false is ignored.
+      expect(
+        BackupSettings.fromJson({'favoriteShortcut': 'yes'}).favoriteShortcut,
+        isNull,
+      );
     });
   });
 }

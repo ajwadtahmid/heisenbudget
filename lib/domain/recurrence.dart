@@ -8,6 +8,20 @@ enum RecurrenceUnit { day, week, month, year }
 /// Longest "every N units" a rule may use.
 const maxRecurrenceInterval = 365;
 
+/// Whether occurrence number [index] of a rule that repeats every [interval]
+/// [unit]s still lands on a date a [DateTime] can hold (a hand-edited backup
+/// could otherwise name a position thousands of years away).
+bool scheduleIndexInRange(RecurrenceUnit unit, int interval, int index) {
+  if (index < 0 || interval < 1) return false;
+  final steps = index * interval;
+  return switch (unit) {
+    RecurrenceUnit.day => steps <= 3000000,
+    RecurrenceUnit.week => steps * 7 <= 3000000,
+    RecurrenceUnit.month => steps <= 96000,
+    RecurrenceUnit.year => steps <= 8000,
+  };
+}
+
 /// Most occurrences one catch-up adds for a single rule, so a rule that
 /// starts years ago cannot flood the ledger in one go.
 const maxCatchUpPerRule = 500;

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:heisenbudget/core/constants.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
@@ -296,6 +297,30 @@ void main() {
       final active = await cats.watchActive(TransactionType.expense).first;
       expect(active.last.name, 'Tea');
     });
+
+    test(
+      'add rejects names over the stored limit, accepts the limit',
+      () async {
+        expect(
+          () => cats.add(
+            'x' * (maxCategoryNameLength + 1),
+            TransactionType.expense,
+          ),
+          throwsA(
+            isA<InvalidCategoryNameException>().having(
+              (e) => e.tooLong,
+              'tooLong',
+              isTrue,
+            ),
+          ),
+        );
+        final ok = await cats.add(
+          'y' * maxCategoryNameLength,
+          TransactionType.expense,
+        );
+        expect(ok.name, hasLength(maxCategoryNameLength));
+      },
+    );
 
     test('add rejects empty names', () async {
       expect(

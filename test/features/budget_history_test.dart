@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/repositories/budget_repository.dart';
 import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
+import 'package:heisenbudget/providers/budget_history_providers.dart';
 
 import 'test_helpers.dart';
 
@@ -39,6 +41,7 @@ Future<void> limit(
       repeats: repeats,
       categoryId: id,
       amountCents: cents,
+      today: env.now,
     ),
   );
 }
@@ -595,8 +598,62 @@ void main() {
     });
   });
 
-  group('show more', () {
-    testWidgets('loads 12 periods of a budget, then more on request', (
+  group('reading a page at a time', () {
+    ProviderContainer containerOf(WidgetTester tester) =>
+        ProviderScope.containerOf(tester.element(find.byType(NavigationBar)));
+
+    BudgetHistoryPage page(WidgetTester tester) =>
+        containerOf(tester).read(budgetHistoryProvider).value!;
+
+    /// A weekly budget since Jan 2, 2023: 197 finished weeks by Oct 15, 2026.
+    Future<TestEnv> longHistory(WidgetTester tester) async {
+      final env = await createEnv(tester);
+      await limit(
+        tester,
+        env,
+        'Food',
+        5000,
+        d(2023, 1, 2),
+        unit: BudgetUnit.week,
+      );
+      await openPastBudgets(tester, env);
+      return env;
+    }
+
+    testWidgets('reads 30, then more as the end is reached, then stops', (
+      tester,
+    ) async {
+      final env = await longHistory(tester);
+      expect(page(tester).rows, hasLength(budgetHistoryPage));
+      expect(page(tester).hasMore, isTrue);
+
+      for (var i = 0; i < 12 && page(tester).hasMore; i++) {
+        await tester.drag(
+          find.byType(CustomScrollView).last,
+          const Offset(0, -6000),
+        );
+        await settle(tester);
+      }
+      expect(page(tester).hasMore, isFalse);
+      expect(page(tester).rows, hasLength(197));
+      expect(
+        page(tester).rows.last.range.start,
+        d(2023, 1, 2),
+        reason: 'the oldest week is there',
+      );
+      expect(find.byKey(const ValueKey('budget-history-more')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a button stands in for scrolling', (tester) async {
+      final env = await longHistory(tester);
+      containerOf(tester).read(budgetHistoryCountProvider.notifier).more();
+      await settle(tester);
+      expect(page(tester).rows, hasLength(budgetHistoryPage * 2));
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('sorting by spending finds the biggest period far back', (
       tester,
     ) async {
       final env = await createEnv(tester);
@@ -604,37 +661,80 @@ void main() {
         tester,
         env,
         'Food',
-        20000,
-        d(2025, 1, 1),
-      ); // 21 finished months
+        5000,
+        d(2023, 1, 2),
+        unit: BudgetUnit.week,
+      );
+      await addExpense(tester, env, 99900, d(2023, 1, 4));
       await openPastBudgets(tester, env);
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('budget-history-more')),
-        400,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(rows(), lessThanOrEqualTo(12));
-      await tester.tap(find.byKey(const ValueKey('budget-history-more')));
+      containerOf(tester)
+          .read(budgetHistoryFilterProvider.notifier)
+          .setSort(BudgetSort.mostSpent);
       await settle(tester);
-      await tester.scrollUntilVisible(
-        find.text('January 2025'),
-        400,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(find.text('January 2025'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('budget-history-more')),
-        findsNothing,
-        reason: 'everything is loaded',
-      );
+
+      final first = page(tester).rows.first;
+      expect((first.range.start, first.spent), (d(2023, 1, 2), 99900));
+      expect(page(tester).rows, hasLength(budgetHistoryPage));
+      expect(page(tester).hasMore, isTrue);
       await disposeEnv(tester, env);
     });
 
-    testWidgets('no button when everything fits', (tester) async {
+    testWidgets('"Went over" looks through the whole history', (tester) async {
+      final env = await createEnv(tester);
+      await limit(
+        tester,
+        env,
+        'Food',
+        5000,
+        d(2023, 1, 2),
+        unit: BudgetUnit.week,
+      );
+      await addExpense(tester, env, 99900, d(2023, 1, 4));
+      await addExpense(tester, env, 6000, d(2024, 6, 5));
+      await openPastBudgets(tester, env);
+      containerOf(tester)
+          .read(budgetHistoryFilterProvider.notifier)
+          .setResult(ResultFilter.over);
+      await settle(tester);
+
+      expect(page(tester).rows.map((r) => r.spent), [6000, 99900]);
+      expect(page(tester).hasMore, isFalse);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('changing the filter starts again at the first page', (
+      tester,
+    ) async {
+      final env = await longHistory(tester);
+      final container = containerOf(tester);
+      container.read(budgetHistoryCountProvider.notifier).more();
+      await settle(tester);
+      expect(container.read(budgetHistoryCountProvider), 60);
+      container
+          .read(budgetHistoryFilterProvider.notifier)
+          .setPeriod(PeriodFilter.custom);
+      await settle(tester);
+      expect(container.read(budgetHistoryCountProvider), budgetHistoryPage);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the filter lists every budget with history, not only the '
+        'loaded ones', (tester) async {
+      final env = await longHistory(tester);
+      final names = containerOf(tester).read(budgetHistoryTargetsProvider);
+      expect(names.values, contains('Food'));
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('no button or spinner when everything fits', (tester) async {
       final env = await createEnv(tester);
       await limit(tester, env, 'Food', 20000, d(2026, 7, 1));
       await openPastBudgets(tester, env);
       expect(find.byKey(const ValueKey('budget-history-more')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('budget-history-loading-more')),
+        findsNothing,
+      );
       await disposeEnv(tester, env);
     });
   });
@@ -668,5 +768,66 @@ void main() {
         await disposeEnv(tester, env);
       },
     );
+  });
+
+  group('a period a change cut short', () {
+    testWidgets('is listed with its real dates and "Ended early"', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(
+        tester,
+        env,
+        'Food',
+        5000,
+        d(2026, 9, 7),
+        unit: BudgetUnit.week,
+      );
+      await limit(tester, env, 'Food', 20000, d(2026, 9, 10));
+      await openPastBudgets(tester, env);
+
+      expect(
+        find.text('Weekly · Sep 7 – Sep 9, 2026 · Ended early'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Ended early'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('the pill', () {
+    testWidgets('each side is at least 48dp tall to tap', (tester) async {
+      final env = await createEnv(tester);
+      await openPastBudgets(tester, env);
+      for (final key in ['history-mode-transactions', 'history-mode-budgets']) {
+        final size = tester.getSize(find.byKey(ValueKey(key)));
+        expect(size.height, greaterThanOrEqualTo(48), reason: key);
+      }
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('the pill at large text', () {
+    testWidgets('keeps each label on one line, shrinking it if it must', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      tester.view.physicalSize = const Size(360, 640);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await openPastBudgets(tester, env);
+      for (final key in ['history-mode-transactions', 'history-mode-budgets']) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byType(FittedBox),
+          ),
+          findsOneWidget,
+          reason: key,
+        );
+      }
+      expect(tester.takeException(), isNull);
+      await disposeEnv(tester, env);
+    });
   });
 }

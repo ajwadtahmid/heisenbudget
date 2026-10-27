@@ -70,6 +70,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   /// The first day of a run of days, when picked by hand.
   DateTime? _firstDay;
   bool _saving = false;
+  String? _saveError;
   int? _suggestion;
 
   BudgetLine? get _current => widget.current;
@@ -114,6 +115,56 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
       return 'Enter 1 to $_largest ${_inMonths ? 'months' : 'days'}';
     }
     return null;
+  }
+
+  /// Rest of this year is the current choice: a one-time run of days from today
+  /// to Dec 31.
+  bool get _restOfYearSelected =>
+      _custom &&
+      !_inMonths &&
+      !_repeats &&
+      _lastCount == _daysLeftInYear &&
+      _firstDay == dateOnly(ref.read(clockProvider));
+
+  /// The months a multi-month budget could start in: this one, or an earlier
+  /// one that is still under way (a quarter set in November can start in
+  /// October, so it is the calendar quarter). The first is today's.
+  List<DateTime> get _startMonths {
+    final startDay = ref.read(monthStartDayProvider);
+    final now = BudgetMonth.containing(ref.read(clockProvider), startDay);
+    final back = (_lastCount - 1).clamp(0, 11);
+    return [
+      for (var k = 0; k <= back; k++) now.shift(-k).range(startDay).start,
+    ];
+  }
+
+  Widget _firstMonthPicker() {
+    final months = _startMonths;
+    final chosen = _firstDay == null
+        ? months.first
+        : months.firstWhere((m) => m == _firstDay, orElse: () => months.first);
+    return DropdownButtonFormField<DateTime>(
+      key: ValueKey(
+        'budget-first-month-$_lastCount-${chosen.toIso8601String()}',
+      ),
+      isExpanded: true,
+      initialValue: chosen,
+      decoration: const InputDecoration(
+        labelText: 'First month',
+        helperText: 'Spending counts from this month.',
+        helperMaxLines: 2,
+      ),
+      items: [
+        for (final m in months)
+          DropdownMenuItem(value: m, child: Text(formatMonth(m))),
+      ],
+      onChanged: (m) {
+        if (m == null) return;
+        // The current month is the default, and keeps an existing budget's own
+        // alignment untouched.
+        _changeLength(() {}, firstDay: m == months.first ? null : m);
+      },
+    );
   }
 
   /// Days from today to the end of this year, today included.
@@ -233,26 +284,42 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   Future<void> _save({required bool stop}) async {
     if (_saving) return;
     if (!stop && !_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     final repo = ref.read(budgetRepositoryProvider);
-    if (stop) {
-      final current = _current!;
-      await repo.setLimit(
-        start: current.range.start,
-        unit: current.unit,
-        categoryId: widget.categoryId,
-        amountCents: null,
-      );
-    } else {
-      await repo.setLimit(
-        start: _range.start,
-        unit: _unit,
-        repeats: _repeats,
-        categoryId: widget.categoryId,
-        amountCents: parseMoney(_amount.text).cents,
-      );
+    final today = ref.read(clockProvider);
+    try {
+      if (stop) {
+        final current = _current!;
+        await repo.setLimit(
+          start: current.range.start,
+          unit: current.unit,
+          categoryId: widget.categoryId,
+          amountCents: null,
+          today: today,
+        );
+      } else {
+        await repo.setLimit(
+          start: _range.start,
+          unit: _unit,
+          repeats: _repeats,
+          categoryId: widget.categoryId,
+          amountCents: parseMoney(_amount.text).cents,
+          today: today,
+        );
+      }
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      // Stay open with Save available again, so nothing typed is lost.
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError = 'Could not save this limit. Try again.';
+        });
+      }
     }
-    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -263,8 +330,9 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
     final range = _range;
     final suggestion = _suggestion;
     final isNew = _current == null;
-    final showFirstDay =
-        _custom && !_inMonths && (isNew || _current!.unit != _unit);
+    final changed = isNew || _current!.unit != _unit;
+    final showFirstDay = _custom && !_inMonths && changed;
+    final showFirstMonth = _custom && _inMonths && _lastCount > 1 && changed;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -395,6 +463,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                     const SizedBox(height: Gap.s),
                     Wrap(
                       spacing: Gap.m,
+                      runSpacing: Gap.s,
                       children: [
                         ChoiceChip(
                           key: const ValueKey('budget-quick-week'),
@@ -421,11 +490,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                           key: const ValueKey('budget-quick-rest'),
                           showCheckmark: false,
                           label: const Text('Rest of this year'),
-                          selected:
-                              !_inMonths &&
-                              !_repeats &&
-                              _lastCount == _daysLeftInYear &&
-                              _firstDay == dateOnly(ref.read(clockProvider)),
+                          selected: _restOfYearSelected,
                           onSelected: (_) => _restOfYear(),
                         ),
                       ],
@@ -458,6 +523,10 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                       onTap: _pickFirstDay,
                     ),
                   ],
+                  if (showFirstMonth) ...[
+                    const SizedBox(height: Gap.s),
+                    _firstMonthPicker(),
+                  ],
                   if (suggestion != null) ...[
                     const SizedBox(height: Gap.s),
                     Align(
@@ -476,12 +545,26 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                   ],
                   const SizedBox(height: Gap.m),
                   Text(
-                    'Applies from this ${_unit.isMonth ? 'month' : 'period'}: '
-                    '${formatRange(range)}. '
-                    'Earlier ones keep what they had.',
+                    _restOfYearSelected
+                        ? 'Applies from today: ${formatRange(range)}. '
+                              'Spending earlier this year is not counted.'
+                        : 'Applies from this '
+                              '${_unit.isMonth ? 'month' : 'period'}: '
+                              '${formatRange(range)}. '
+                              'Earlier ones keep what they had.',
                     key: const ValueKey('budget-starts'),
                     style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
                   ),
+                  if (_saveError != null) ...[
+                    const SizedBox(height: Gap.m),
+                    Text(
+                      _saveError!,
+                      key: const ValueKey('budget-save-error'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: c.error,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: Gap.l),
                   FilledButton(
                     key: const ValueKey('budget-save'),

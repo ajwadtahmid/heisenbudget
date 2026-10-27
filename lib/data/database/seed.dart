@@ -51,25 +51,3 @@ Future<void> seedDefaultCategories(AppDatabase db) async {
     ]);
   });
 }
-
-/// Gives the default categories of an older database their icons (schema 1
-/// had no icon column). Custom categories keep the general icon.
-Future<void> applyDefaultIcons(AppDatabase db) async {
-  Future<void> apply(TransactionType type, List<(String, String)> defaults) {
-    return db.batch((batch) {
-      for (final (name, icon) in defaults) {
-        batch.update(
-          db.categories,
-          CategoriesCompanion(icon: Value(icon)),
-          where: (c) =>
-              c.isDefault.equals(true) &
-              c.type.equalsValue(type) &
-              c.name.equals(name),
-        );
-      }
-    });
-  }
-
-  await apply(TransactionType.expense, defaultExpenseCategories);
-  await apply(TransactionType.income, defaultIncomeCategories);
-}

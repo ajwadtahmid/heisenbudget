@@ -1,0 +1,11 @@
+import 'tables.dart';
+
+-- Case-insensitive uniqueness per type (the table DSL cannot say COLLATE NOCASE).
+CREATE UNIQUE INDEX categories_type_name ON categories (type, name COLLATE NOCASE);
+
+-- One limit per category and first day, and one overall limit per first day (a
+-- plain unique index would let two null-category rows through).
+CREATE UNIQUE INDEX budget_limits_category_start
+  ON budget_limits (category_id, start) WHERE category_id IS NOT NULL;
+CREATE UNIQUE INDEX budget_limits_overall_start
+  ON budget_limits (start) WHERE category_id IS NULL;
