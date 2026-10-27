@@ -8,7 +8,8 @@ import '../../domain/category_spend.dart';
 /// Spending per category as sorted amber "peaks" over a faint graticule.
 ///
 /// Tap a peak to focus it: the others dim and a readout line gives its exact
-/// share and amount. Drawn with plain widgets and one painter (no chart
+/// share and amount, with a button that opens the transactions behind it (when
+/// [onOpen] is given). Drawn with plain widgets and one painter (no chart
 /// package), so every bar is also a real, labelled button for screen readers.
 class SpectrumChart extends StatefulWidget {
   const SpectrumChart({
@@ -17,6 +18,7 @@ class SpectrumChart extends StatefulWidget {
     required this.symbol,
     required this.emptyText,
     this.height = 152,
+    this.onOpen,
   });
 
   final List<SpectrumBar> bars;
@@ -25,6 +27,9 @@ class SpectrumChart extends StatefulWidget {
   /// Shown on the flat line when nothing was spent.
   final String emptyText;
   final double height;
+
+  /// Called with the focused bar when the person asks to see its transactions.
+  final ValueChanged<SpectrumBar>? onOpen;
 
   @override
   State<SpectrumChart> createState() => _SpectrumChartState();
@@ -134,6 +139,7 @@ class _SpectrumChartState extends State<SpectrumChart> {
           key: const ValueKey('spectrum-readout'),
           bar: _focus == null ? null : bars[_focus!],
           symbol: widget.symbol,
+          onOpen: widget.onOpen,
         ),
       ],
     );
@@ -251,10 +257,16 @@ class _PeakColumn extends StatelessWidget {
 }
 
 class _Readout extends StatelessWidget {
-  const _Readout({super.key, required this.bar, required this.symbol});
+  const _Readout({
+    super.key,
+    required this.bar,
+    required this.symbol,
+    this.onOpen,
+  });
 
   final SpectrumBar? bar;
   final String symbol;
+  final ValueChanged<SpectrumBar>? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -264,23 +276,42 @@ class _Readout extends StatelessWidget {
     if (focused == null) {
       return Text('Tap a peak for detail', style: theme.textTheme.bodySmall);
     }
-    return Row(
+    final open = onOpen;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(categoryIconFor(focused.iconKey).icon, size: 16, color: c.spent),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '${focused.label.toUpperCase()} · ${focused.percentDetailText}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelMedium?.copyWith(color: c.text),
+        Row(
+          children: [
+            Icon(
+              categoryIconFor(focused.iconKey).icon,
+              size: 16,
+              color: c.spent,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${focused.label.toUpperCase()} · ${focused.percentDetailText}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(color: c.text),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              formatMoney(focused.cents, symbol),
+              style: monoText(size: 15, color: c.spent),
+            ),
+          ],
+        ),
+        if (open != null && focused.categoryIds.isNotEmpty)
+          TextButton.icon(
+            key: const ValueKey('spectrum-open'),
+            onPressed: () => open(focused),
+            icon: const Icon(Icons.receipt_long_outlined, size: 18),
+            label: Text(
+              focused.isRest ? 'See these transactions' : 'See transactions',
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          formatMoney(focused.cents, symbol),
-          style: monoText(size: 15, color: c.spent),
-        ),
       ],
     );
   }

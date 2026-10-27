@@ -12,6 +12,7 @@ import '../../core/design/app_font.dart' show AppFont;
 import '../../domain/budget.dart';
 import '../../domain/iso_date.dart';
 import '../../domain/recurrence.dart';
+import '../../domain/saved_filter.dart';
 import '../../domain/transaction_type.dart';
 import '../../domain/week_mode.dart';
 import '../database/app_database.dart';
@@ -60,6 +61,7 @@ class BackupSettings {
     this.weekStartDay,
     this.monthStartDay,
     this.favoriteShortcut,
+    this.savedFilters,
   });
 
   final String? currency;
@@ -73,6 +75,9 @@ class BackupSettings {
   final int? monthStartDay;
   final bool? favoriteShortcut;
 
+  /// The named History filters; null when the file had none to give.
+  final List<SavedFilter>? savedFilters;
+
   Map<String, Object?> toJson() => {
     'currency': currency,
     'themeMode': themeMode,
@@ -84,6 +89,7 @@ class BackupSettings {
     'weekStartDay': weekStartDay,
     'monthStartDay': monthStartDay,
     'favoriteShortcut': favoriteShortcut,
+    'savedFilters': ?savedFilters?.map((f) => f.toJson()).toList(),
   };
 
   /// Reads whatever it understands and ignores the rest.
@@ -118,6 +124,9 @@ class BackupSettings {
       weekMode: oneOf('weekMode', WeekMode.values.asNameMap().keys),
       weekStartDay: day is int && day >= 1 && day <= 7 ? day : null,
       favoriteShortcut: shortcut is bool ? shortcut : null,
+      savedFilters: m['savedFilters'] is List
+          ? SavedFilter.listFromJson(m['savedFilters'])
+          : null,
       monthStartDay: monthDay is int && monthDay >= 1 && monthDay <= 28
           ? monthDay
           : null,

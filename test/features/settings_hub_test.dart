@@ -441,6 +441,24 @@ void main() {
       await disposeEnv(tester, env);
     });
 
+    testWidgets('it opens the open-source licences page', (tester) async {
+      final env = await createEnv(tester);
+      await openSettings(tester, env);
+      await tapRow(tester, 'settings-about');
+      expect(find.text('OPEN-SOURCE LICENCES'), findsOneWidget);
+
+      final button = find.byKey(const ValueKey('about-licences'));
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await settle(tester);
+
+      expect(find.byType(LicensePage), findsOneWidget);
+      expect(find.text(appName), findsWidgets);
+      expect(find.text(appVersion), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
     testWidgets(
       'it explains how the data is kept and says it is not affiliated',
       (tester) async {

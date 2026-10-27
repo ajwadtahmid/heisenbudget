@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:heisenbudget/providers/history_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:heisenbudget/core/design/tick_ruler.dart';
 import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
@@ -397,6 +399,133 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('spectrum-bar-1')));
       await settle(tester);
       expect(find.text('Tap a peak for detail'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    Future<void> openFocused(WidgetTester tester, String bar) async {
+      await tester.tap(find.byKey(ValueKey(bar)));
+      await settle(tester);
+      final open = find.byKey(const ValueKey('spectrum-open'));
+      await tester.ensureVisible(open);
+      await tester.pump();
+      await tester.tap(open);
+      await settle(tester);
+    }
+
+    testWidgets('a focused peak opens History on that category and period', (
+      tester,
+    ) async {
+      final env = await seeded(tester); // Rent 30.00 and Food 10.00, in Oct
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('spectrum-open')), findsNothing);
+
+      // A leftover search must not hide what was asked for.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(HomeScreen)),
+      );
+      container.read(historyFilterProvider.notifier).setQuery('zzz');
+
+      await openFocused(tester, 'spectrum-bar-0');
+
+      expect(find.byType(HistoryScreen), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.text(r'-$30.00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.text(r'-$10.00'),
+        ),
+        findsNothing,
+      );
+      final filter = container.read(historyFilterProvider);
+      expect(filter.type, TransactionType.expense);
+      expect(filter.categoryIds, hasLength(1));
+      expect(filter.period, isNotNull, reason: 'the period the chart shows');
+      expect(filter.query, isEmpty);
+      expect(find.byKey(const ValueKey('active-type')), findsOneWidget);
+      expect(find.byKey(const ValueKey('active-period')), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('only spending in the chart\'s period is listed', (
+      tester,
+    ) async {
+      final env = await seeded(tester);
+      await addExpense(
+        tester,
+        env,
+        5000,
+        DateTime(2026, 9, 5),
+        category: 'Rent',
+      );
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+
+      await openFocused(tester, 'spectrum-bar-0');
+
+      expect(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.text(r'-$30.00'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ListTile),
+          matching: find.text(r'-$50.00'),
+        ),
+        findsNothing,
+        reason: 'September Rent is outside October',
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the Rest peak opens every category folded into it', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      var day = 1;
+      for (final (name, cents) in [
+        ('Rent', 7000),
+        ('Food', 6000),
+        ('Travel', 5000),
+        ('Shopping', 4000),
+        ('Medical', 3000),
+        ('Bills', 2000),
+        ('Transport', 1000),
+      ]) {
+        await addExpense(
+          tester,
+          env,
+          cents,
+          DateTime(2026, 10, day++),
+          category: name,
+        );
+      }
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('spectrum-bar-5')));
+      await settle(tester);
+      expect(find.text('See these transactions'), findsOneWidget);
+      final open = find.byKey(const ValueKey('spectrum-open'));
+      await tester.ensureVisible(open);
+      await tester.pump();
+      await tester.tap(open);
+      await settle(tester);
+
+      Finder row(String text) =>
+          find.descendant(of: find.byType(ListTile), matching: find.text(text));
+      expect(row(r'-$20.00'), findsOneWidget, reason: 'Bills');
+      expect(row(r'-$10.00'), findsOneWidget, reason: 'Transport');
+      expect(row(r'-$70.00'), findsNothing, reason: 'Rent is its own peak');
       await disposeEnv(tester, env);
     });
 

@@ -96,6 +96,28 @@ class AboutScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Gap.xl),
+          const SectionLabel('Open-source licences'),
+          const SizedBox(height: Gap.m),
+          Text(
+            'Built with Flutter, drift, Riverpod and other open-source '
+            'software, and the Geist, Inter and Atkinson Hyperlegible fonts.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: Gap.s),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const ValueKey('about-licences'),
+              onPressed: () => showLicensePage(
+                context: context,
+                applicationName: appName,
+                applicationVersion: appVersion,
+              ),
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('View licences'),
+            ),
+          ),
+          const SizedBox(height: Gap.xl),
           const SectionLabel('How your data is kept'),
           const SizedBox(height: Gap.m),
           for (final (heading, body) in kept) ...[

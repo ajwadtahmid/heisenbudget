@@ -10,6 +10,52 @@ CategorySpend spend(String name, int cents, {String icon = 'category'}) =>
     );
 
 void main() {
+  group('which categories a bar covers', () {
+    CategorySpend withId(int id, String name, int cents) => CategorySpend(
+      categoryId: id,
+      name: name,
+      icon: 'category',
+      cents: cents,
+    );
+
+    test('a bar for one category names it', () {
+      final bars = buildSpectrum([
+        withId(7, 'Rent', 3000),
+        withId(9, 'Food', 1000),
+      ]);
+      expect(bars[0].categoryIds, {7});
+      expect(bars[1].categoryIds, {9});
+    });
+
+    test('the Rest bar names every category folded into it', () {
+      final bars = buildSpectrum([
+        withId(1, 'A', 700),
+        withId(2, 'B', 600),
+        withId(3, 'C', 500),
+        withId(4, 'D', 400),
+        withId(5, 'E', 300),
+        withId(6, 'F', 200),
+        withId(7, 'G', 100),
+      ]);
+      expect(bars, hasLength(6));
+      expect(bars.last.isRest, isTrue);
+      expect(bars.last.categoryIds, {6, 7});
+      for (final bar in bars.take(5)) {
+        expect(bar.categoryIds, hasLength(1));
+      }
+    });
+
+    test('a bar made by hand covers nothing, so it offers no link', () {
+      const bar = SpectrumBar(
+        label: 'x',
+        iconKey: 'category',
+        cents: 1,
+        permille: 1000,
+      );
+      expect(bar.categoryIds, isEmpty);
+    });
+  });
+
   group('buildSpectrum', () {
     test('nothing spent gives no bars', () {
       expect(buildSpectrum(const []), isEmpty);

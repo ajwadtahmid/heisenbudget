@@ -8,6 +8,7 @@ import '../core/copy.dart';
 import '../core/design/app_colors.dart';
 import '../core/design/app_font.dart';
 import '../data/repositories/settings_repository.dart';
+import '../domain/saved_filter.dart';
 import '../domain/transaction_type.dart';
 import '../domain/week_mode.dart';
 
@@ -67,6 +68,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setFavoriteShortcut(bool value) =>
       _save(() => _repo.setFavoriteShortcut(value));
+
+  Future<void> setSavedFilters(List<SavedFilter> filters) =>
+      _save(() => _repo.setSavedFilters(filters));
+
+  Future<void> setBackupReminders(bool value) =>
+      _save(() => _repo.setBackupReminders(value));
+
+  Future<void> setBackupSnoozedUntil(DateTime day) =>
+      _save(() => _repo.setBackupSnoozedUntil(day));
 
   Future<void> setLastBackupAt(DateTime when) =>
       _save(() => _repo.setLastBackupAt(when));

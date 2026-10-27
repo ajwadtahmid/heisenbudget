@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/currencies.dart';
 import '../../core/design/app_colors.dart' show AccentColor;
 import '../../core/design/app_font.dart' show AppFont;
+import '../../domain/saved_filter.dart';
 import '../../domain/transaction_type.dart';
 import '../../domain/week_mode.dart';
 import '../backup/backup_data.dart';
@@ -26,6 +29,9 @@ class AppSettings {
     required this.lastIncomeCategoryId,
     this.lastBackupAt,
     this.favoriteShortcut = true,
+    this.savedFilters = const [],
+    this.backupReminders = true,
+    this.backupSnoozedUntil,
   });
 
   final Currency currency;
@@ -66,6 +72,16 @@ class AppSettings {
   /// When a backup file was last handed to the share sheet, or null if
   /// never. Kept on this phone only: it is not part of a backup file.
   final DateTime? lastBackupAt;
+
+  /// History filters the person named and kept, oldest first.
+  final List<SavedFilter> savedFilters;
+
+  /// Whether Home reminds the person to make a backup when it has been a
+  /// while. Kept on this phone only, like [lastBackupAt]: not in a backup.
+  final bool backupReminders;
+
+  /// "Remind me later": no reminder before this day. Also phone-only.
+  final DateTime? backupSnoozedUntil;
 
   /// What amounts are written with, e.g. `৳`.
   String get currencySymbol => currency.symbol;
@@ -110,6 +126,9 @@ class SettingsRepository {
   static const _lastIncomeKey = 'last_category_income';
   static const _lastBackupKey = 'last_backup_at';
   static const _favoriteShortcutKey = 'favorite_shortcut';
+  static const _savedFiltersKey = 'saved_filters';
+  static const _backupRemindersKey = 'backup_reminders';
+  static const _backupSnoozedKey = 'backup_snoozed_until';
 
   AppSettings load() {
     final storedDay = _prefs.getInt(_weekStartDayKey) ?? 1;
@@ -135,7 +154,23 @@ class SettingsRepository {
       lastIncomeCategoryId: _prefs.getInt(_lastIncomeKey),
       lastBackupAt: DateTime.tryParse(_prefs.getString(_lastBackupKey) ?? ''),
       favoriteShortcut: _prefs.getBool(_favoriteShortcutKey) ?? true,
+      savedFilters: _loadSavedFilters(),
+      backupReminders: _prefs.getBool(_backupRemindersKey) ?? true,
+      backupSnoozedUntil: DateTime.tryParse(
+        _prefs.getString(_backupSnoozedKey) ?? '',
+      ),
     );
+  }
+
+  /// What is stored, skipping anything unreadable instead of failing.
+  List<SavedFilter> _loadSavedFilters() {
+    final raw = _prefs.getString(_savedFiltersKey);
+    if (raw == null) return const [];
+    try {
+      return SavedFilter.listFromJson(jsonDecode(raw));
+    } on FormatException {
+      return const [];
+    }
   }
 
   Future<void> setCurrencyCode(String code) {
@@ -178,6 +213,22 @@ class SettingsRepository {
   Future<void> setFavoriteShortcut(bool value) =>
       _prefs.setBool(_favoriteShortcutKey, value);
 
+  Future<void> setSavedFilters(List<SavedFilter> filters) => _prefs.setString(
+    _savedFiltersKey,
+    jsonEncode([for (final f in filters) f.toJson()]),
+  );
+
+  Future<void> setBackupReminders(bool value) =>
+      _prefs.setBool(_backupRemindersKey, value);
+
+  /// The day before which no backup reminder shows (date only).
+  Future<void> setBackupSnoozedUntil(DateTime day) => _prefs.setString(
+    _backupSnoozedKey,
+    '${day.year.toString().padLeft(4, '0')}-'
+    '${day.month.toString().padLeft(2, '0')}-'
+    '${day.day.toString().padLeft(2, '0')}',
+  );
+
   Future<void> setLastBackupAt(DateTime when) =>
       _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());
 
@@ -206,6 +257,7 @@ class SettingsRepository {
       weekStartDay: s.weekStartDay,
       monthStartDay: s.monthStartDay,
       favoriteShortcut: s.favoriteShortcut,
+      savedFilters: s.savedFilters,
     );
   }
 
@@ -233,6 +285,7 @@ class SettingsRepository {
     if (b.favoriteShortcut != null) {
       await _prefs.setBool(_favoriteShortcutKey, b.favoriteShortcut!);
     }
+    if (b.savedFilters != null) await setSavedFilters(b.savedFilters!);
     await _prefs.remove(_lastExpenseKey);
     await _prefs.remove(_lastIncomeKey);
     await _prefs.setBool(_onboardingKey, true);

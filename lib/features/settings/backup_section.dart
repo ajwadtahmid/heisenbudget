@@ -17,6 +17,7 @@ import '../../providers/history_providers.dart';
 import '../../providers/period_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/recurring_catch_up.dart';
+import 'backup_actions.dart';
 import 'settings_widgets.dart';
 import '../../providers/database_providers.dart';
 
@@ -55,6 +56,26 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           emphasizeSummary: freshness == BackupFreshness.stale,
           enabled: !_busy,
           onTap: () => _run(_exportBackup),
+        ),
+        SettingsRow(
+          key: const ValueKey('save-backup-folder'),
+          icon: Icons.folder_outlined,
+          title: 'Save to a folder',
+          summary: 'Pick where on this phone the backup file goes.',
+          enabled: !_busy,
+          onTap: () => _run(_saveToFolder),
+        ),
+        SwitchListTile(
+          key: const ValueKey('backup-reminders'),
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.event_repeat),
+          title: const Text('Backup reminders'),
+          subtitle: Text(
+            'A card on Home when your last backup is over $backupStaleDays '
+            'days old.',
+          ),
+          value: ref.watch(settingsProvider.select((s) => s.backupReminders)),
+          onChanged: ref.read(settingsProvider.notifier).setBackupReminders,
         ),
         SettingsRow(
           key: const ValueKey('restore-backup'),
@@ -116,23 +137,10 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   String get _today => toIsoDate(ref.read(clockProvider));
 
-  Future<void> _exportBackup() async {
-    final origin = _origin();
-    final data = await ref
-        .read(backupServiceProvider)
-        .snapshot(now: ref.read(nowProvider)());
-    await ref
-        .read(fileExchangeProvider)
-        .shareFile(
-          fileName: 'heisenbudget-backup-$_today.json',
-          mimeType: 'application/json',
-          bytes: await data.toBytes(),
-          origin: origin,
-        );
-    // Remembered for the "Last backup file" line (on this phone only).
-    await ref
-        .read(settingsProvider.notifier)
-        .setLastBackupAt(ref.read(nowProvider)());
+  Future<void> _exportBackup() => shareBackup(ref, origin: _origin());
+
+  Future<void> _saveToFolder() async {
+    if (await saveBackupToFolder(ref)) _say('Backup saved.');
   }
 
   Future<void> _exportCsv() async {

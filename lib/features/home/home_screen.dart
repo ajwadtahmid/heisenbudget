@@ -9,7 +9,10 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../domain/category_spend.dart';
 import '../../domain/summary.dart';
+import '../../domain/transaction_type.dart';
+import '../../providers/budget_history_providers.dart';
 import '../../providers/comparison_providers.dart';
+import '../../providers/history_providers.dart';
 import '../../providers/navigation_providers.dart';
 import '../../providers/period_providers.dart';
 import '../../providers/recurring_providers.dart';
@@ -21,6 +24,7 @@ import '../shared/period_selector.dart';
 import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
+import 'backup_reminder_card.dart';
 import 'budget_line.dart';
 import 'coming_up_tile.dart';
 import 'delta_line.dart';
@@ -28,6 +32,23 @@ import 'spectrum_chart.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
+
+  /// Opens History on what the chart bar adds up: spending in its categories
+  /// over the period the chart shows. What was typed in History's search box
+  /// is cleared so nothing hides the result.
+  void _openHistoryFor(WidgetRef ref, SpectrumBar bar) {
+    final filters = ref.read(historyFilterProvider.notifier);
+    filters.replace(
+      HistoryFilter(
+        type: TransactionType.expense,
+        categoryIds: bar.categoryIds,
+        period: ref.read(selectedPeriodProvider),
+      ),
+    );
+    filters.setQuery('');
+    ref.read(historyModeProvider.notifier).set(HistoryMode.transactions);
+    ref.read(shellTabProvider.notifier).select(historyTab);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -102,6 +123,7 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ],
             ),
+            const BackupReminderCard(),
             const SizedBox(height: Gap.l),
             PeriodSelector(
               period: ref.watch(selectedPeriodProvider),
@@ -156,6 +178,7 @@ class HomeScreen extends ConsumerWidget {
               bars: buildSpectrum(spends),
               symbol: symbol,
               emptyText: copy.emptyChart,
+              onOpen: (bar) => _openHistoryFor(ref, bar),
             ),
             if (comingUp.isNotEmpty) ...[
               const SizedBox(height: Gap.xl),

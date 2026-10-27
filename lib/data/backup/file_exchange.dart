@@ -53,6 +53,24 @@ class FileExchange {
     Timer(exportKeep + const Duration(seconds: 5), clearOldExports);
   }
 
+  /// Opens the phone's save dialog so the person picks the folder (and may
+  /// rename the file), and writes [bytes] there. True when it was saved, false
+  /// when they closed the dialog. The app never writes anywhere it was not
+  /// pointed at, and remembers no folder.
+  Future<bool> saveFile({
+    required String fileName,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Save your backup',
+      fileName: fileName,
+      mimeType: mimeType,
+      bytes: bytes,
+    );
+    return saved != null;
+  }
+
   /// Deletes every temporary copy made for sharing (they hold financial
   /// data). Best effort: a failure here is not worth showing.
   Future<void> clearTemporaryFiles() async {

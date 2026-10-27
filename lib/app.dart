@@ -37,6 +37,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   historyListProvider,
   budgetOverviewProvider,
   budgetOverrunHintsProvider,
+  backupReminderProvider,
   copyProvider,
 ];
 

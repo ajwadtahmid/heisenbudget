@@ -307,4 +307,61 @@ void main() {
     expect(seen.length, greaterThanOrEqualTo(3));
     expect(seen, orderedEquals([...seen]..sort()));
   });
+
+  group('amount range', () {
+    Future<void> seed() async {
+      await add(499, d(2026, 10, 1));
+      await add(500, d(2026, 10, 2));
+      await add(1250, d(2026, 10, 3), category: rent);
+      await add(2000, d(2026, 10, 4));
+      await add(2001, d(2026, 10, 5));
+      await add(450000, d(2026, 10, 6), type: TransactionType.income);
+    }
+
+    Future<List<int>> cents({int? min, int? max}) async => [
+      for (final r
+          in await txs
+              .watchFiltered(
+                minCents: min,
+                maxCents: max,
+                sort: SortOption.lowestAmount,
+              )
+              .first)
+        r.transaction.amountCents,
+    ];
+
+    test('each bound alone, and both, include their edge', () async {
+      await seed();
+      expect(await cents(min: 500), [500, 1250, 2000, 2001, 450000]);
+      expect(await cents(max: 2000), [499, 500, 1250, 2000]);
+      expect(await cents(min: 500, max: 2000), [500, 1250, 2000]);
+      expect(await cents(min: 1250, max: 1250), [1250]);
+      expect(await cents(min: 3000, max: 4000), isEmpty);
+      expect(await cents(), hasLength(6));
+    });
+
+    test('works with the other filters and with the limit', () async {
+      await seed();
+      final rows = await txs
+          .watchFiltered(
+            type: TransactionType.expense,
+            categoryIds: {food.id},
+            minCents: 500,
+            sort: SortOption.highestAmount,
+            limit: 2,
+          )
+          .first;
+      expect(rows.map((r) => r.transaction.amountCents), [2001, 2000]);
+    });
+
+    test('the totals follow the same range as the list', () async {
+      await seed();
+      final t = await txs
+          .watchFilteredTotals(minCents: 500, maxCents: 2000)
+          .first;
+      expect((t.count, t.spentCents, t.receivedCents), (3, 3750, 0));
+      final all = await txs.watchFilteredTotals(minCents: 100000).first;
+      expect((all.count, all.receivedCents), (1, 450000));
+    });
+  });
 }

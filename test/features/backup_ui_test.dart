@@ -15,10 +15,18 @@ import 'package:heisenbudget/providers/budget_history_providers.dart';
 
 /// Stands in for the share sheet and the file picker.
 class FakeFileExchange extends FileExchange {
-  FakeFileExchange({this.toPick, this.shareFails = false});
+  FakeFileExchange({
+    this.toPick,
+    this.shareFails = false,
+    this.saveCancelled = false,
+  });
 
   Uint8List? toPick;
   bool shareFails;
+
+  /// The person closes the save dialog without choosing a folder.
+  bool saveCancelled;
+  final saved = <({String name, String mime, Uint8List bytes})>[];
   final shared = <({String name, String mime, Uint8List bytes})>[];
 
   @override
@@ -30,6 +38,17 @@ class FakeFileExchange extends FileExchange {
   }) async {
     if (shareFails) throw StateError('no share target');
     shared.add((name: fileName, mime: mimeType, bytes: bytes));
+  }
+
+  @override
+  Future<bool> saveFile({
+    required String fileName,
+    required String mimeType,
+    required Uint8List bytes,
+  }) async {
+    if (saveCancelled) return false;
+    saved.add((name: fileName, mime: mimeType, bytes: bytes));
+    return true;
   }
 
   @override
@@ -328,5 +347,205 @@ void main() {
     await settle(tester);
     expect(exchange.sweeps, 2);
     await disposeEnv(tester, env);
+  });
+
+  group('save to a folder', () {
+    testWidgets('writes the backup where the dialog points and counts it', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await addExpense(tester, env, 1250, DateTime(2026, 10, 5), note: 'Lunch');
+      final exchange = FakeFileExchange();
+      await openSettings(tester, env, exchange);
+      expect(env.prefs.getString('last_backup_at'), isNull);
+
+      await tapTile(tester, 'save-backup-folder');
+
+      final file = exchange.saved.single;
+      expect(file.name, 'heisenbudget-backup-2026-10-15.json');
+      expect(file.mime, 'application/json');
+      expect(BackupData.parse(file.bytes).transactions.single.note, 'Lunch');
+      expect(exchange.shared, isEmpty, reason: 'not the share sheet');
+      expect(find.text('Backup saved.'), findsOneWidget);
+      expect(env.prefs.getString('last_backup_at'), isNotNull);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('closing the dialog saves nothing and records nothing', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      final exchange = FakeFileExchange(saveCancelled: true);
+      await openSettings(tester, env, exchange);
+
+      await tapTile(tester, 'save-backup-folder');
+
+      expect(exchange.saved, isEmpty);
+      expect(find.text('Backup saved.'), findsNothing);
+      expect(env.prefs.getString('last_backup_at'), isNull);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('backup reminder', () {
+    // Today is Oct 15, 2026; Sep 1 is 44 days back.
+    final stale = {
+      'last_backup_at': DateTime(2026, 9, 1).toUtc().toIso8601String(),
+    };
+
+    Future<void> openHome(
+      WidgetTester tester,
+      TestEnv env,
+      FakeFileExchange exchange,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...env.overrides,
+            fileExchangeProvider.overrideWithValue(exchange),
+          ],
+          child: const HeisenbudgetApp(),
+        ),
+      );
+      await settle(tester);
+    }
+
+    Finder card() => find.byKey(const ValueKey('backup-reminder'));
+
+    Future<void> tapCard(WidgetTester tester, String key) async {
+      final finder = find.byKey(ValueKey(key));
+      await tester.ensureVisible(finder);
+      await tester.pump();
+      await tester.tap(finder);
+      await settle(tester);
+    }
+
+    testWidgets('shows how old the last backup is, and Back up now makes one', (
+      tester,
+    ) async {
+      final env = await createEnv(tester, prefs: stale);
+      final exchange = FakeFileExchange();
+      await openHome(tester, env, exchange);
+      expect(card(), findsOneWidget);
+      expect(find.text('Time for a backup'), findsOneWidget);
+      expect(find.text('Your last backup is 44 days old.'), findsOneWidget);
+
+      await tapCard(tester, 'reminder-backup-now');
+
+      expect(exchange.shared, hasLength(1));
+      expect(card(), findsNothing, reason: 'it is recent now');
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('never backed up: asks only once there is enough to lose', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      for (var i = 0; i < 9; i++) {
+        await addExpense(tester, env, 100 + i, DateTime(2026, 10, 1 + i));
+      }
+      await openHome(tester, env, FakeFileExchange());
+      expect(card(), findsNothing, reason: 'nine transactions');
+
+      await addExpense(tester, env, 999, DateTime(2026, 10, 12));
+      await settle(tester);
+      expect(card(), findsOneWidget, reason: 'ten');
+      expect(find.text('Back up your data'), findsOneWidget);
+      expect(find.textContaining('not saved a backup yet'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a recent backup shows nothing', (tester) async {
+      final env = await createEnv(
+        tester,
+        prefs: {
+          'last_backup_at': DateTime(2026, 10, 10).toUtc().toIso8601String(),
+        },
+      );
+      await openHome(tester, env, FakeFileExchange());
+      expect(card(), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('Remind me later hides it for a week', (tester) async {
+      final env = await createEnv(tester, prefs: stale);
+      await openHome(tester, env, FakeFileExchange());
+
+      await tapCard(tester, 'reminder-later');
+
+      expect(card(), findsNothing);
+      expect(env.prefs.getString('backup_snoozed_until'), '2026-10-22');
+      expect(env.prefs.getBool('backup_reminders'), isNull, reason: 'still on');
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets(
+      'Stop reminding me turns them off, and Settings turns them on',
+      (tester) async {
+        final env = await createEnv(tester, prefs: stale);
+        final exchange = FakeFileExchange();
+        await openHome(tester, env, exchange);
+
+        await tapCard(tester, 'reminder-off');
+        expect(card(), findsNothing);
+        expect(env.prefs.getBool('backup_reminders'), isFalse);
+        expect(
+          find.textContaining('turn them on again in Settings'),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Settings'),
+          ),
+        );
+        await settle(tester);
+        final toggle = find.byKey(const ValueKey('backup-reminders'));
+        await tester.ensureVisible(toggle);
+        await tester.pump();
+        expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+
+        await tester.tap(toggle);
+        await settle(tester);
+        expect(env.prefs.getBool('backup_reminders'), isTrue);
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Home'),
+          ),
+        );
+        await settle(tester);
+        expect(card(), findsOneWidget, reason: 'the backup is still old');
+        await disposeEnv(tester, env);
+      },
+    );
+
+    testWidgets('a failing share keeps the card and says so', (tester) async {
+      final env = await createEnv(tester, prefs: stale);
+      final exchange = FakeFileExchange(shareFails: true);
+      await openHome(tester, env, exchange);
+
+      await tapCard(tester, 'reminder-backup-now');
+
+      expect(
+        find.text('Something went wrong. No backup was made.'),
+        findsOneWidget,
+      );
+      expect(card(), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the card fits at 200% text on a small phone', (tester) async {
+      final env = await createEnv(tester, prefs: stale);
+      tester.view.physicalSize = const Size(360, 640);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await openHome(tester, env, FakeFileExchange());
+      expect(card(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await disposeEnv(tester, env);
+    });
   });
 }

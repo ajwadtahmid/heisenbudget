@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/repositories/transaction_repository.dart';
@@ -88,6 +89,33 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     ref.read(historyFilterProvider.notifier).setQuery('');
   }
 
+  /// Starts the list from a day the person picks (inside the period, if one
+  /// is chosen). Only offered while the list is sorted by date.
+  Future<void> _jump() async {
+    final filter = ref.read(historyFilterProvider);
+    final period = filter.period;
+    final base = period == null
+        ? null
+        : rangeOf(period, ref.read(settingsProvider));
+    final first = base?.start ?? earliestDate;
+    final last = base?.end ?? latestDate;
+    final today = ref.read(clockProvider);
+    var initial = filter.jumpTo ?? today;
+    if (initial.isBefore(first)) initial = first;
+    if (initial.isAfter(last)) initial = last;
+    final oldestFirst = filter.sort == SortOption.oldestFirst;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: oldestFirst ? 'Start the list from' : 'Jump to',
+    );
+    if (picked != null && mounted) {
+      ref.read(historyFilterProvider.notifier).setJump(picked);
+    }
+  }
+
   Future<void> _delete(TransactionWithCategory item) async {
     final row = item.transaction;
     setState(() => _dismissed.add(row.id));
@@ -132,6 +160,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
       appBar: AppBar(
         title: const Text('History'),
         actions: [
+          // Quiet on purpose: a calendar beside Search, lit while a jump is on.
+          if (!isBudgets && filter.sort.isByDate)
+            IconButton(
+              key: const ValueKey('jump-button'),
+              tooltip: 'Jump to a date',
+              icon: Icon(
+                Icons.event,
+                color: filter.jumpTo != null ? context.appColors.accent : null,
+              ),
+              onPressed: _jump,
+            ),
           if (!isBudgets)
             IconButton(
               key: const ValueKey('search-button'),
@@ -515,9 +554,35 @@ class _ActiveFilterChips extends ConsumerWidget {
               formatRange(rangeOf(period, settings)),
               () => notifier.setPeriod(null),
             ),
+          if (filter.hasAmountRange)
+            _chip(
+              'amount',
+              _amountLabel(filter, settings.currencySymbol),
+              () => notifier.setAmountRange(null, null),
+            ),
+          if (filter.jumpTo != null)
+            _chip(
+              'jump',
+              'Starting ${formatDate(filter.jumpTo!)}',
+              () => notifier.setJump(null),
+              tooltip: filter.sort == SortOption.oldestFirst
+                  ? 'Back to the start'
+                  : 'Back to the latest',
+            ),
         ],
       ),
     );
+  }
+
+  static String _amountLabel(HistoryFilter filter, String symbol) {
+    final min = filter.minCents;
+    final max = filter.maxCents;
+    if (min != null && max != null) {
+      return '${formatMoney(min, symbol)} to ${formatMoney(max, symbol)}';
+    }
+    return min != null
+        ? 'At least ${formatMoney(min, symbol)}'
+        : 'At most ${formatMoney(max!, symbol)}';
   }
 
   Widget _chip(

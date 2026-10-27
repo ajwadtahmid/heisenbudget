@@ -1,11 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
+import 'package:heisenbudget/domain/saved_filter.dart';
 import 'package:heisenbudget/domain/sort_option.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/history/history_screen.dart';
 import 'package:heisenbudget/providers/history_providers.dart';
+import 'package:heisenbudget/providers/settings_providers.dart';
 
 import 'test_helpers.dart';
 
@@ -442,14 +446,25 @@ void main() {
       final sort = tester.getRect(find.byKey(const ValueKey('sort-button')));
       expect(filter.top, greaterThan(title.bottom));
       expect(sort.top, greaterThan(title.bottom));
-      // Filter and Sort are not in the app bar; only Search is.
+      // Filter and Sort are not in the app bar: only the two quiet icons,
+      // jump to a date and Search.
       expect(
         find.descendant(
           of: find.byType(AppBar),
           matching: find.byType(IconButton),
         ),
-        findsOneWidget,
+        findsNWidgets(2),
       );
+      for (final key in ['filter-button', 'sort-button']) {
+        expect(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.byKey(ValueKey(key)),
+          ),
+          findsNothing,
+          reason: key,
+        );
+      }
       expect(
         find.descendant(
           of: find.byType(AppBar),
@@ -723,5 +738,374 @@ void main() {
     expect((room.padding as EdgeInsets).bottom, greaterThan(0));
     expect(tester.takeException(), isNull);
     await disposeEnv(tester, env);
+  });
+
+  group('amount range', () {
+    Future<void> enter(WidgetTester tester, String key, String text) async {
+      await tester.enterText(find.byKey(ValueKey(key)), text);
+      await settle(tester);
+    }
+
+    testWidgets('keeps only the rows between the two amounts', (tester) async {
+      final env = await createEnv(tester);
+      await seed(tester, env); // 10.00, 30.00, 300.00 spent; 200.00 received
+      await pumpHistory(tester, env);
+
+      await openFilterSheet(tester);
+      await enter(tester, 'amount-min', '50');
+      expect(amount('-\$10.00'), findsNothing);
+      expect(amount('-\$30.00'), findsNothing);
+      expect(amount('-\$300.00'), findsOneWidget);
+      expect(amount('+\$200.00'), findsOneWidget);
+
+      await enter(tester, 'amount-max', '250');
+      expect(amount('-\$300.00'), findsNothing);
+      expect(amount('+\$200.00'), findsOneWidget);
+      await closeFilterSheet(tester);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('active-amount')),
+          matching: find.text('\$50.00 to \$250.00'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Filter · 1'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Remove filter'));
+      await settle(tester);
+      expect(amount('-\$10.00'), findsOneWidget, reason: 'back to everything');
+      expect(find.byKey(const ValueKey('active-amount')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('one bound alone reads "At least" or "At most"', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      await enter(tester, 'amount-max', '30,00');
+      await closeFilterSheet(tester);
+      expect(find.text('At most \$30.00'), findsOneWidget);
+      expect(amount('-\$30.00'), findsOneWidget, reason: 'the edge is in');
+      expect(amount('-\$300.00'), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('bad input says so and changes nothing', (tester) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+
+      await enter(tester, 'amount-min', 'abc');
+      expect(find.text('Enter a valid amount'), findsOneWidget);
+      expect(amount('-\$10.00'), findsOneWidget, reason: 'not applied');
+
+      await enter(tester, 'amount-min', '300');
+      expect(find.text('Enter a valid amount'), findsNothing);
+      expect(amount('-\$300.00'), findsOneWidget);
+      expect(amount('+\$200.00'), findsNothing);
+
+      await enter(tester, 'amount-max', '100');
+      expect(find.text('The maximum is below the minimum'), findsOneWidget);
+      expect(
+        amount('-\$300.00'),
+        findsOneWidget,
+        reason: 'still the old range',
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('Clear filters empties the two fields too', (tester) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      await enter(tester, 'amount-min', '50');
+      await tester.tap(find.text('Clear filters'));
+      await settle(tester);
+
+      TextField field(String key) =>
+          tester.widget<TextField>(find.byKey(ValueKey(key)));
+      expect(field('amount-min').controller!.text, isEmpty);
+      expect(amount('-\$10.00'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('jump to a date', () {
+    Future<void> pickDay(WidgetTester tester, String day) async {
+      await tester.tap(find.byKey(const ValueKey('jump-button')));
+      await settle(tester);
+      await tester.tap(find.text(day));
+      await tester.pump();
+      await tester.tap(find.text('OK'));
+      await settle(tester);
+    }
+
+    testWidgets('starts the list from the picked day and goes back', (
+      tester,
+    ) async {
+      final env = await createEnv(tester); // today = Oct 15, 2026
+      await seed(tester, env); // Oct 2, Oct 1, Sep 20
+      await pumpHistory(tester, env);
+      expect(find.text('Fri, Oct 2, 2026'), findsOneWidget);
+
+      await pickDay(tester, '1');
+      expect(find.text('Fri, Oct 2, 2026'), findsNothing);
+      expect(find.text('Thu, Oct 1, 2026'), findsOneWidget);
+      expect(find.text('Sun, Sep 20, 2026'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('active-jump')),
+          matching: find.text('Starting Oct 1, 2026'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Back to the latest'));
+      await settle(tester);
+      expect(find.text('Fri, Oct 2, 2026'), findsOneWidget);
+      expect(find.byKey(const ValueKey('active-jump')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('oldest first starts from the picked day going forward', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      _container(tester)
+          .read(historyFilterProvider.notifier)
+          .setSort(SortOption.oldestFirst);
+      await settle(tester);
+
+      await pickDay(tester, '1');
+      expect(find.text('Sun, Sep 20, 2026'), findsNothing);
+      expect(find.text('Thu, Oct 1, 2026'), findsOneWidget);
+      expect(find.text('Fri, Oct 2, 2026'), findsOneWidget);
+      expect(find.byTooltip('Back to the start'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets(
+      'is offered only while sorted by date, and counts as a filter',
+      (tester) async {
+        final env = await createEnv(tester);
+        await seed(tester, env);
+        await pumpHistory(tester, env);
+        expect(find.byKey(const ValueKey('jump-button')), findsOneWidget);
+
+        await pickDay(tester, '1');
+        expect(find.text('Filter · 1'), findsOneWidget);
+
+        _container(tester)
+            .read(historyFilterProvider.notifier)
+            .setSort(SortOption.highestAmount);
+        await settle(tester);
+        expect(find.byKey(const ValueKey('jump-button')), findsNothing);
+        expect(
+          find.byKey(const ValueKey('active-jump')),
+          findsNothing,
+          reason: 'sorting by amount drops the jump',
+        );
+        await disposeEnv(tester, env);
+      },
+    );
+  });
+
+  group('saved filters', () {
+    Future<void> save(WidgetTester tester, String name) async {
+      final button = find.byKey(const ValueKey('save-filter'));
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await settle(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('saved-filter-name')),
+        name,
+      );
+      await tester.tap(find.byKey(const ValueKey('saved-filter-save')));
+      await settle(tester);
+    }
+
+    Future<void> pickRent(WidgetTester tester, TestEnv env) async {
+      final rent = await categoryId(
+        tester,
+        env,
+        'Rent',
+        TransactionType.expense,
+      );
+      await tester.tap(find.byKey(ValueKey('filter-category-$rent')));
+      await settle(tester);
+    }
+
+    testWidgets('save the filters, clear them, bring them back in one tap', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      expect(find.byKey(const ValueKey('saved-filter-0')), findsNothing);
+      expect(
+        tester
+            .widget<OutlinedButton>(find.byKey(const ValueKey('save-filter')))
+            .onPressed,
+        isNull,
+        reason: 'nothing to save yet',
+      );
+
+      await pickRent(tester, env);
+      await save(tester, 'Rent only');
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('saved-filter-0')),
+          matching: find.text('Rent only'),
+        ),
+        findsOneWidget,
+      );
+      expect(env.prefs.getString('saved_filters'), contains('Rent only'));
+
+      await tester.tap(find.text('Clear filters'));
+      await settle(tester);
+      expect(amount('-\$10.00'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('saved-filter-0')));
+      await settle(tester);
+      expect(find.text('Done'), findsNothing, reason: 'the sheet closed');
+      expect(amount('-\$300.00'), findsOneWidget);
+      expect(amount('-\$10.00'), findsNothing);
+      expect(
+        _container(tester).read(historyFilterProvider).categoryIds,
+        hasLength(1),
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('keeps the amount range, the type and the sort', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      await tester.tap(find.text('Expense'));
+      await settle(tester);
+      await tester.enterText(find.byKey(const ValueKey('amount-min')), '20');
+      await settle(tester);
+      await save(tester, 'Big spending');
+      await tester.tap(find.text('Clear filters'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('saved-filter-0')));
+      await settle(tester);
+
+      final f = _container(tester).read(historyFilterProvider);
+      expect(f.type, TransactionType.expense);
+      expect(f.minCents, 2000);
+      expect(amount('-\$30.00'), findsOneWidget);
+      expect(amount('-\$10.00'), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a repeated name replaces, a blank name is refused', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      await pickRent(tester, env);
+      await save(tester, 'Mine');
+
+      // Blank: the dialog stays open with a message.
+      final button = find.byKey(const ValueKey('save-filter'));
+      await tester.tap(button);
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('saved-filter-save')));
+      await settle(tester);
+      expect(find.text('Enter a name'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('saved-filter-name')),
+        'mine',
+      );
+      await tester.tap(find.byKey(const ValueKey('saved-filter-save')));
+      await settle(tester);
+
+      expect(find.byKey(const ValueKey('saved-filter-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('saved-filter-1')), findsNothing);
+      expect(find.text('mine'), findsOneWidget, reason: 'replaced, not added');
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a full list refuses a new name', (tester) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await _container(tester).read(settingsProvider.notifier).setSavedFilters([
+        for (var i = 0; i < maxSavedFilters; i++) SavedFilter(name: 'F$i'),
+      ]);
+      await openFilterSheet(tester);
+      await pickRent(tester, env);
+
+      final button = find.byKey(const ValueKey('save-filter'));
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await settle(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('saved-filter-name')),
+        'One more',
+      );
+      await tester.tap(find.byKey(const ValueKey('saved-filter-save')));
+      await settle(tester);
+      expect(find.textContaining('up to $maxSavedFilters'), findsOneWidget);
+      expect(find.byKey(const ValueKey('saved-filter-name')), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a saved filter can be deleted', (tester) async {
+      final env = await createEnv(tester);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      await pickRent(tester, env);
+      await save(tester, 'Temp');
+      expect(find.byKey(const ValueKey('saved-filter-0')), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Delete "Temp"'));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('saved-filter-0')), findsNothing);
+      expect(
+        find.textContaining('Keep a set of filters you use often'),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the sheet fits at 200% text on a small phone', (tester) async {
+      final env = await createEnv(
+        tester,
+        prefs: {
+          'saved_filters': jsonEncode([
+            const SavedFilter(name: 'A rather long saved filter name here')
+                .toJson(),
+            const SavedFilter(name: 'Short').toJson(),
+          ]),
+        },
+      );
+      tester.view.physicalSize = const Size(360, 640);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await seed(tester, env);
+      await pumpHistory(tester, env);
+      await openFilterSheet(tester);
+      expect(tester.takeException(), isNull);
+      await disposeEnv(tester, env);
+    });
   });
 }

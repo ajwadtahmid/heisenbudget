@@ -161,7 +161,8 @@ class TransactionRepository {
   }
 
   /// History list. Every filter is optional; an empty [categoryIds] means
-  /// "all categories" and a null [range] means "all time". [search] keeps
+  /// "all categories", a null [range] means "all time", and [minCents] and
+  /// [maxCents] bound the amount (both ends inclusive). [search] keeps
   /// rows that match every word (see `SearchQuery`), and [limit] returns only
   /// the first rows in the chosen order, so a long history is read a page at
   /// a time.
@@ -169,12 +170,21 @@ class TransactionRepository {
     TransactionType? type,
     Set<int> categoryIds = const {},
     DateRange? range,
+    int? minCents,
+    int? maxCents,
     SortOption sort = SortOption.newestFirst,
     String search = '',
     int? limit,
   }) {
     final query = _joined();
-    for (final condition in _filter(type, categoryIds, range, search)) {
+    for (final condition in _filter(
+      type,
+      categoryIds,
+      range,
+      search,
+      minCents,
+      maxCents,
+    )) {
       query.where(condition);
     }
     query.orderBy(_ordering(sort));
@@ -188,6 +198,8 @@ class TransactionRepository {
     TransactionType? type,
     Set<int> categoryIds = const {},
     DateRange? range,
+    int? minCents,
+    int? maxCents,
     String search = '',
   }) {
     final count = _t.id.count();
@@ -200,7 +212,14 @@ class TransactionRepository {
     final query = _db.selectOnly(_t).join([
       innerJoin(_c, _c.id.equalsExp(_t.categoryId)),
     ])..addColumns([count, received, spent]);
-    for (final condition in _filter(type, categoryIds, range, search)) {
+    for (final condition in _filter(
+      type,
+      categoryIds,
+      range,
+      search,
+      minCents,
+      maxCents,
+    )) {
       query.where(condition);
     }
     return query.watchSingle().map(
@@ -217,10 +236,14 @@ class TransactionRepository {
     Set<int> categoryIds,
     DateRange? range,
     String search,
+    int? minCents,
+    int? maxCents,
   ) => [
     if (type != null) _t.type.equalsValue(type),
     if (categoryIds.isNotEmpty) _t.categoryId.isIn(categoryIds),
     if (range != null) _inRange(range),
+    if (minCents != null) _t.amountCents.isBiggerOrEqualValue(minCents),
+    if (maxCents != null) _t.amountCents.isSmallerOrEqualValue(maxCents),
     if (search.trim().isNotEmpty)
       FunctionCallExpression<int>(searchFunctionName, [
         _c.name,

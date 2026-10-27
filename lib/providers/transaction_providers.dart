@@ -37,6 +37,14 @@ final transactionByIdProvider = FutureProvider.autoDispose
     });
 
 /// Categories that have transactions (so History can offer archived ones).
+/// How many transactions there are in all (for the backup reminder).
+final transactionCountProvider = StreamProvider<int>((ref) {
+  return ref
+      .watch(transactionRepositoryProvider)
+      .watchFilteredTotals()
+      .map((totals) => totals.count);
+});
+
 final usedCategoryIdsProvider = StreamProvider<Set<int>>((ref) {
   return ref.watch(transactionRepositoryProvider).watchUsedCategoryIds();
 });

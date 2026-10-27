@@ -25,6 +25,7 @@ class SpectrumBar {
     required this.cents,
     required this.permille,
     this.isRest = false,
+    this.categoryIds = const {},
   });
 
   final String label;
@@ -36,6 +37,9 @@ class SpectrumBar {
 
   /// True for the combined "Rest" bar.
   final bool isRest;
+
+  /// The categories this bar adds up: one, or all of those in "Rest".
+  final Set<int> categoryIds;
 
   /// Whole percent for the bar label: `62%`.
   String get percentText => '${(permille / 10).round()}%';
@@ -66,6 +70,7 @@ List<SpectrumBar> buildSpectrum(
         iconKey: s.icon,
         cents: s.cents,
         permille: share(s.cents),
+        categoryIds: {s.categoryId},
       ),
   ];
 
@@ -78,6 +83,7 @@ List<SpectrumBar> buildSpectrum(
         cents: restCents,
         permille: share(restCents),
         isRest: true,
+        categoryIds: {for (final s in spends.skip(top)) s.categoryId},
       ),
     );
   }
