@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/features/home/home_screen.dart';
-import 'package:heisenbudget/features/trends/trends_screen.dart';
+import 'package:heisenbudget/features/trends/insights_screen.dart';
+import 'package:heisenbudget/providers/navigation_providers.dart';
 import 'package:heisenbudget/providers/trends_providers.dart';
 
 import 'test_helpers.dart';
 
 DateTime d(int y, int m, int day) => DateTime(y, m, day);
+
+int selectedTab(WidgetTester tester) =>
+    tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex;
 
 /// Home, scrolled until [key] is built and on screen (a long list builds only
 /// what is near the screen).
@@ -52,104 +56,12 @@ Future<void> openHome(WidgetTester tester, TestEnv env) async {
 }
 
 Future<void> openTrendsPage(WidgetTester tester, TestEnv env) async {
-  await tester.pumpWidget(wrap(env, const TrendsScreen()));
+  await tester.pumpWidget(wrap(env, const InsightsScreen()));
   await settle(tester);
 }
 
 void main() {
-  group('Home glance', () {
-    testWidgets('says nothing until something has been logged', (tester) async {
-      final env = await createEnv(tester);
-      await openHome(tester, env);
-      expect(find.byKey(const ValueKey('trend-glance')), findsNothing);
-      expect(find.text('TRACE · LAST 6 MONTHS'), findsNothing);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('six small peaks and how the last month compares', (
-      tester,
-    ) async {
-      final env = await withHistory(tester);
-      await openHome(tester, env);
-      await reveal(tester, 'trend-glance');
-
-      expect(find.text('TRACE · LAST 6 MONTHS'), findsOneWidget);
-      for (final month in ['May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']) {
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('trend-glance')),
-            matching: find.text(month),
-          ),
-          findsOneWidget,
-          reason: month,
-        );
-      }
-      // Sep 300.00 against Jul 100.00 and Aug 400.00: 250.00 on average.
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('trend-glance-text')))
-            .data,
-        r'September: spent $300.00, 20% over your 2-month average.',
-      );
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('with Lab flavor off it says Trends', (tester) async {
-      final env = await withHistory(tester, prefs: {'lab_flavor': false});
-      await openHome(tester, env);
-      await reveal(tester, 'trend-glance');
-      expect(find.text('TRENDS · LAST 6 MONTHS'), findsOneWidget);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('one month of history cannot be compared yet', (tester) async {
-      final env = await createEnv(tester);
-      await addExpense(tester, env, 1000, d(2026, 10, 2));
-      await openHome(tester, env);
-      await reveal(tester, 'trend-glance');
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('trend-glance-text')))
-            .data,
-        'A second month of history unlocks the comparison.',
-      );
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('See all and the peaks both open the Trends page', (
-      tester,
-    ) async {
-      final env = await withHistory(tester);
-      await openHome(tester, env);
-      await reveal(tester, 'trend-glance');
-
-      await tester.tap(find.byKey(const ValueKey('glance-see-all')));
-      await settle(tester);
-      expect(find.byType(TrendsScreen), findsOneWidget);
-      await tester.pageBack();
-      await settle(tester);
-      expect(find.byType(TrendsScreen), findsNothing);
-
-      await reveal(tester, 'trend-glance');
-      await tester.tap(find.byKey(const ValueKey('trend-glance')));
-      await settle(tester);
-      expect(find.byType(TrendsScreen), findsOneWidget);
-      await disposeEnv(tester, env);
-    });
-
-    testWidgets('fits at 200% text on a small phone', (tester) async {
-      final env = await withHistory(tester);
-      tester.view.physicalSize = const Size(360, 640);
-      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await openHome(tester, env);
-      await reveal(tester, 'trend-glance');
-      expect(tester.takeException(), isNull);
-      await disposeEnv(tester, env);
-    });
-  });
-
-  group('Trends page', () {
+  group('Insights page', () {
     testWidgets('draws the months, and a month can be focused', (tester) async {
       final env = await withHistory(tester);
       await openTrendsPage(tester, env);
@@ -320,7 +232,7 @@ void main() {
           child: MaterialApp(
             theme: lightTheme(),
             darkTheme: darkTheme(),
-            home: const TrendsScreen(),
+            home: const InsightsScreen(),
           ),
         ),
       );
@@ -373,7 +285,9 @@ void main() {
   });
 
   group('from the spending chart', () {
-    testWidgets('See trend opens Trends on that category', (tester) async {
+    testWidgets('See trend opens the Insights tab on that category', (
+      tester,
+    ) async {
       final env = await withHistory(tester); // October: Rent 25.00, Food 15.00
       await openHome(tester, env);
 
@@ -385,7 +299,8 @@ void main() {
       await tester.tap(trend);
       await settle(tester);
 
-      expect(find.byType(TrendsScreen), findsOneWidget);
+      expect(selectedTab(tester), insightsTab);
+      expect(find.byType(InsightsScreen), findsOneWidget);
       expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
       expect(find.byKey(const ValueKey('trace-chart')), findsNWidgets(2));
       await disposeEnv(tester, env);
@@ -445,6 +360,97 @@ void main() {
       expect(find.byKey(const ValueKey('backup-reminder')), findsNothing);
       expect(find.byType(HomeScreen), findsOneWidget);
       expect(find.text('HEISENBUDGET'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('the Insights tab', () {
+    Future<void> openTab(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Insights'),
+        ),
+      );
+      await settle(tester);
+    }
+
+    testWidgets('is not read until it is opened', (tester) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+      expect(
+        find.byType(InsightsScreen, skipOffstage: false),
+        findsNothing,
+        reason: 'not built at start',
+      );
+      expect(find.byKey(const ValueKey('trace-chart')), findsNothing);
+
+      await openTab(tester);
+      expect(selectedTab(tester), insightsTab);
+      expect(find.byType(InsightsScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('trace-chart')), findsWidgets);
+
+      // And stays built when you leave it.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Home'),
+        ),
+      );
+      await settle(tester);
+      expect(find.byType(InsightsScreen, skipOffstage: false), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('has no back arrow, and a title', (tester) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+      await openTab(tester);
+      expect(find.byType(BackButton), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Insights'),
+        ),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the category choice survives a trip to another tab', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+      await openTab(tester);
+      final chip = find.byWidgetPredicate(
+        (w) =>
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith('trend-category-') &&
+            (w.key! as ValueKey<String>).value != 'trend-category-none' &&
+            (w.key! as ValueKey<String>).value != 'trend-category-hint',
+      );
+      await tester.ensureVisible(chip.first);
+      await tester.tap(chip.first);
+      await settle(tester);
+      expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('History'),
+        ),
+      );
+      await settle(tester);
+      await openTab(tester);
+      expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('Home no longer carries a trend glance', (tester) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+      expect(find.byKey(const ValueKey('trend-glance')), findsNothing);
       await disposeEnv(tester, env);
     });
   });

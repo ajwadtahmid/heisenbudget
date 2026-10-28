@@ -26,11 +26,10 @@ import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
 import 'budget_line.dart';
 import 'coming_up_tile.dart';
-import '../trends/trends_screen.dart';
+import '../trends/insights_screen.dart';
 import 'delta_line.dart';
 import 'home_notice_slot.dart';
 import 'spectrum_chart.dart';
-import 'trend_glance.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -182,9 +181,8 @@ class HomeScreen extends ConsumerWidget {
               emptyText: copy.emptyChart,
               onOpen: (bar) => _openHistoryFor(ref, bar),
               onOpenTrend: (bar) =>
-                  openTrends(context, categoryId: bar.categoryIds.single),
+                  openInsights(ref, categoryId: bar.categoryIds.single),
             ),
-            const TrendGlance(),
             if (comingUp.isNotEmpty) ...[
               const SizedBox(height: Gap.xl),
               const SectionLabel('Coming up'),

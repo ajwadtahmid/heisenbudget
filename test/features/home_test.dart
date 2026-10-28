@@ -5,6 +5,7 @@ import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/domain/period.dart';
 import 'package:heisenbudget/domain/week_mode.dart';
 import 'package:heisenbudget/features/home/home_screen.dart';
+import 'package:heisenbudget/providers/navigation_providers.dart';
 import 'package:heisenbudget/providers/period_providers.dart';
 import 'package:heisenbudget/providers/settings_providers.dart';
 
@@ -271,7 +272,7 @@ void main() {
     await tester.tap(find.text('See all'));
     await settle(tester);
     final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
-    expect(bar.selectedIndex, 2);
+    expect(bar.selectedIndex, historyTab);
     await disposeEnv(tester, env);
   });
 

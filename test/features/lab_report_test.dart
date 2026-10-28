@@ -6,7 +6,7 @@ import 'package:heisenbudget/data/repositories/budget_repository.dart';
 import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/trends/lab_report_screen.dart';
-import 'package:heisenbudget/features/trends/trends_screen.dart';
+import 'package:heisenbudget/features/trends/insights_screen.dart';
 import 'package:heisenbudget/features/transaction_form/transaction_form_screen.dart';
 import 'package:heisenbudget/providers/lab_report_providers.dart';
 
@@ -404,12 +404,12 @@ void main() {
     });
   });
 
-  group('Reports under Trends', () {
+  group('Reports on the Insights tab', () {
     testWidgets('lists the finished months with something in them', (
       tester,
     ) async {
       final env = await withHistory(tester);
-      await tester.pumpWidget(wrap(env, const TrendsScreen()));
+      await tester.pumpWidget(wrap(env, const InsightsScreen()));
       await settle(tester);
 
       final sep = find.byKey(const ValueKey('report-month-2026-09'));
@@ -435,9 +435,41 @@ void main() {
     testWidgets('no list before any month is finished', (tester) async {
       final env = await createEnv(tester);
       await addExpense(tester, env, 500, d(2026, 10, 2));
-      await tester.pumpWidget(wrap(env, const TrendsScreen()));
+      await tester.pumpWidget(wrap(env, const InsightsScreen()));
       await settle(tester);
       expect(find.text('LAB REPORTS'), findsNothing);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('the report card on the Insights tab', () {
+    testWidgets('is at the top there too, and one dismissal clears both', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+      expect(card(), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Insights'),
+        ),
+      );
+      await settle(tester);
+      expect(card(), findsOneWidget, reason: 'the Home copy is offstage');
+      await tester.tap(find.byKey(const ValueKey('report-dismiss')));
+      await settle(tester);
+      expect(card(), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text('Home'),
+        ),
+      );
+      await settle(tester);
+      expect(card(), findsNothing);
       await disposeEnv(tester, env);
     });
   });

@@ -44,6 +44,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   homeNoticeProvider,
   reportNoticeProvider,
   trendTotalsProvider(6),
+  trendCategoryProvider,
   copyProvider,
 ];
 

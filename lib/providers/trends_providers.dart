@@ -26,6 +26,19 @@ final transactionChangesProvider = StreamProvider<int>(
   (ref) => ref.watch(transactionRepositoryProvider).watchChangeCount(),
 );
 
+/// The category the Insights tab shows month by month (null: none picked). Set
+/// by its chips and by the spending chart's "See trend".
+final trendCategoryProvider = NotifierProvider<TrendCategory, int?>(
+  TrendCategory.new,
+);
+
+class TrendCategory extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void set(int? categoryId) => state = categoryId;
+}
+
 /// Received and Spent for each of the last [count] budget months, oldest
 /// first, the month under way last.
 final trendTotalsProvider = FutureProvider.family<List<MonthTotals>, int>((

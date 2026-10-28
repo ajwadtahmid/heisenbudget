@@ -9,6 +9,7 @@ import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
+import 'package:heisenbudget/providers/navigation_providers.dart';
 
 import 'test_helpers.dart';
 
@@ -1184,7 +1185,7 @@ void main() {
           tester
               .widget<NavigationBar>(find.byType(NavigationBar))
               .selectedIndex,
-          2,
+          historyTab,
         );
         expect(
           find.byKey(const ValueKey('budget-filter-button')),
@@ -1204,7 +1205,7 @@ void main() {
           tester
               .widget<NavigationBar>(find.byType(NavigationBar))
               .selectedIndex,
-          2,
+          historyTab,
         );
         expect(
           find.byKey(const ValueKey('budget-filter-button')),

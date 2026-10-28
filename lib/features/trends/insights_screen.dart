@@ -13,38 +13,36 @@ import '../../domain/trends.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/lab_report_providers.dart';
 import '../../providers/settings_providers.dart';
+import '../../providers/navigation_providers.dart';
 import '../../providers/trends_providers.dart';
+import '../home/report_notice_card.dart';
 import '../shared/empty_state.dart';
 import '../shared/fact_row.dart';
 import 'lab_report_screen.dart';
 import 'mover_row.dart';
 import 'trace_chart.dart';
 
-/// Opens the Trends page over the app, on one category when [categoryId] is
-/// given.
-Future<void> openTrends(BuildContext context, {int? categoryId}) {
-  return Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => TrendsScreen(initialCategoryId: categoryId),
-    ),
-  );
+/// Switches to the Insights tab, on one category when [categoryId] is given
+/// (the spending chart's "See trend").
+void openInsights(WidgetRef ref, {int? categoryId}) {
+  if (categoryId != null) {
+    ref.read(trendCategoryProvider.notifier).set(categoryId);
+  }
+  ref.read(shellTabProvider.notifier).select(insightsTab);
 }
 
-/// Months side by side: money in and out, one category over time, what moved
-/// most, and how this month has run. [initialCategoryId] opens it on one
-/// category (from the spending chart's "See trend").
-class TrendsScreen extends ConsumerStatefulWidget {
-  const TrendsScreen({super.key, this.initialCategoryId});
-
-  final int? initialCategoryId;
+/// The Insights tab: the month-end report when one is due, then months side by
+/// side (money in and out, one category over time, what moved most, how this
+/// month has run) and the earlier reports.
+class InsightsScreen extends ConsumerStatefulWidget {
+  const InsightsScreen({super.key});
 
   @override
-  ConsumerState<TrendsScreen> createState() => _TrendsScreenState();
+  ConsumerState<InsightsScreen> createState() => _InsightsScreenState();
 }
 
-class _TrendsScreenState extends ConsumerState<TrendsScreen> {
+class _InsightsScreenState extends ConsumerState<InsightsScreen> {
   bool _asList = false;
-  late int? _categoryId = widget.initialCategoryId;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +71,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
       body = ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         children: [
+          const ReportNoticeCard(),
           Wrap(
             spacing: Gap.m,
             children: [
@@ -140,7 +139,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(copy.trendsTitle)),
+      appBar: AppBar(title: const Text('Insights')),
       body: body,
     );
   }
@@ -159,7 +158,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
     final shown = <({int id, String name, String icon})>[
       for (final h in choices) (id: h.categoryId, name: h.name, icon: h.icon),
     ];
-    final wanted = _categoryId;
+    final wanted = ref.watch(trendCategoryProvider);
     if (wanted != null && shown.every((s) => s.id != wanted)) {
       final row = all.where((r) => r.id == wanted).firstOrNull;
       if (row != null) shown.add((id: row.id, name: row.name, icon: row.icon));
@@ -203,7 +202,8 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
               showCheckmark: false,
               label: const Text('None'),
               selected: wanted == null,
-              onSelected: (_) => setState(() => _categoryId = null),
+              onSelected: (_) =>
+                  ref.read(trendCategoryProvider.notifier).set(null),
             ),
             for (final s in shown)
               ChoiceChip(
@@ -212,7 +212,8 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
                 avatar: Icon(categoryIconFor(s.icon).icon, size: 18),
                 label: Text(s.name),
                 selected: wanted == s.id,
-                onSelected: (_) => setState(() => _categoryId = s.id),
+                onSelected: (_) =>
+                    ref.read(trendCategoryProvider.notifier).set(s.id),
               ),
           ],
         ),

@@ -8,6 +8,7 @@ import '../favorites/quick_log.dart';
 import '../budgets/budgets_screen.dart';
 import '../history/history_screen.dart';
 import '../home/home_screen.dart';
+import '../trends/insights_screen.dart';
 import '../settings/settings_screen.dart';
 import '../transaction_form/transaction_draft.dart';
 import '../transaction_form/transaction_form_screen.dart';
@@ -25,6 +26,18 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  /// In the order of the bottom bar and of the tab constants in
+  /// `navigation_providers.dart`.
+  static const _tabs = <Widget>[
+    HomeScreen(),
+    BudgetsScreen(),
+    InsightsScreen(),
+    HistoryScreen(),
+    SettingsScreen(),
+  ];
+
+  final _opened = <int>{homeTab};
+
   @override
   void initState() {
     super.initState();
@@ -66,14 +79,15 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (request != null) _openRequested();
     });
     final index = ref.watch(shellTabProvider);
+    // A tab is built when it is first opened, then kept (so each keeps its own
+    // state). Insights reads months of figures: it should not do that at start.
+    _opened.add(index);
     return Scaffold(
       body: IndexedStack(
         index: index,
-        children: const [
-          HomeScreen(),
-          BudgetsScreen(),
-          HistoryScreen(),
-          SettingsScreen(),
+        children: [
+          for (var i = 0; i < _tabs.length; i++)
+            _opened.contains(i) ? _tabs[i] : const SizedBox.shrink(),
         ],
       ),
       bottomNavigationBar: Column(
@@ -96,6 +110,11 @@ class _AppShellState extends ConsumerState<AppShell> {
                 selectedIcon: Icon(Icons.account_balance_wallet),
 
                 label: 'Budgets',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.insights_outlined),
+                selectedIcon: Icon(Icons.insights),
+                label: 'Insights',
               ),
               NavigationDestination(
                 icon: Icon(Icons.receipt_long_outlined),

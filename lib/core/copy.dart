@@ -26,9 +26,6 @@ class Copy {
 
   String get chartTitle => lab ? 'Spectrum' : 'Spending';
 
-  /// The page of months side by side.
-  String get trendsTitle => lab ? 'Trace' : 'Trends';
-
   /// The trace has nothing to draw.
   String get emptyTrends => lab
       ? 'Flat line. Log a few transactions to see a trace.'
