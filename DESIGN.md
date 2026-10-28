@@ -1,6 +1,6 @@
 ---
 name: Heisenbudget
-description: A calm bench instrument for personal money. Ruled readouts, tick scales, one spectrum chart, hairlines instead of shadows.
+description: A calm bench instrument for personal money. Ruled readouts, tick scales, two charts (a spectrum and a trace), hairlines instead of shadows.
 colors:
   ink-ground: "#070A09"
   ink-panel: "#0D1210"
@@ -170,7 +170,7 @@ components:
 
 **Creative North Star: "The Bench Instrument"**
 
-Money is a measurement. The app reads like a small, calm piece of lab equipment: ruled readouts, a tick scale for the period, one spectrum chart, and nothing that shouts. It is dark first. The default Ink palette is a near-black ground with a faint green cast, and the Bench palette is its light sibling. Depth comes from tonal panels one or two steps off the ground and from 1dp hairlines. There are no shadows anywhere in the build.
+Money is a measurement. The app reads like a small, calm piece of lab equipment: ruled readouts, a tick scale for the period, a spectrum chart and a trace of the months, and nothing that shouts. It is dark first. The default Ink palette is a near-black ground with a faint green cast, and the Bench palette is its light sibling. Depth comes from tonal panels one or two steps off the ground and from 1dp hairlines. There are no shadows anywhere in the build.
 
 Colour carries meaning, so it is rationed. Two fixed channels, Received (green) and Spent (amber), mark money events and never change with the accent. One switchable accent (default Assay teal) colours chrome only: the add key, selected states, switches, the today tick, chart focus, caret. Numbers are always Geist Mono with tabular figures so digits never shift. Layout is left aligned, dense but unhurried, built for one-handed sessions in dim light.
 
@@ -181,7 +181,7 @@ An optional Lab flavor layer (on by default) swaps a few strings for instrument 
 - Two money channels (Received, Spent) independent of five selectable accents.
 - Geist Mono tabular for every number; UI text in a user-chosen face.
 - Small radii (8 to 20dp), nothing is a pill; the add key is a 10dp rounded rectangle.
-- Instrument furniture is local: graticule only inside the chart, tick ruler only on the period control, dotted leaders only on Home's three summary rows.
+- Instrument furniture is local: graticule only inside the two charts, tick ruler only on the period control, dotted leaders only on Home's three summary rows.
 
 ## Colors
 
@@ -278,8 +278,19 @@ The balance counts to its new value in 350ms (ease-out cubic). Screen readers he
 ### Spectrum chart
 Top categories (up to five plus a Rest bar in the render) as 24dp amber peaks over a graticule of four hairlines and a stronger baseline, 152dp tall; percentage in 12sp mono above each peak, icon and name below. Tap focuses one peak: others dim to 32% and a readout line shows name, share and amount. Each peak is a labelled button. Empty state: a flat baseline with one line of text. Peaks rise left to right over 700ms. Chart labels are capped at 130% text scale.
 
+A focused peak also offers **See transactions** (History on that category and the chart's period; for the Rest peak, all the categories folded into it) and, for a single category, **See trend**. Both are 48dp text buttons under the readout.
+
+### Trace chart
+Months side by side, same vocabulary as the spectrum: peaks with 3dp top corners over the graticule (four hairlines and a baseline), 152dp tall, month name in 12sp under each peak (it shrinks, never wraps). Money in and out: a pair per month, Received (green, 9dp) beside Spent (amber, 9dp); a single category: one amber peak (18dp). The month still going is drawn at about 60% so a part-month is never read as a whole one. Tap focuses a month: the others dim to 32% and a readout under the chart gives its title in caps ("SEPTEMBER 2026", "· SO FAR" while it runs), then Received, Spent, Net and the share kept as labelled mono figures that wrap at large text. Peaks rise left to right over 700ms (skipped with reduce-motion). Every month is a labelled button ("September 2026, received $2,000.00, spent $300.00"). **Every trace has a "Show as a list" toggle** that swaps the chart for the same months as text, newest first; a trace with nothing logged is the flat baseline and one line of words. Chart labels are capped at 130% text scale.
+
 ### Home notice slot
 The top of Home holds at most one notice card, so cards never stack: the backup reminder today, and the month-end report later (it will take priority). A card is a panel (panel fill, 1dp hairline, panel radius) with a title, one or two lines, and 48dp text buttons in an OverflowBar. Nothing is drawn when there is no notice.
+
+### Home glances
+A short look at something that has a page of its own: a section label (with "See all" at the right, 48dp), then a few lines. The glance never grows: detail lives on the page. The **trend glance** sits after the spectrum chart: label "TRACE · LAST 6 MONTHS" ("TRENDS" with Lab flavor off), six small amber peaks (16dp wide, 48dp room, the month under way lighter) with the month name under each, and one dim sentence ("September: spent $300.00, 20% over your 2-month average."). It is absent until something has been logged. Glances ignore the period selector and say so in their label.
+
+### Trends page
+Pushed over the app (not a tab) from the glance, or from the chart's **See trend**. A 6 or 12 months choice (chips), then blocks under section labels: *Money in and out* (trace chart and its list toggle), the share kept by month (plain rows, no chart), *A category over time* (chips for the five biggest, plus the one asked for, and a trace for it; "None" shows a hint, not a copy of the first chart), *What moved* (the last finished month against the three before: up to three rises and three falls with arrow, sign and amount, never colour alone) and *This month so far* (biggest expense, busiest day, average a day, days with no spending, longest run). Rows are 48dp minimum with a hairline; values shrink with the label. Months are budget months (the "month starts on" setting), the same as budgets. With only one month of history it says so instead of showing empty comparisons.
 
 ### Transaction row
 Category tile at left, then the first line in 16sp medium: the category name, or "Title · Category" when the transaction has a title (the title is never a replacement for the category). Under it the date and note in dim (Home shows the date), amount in 16sp mono at right coloured by channel with explicit sign, closed by a hairline. Archived categories are marked "(archived)" and drawn in faint.
@@ -359,6 +370,6 @@ One switch, on by default, only changes strings (lib/core/copy.dart): chart titl
 - **Don't** add shadows, glow, surface tint, pill buttons, stat cards or donut charts.
 - **Don't** offer amber as an accent or let any accent land near the Received green.
 - **Don't** use the faint grey for words.
-- **Don't** spread leaders, graticule or tick ruler to other screens: leaders on Home's summary rows, graticule in the chart, ruler on the period control.
+- **Don't** spread leaders, graticule or tick ruler to other screens: leaders on Home's summary rows, graticule inside the charts, ruler on the period control.
 - **Don't** use any show logo, show lettering, or hat-and-glasses silhouette, quote the show, or hard-code a "99.1%" purity figure.
 - **Don't** make the Lab flavor change layout or colour.

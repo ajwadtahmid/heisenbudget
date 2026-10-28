@@ -9,6 +9,7 @@ import '../../domain/iso_date.dart';
 import '../../domain/sort_option.dart';
 import '../../domain/summary.dart';
 import '../../domain/transaction_type.dart';
+import '../../domain/trends.dart' show CategoryHistory;
 import '../database/app_database.dart';
 import '../database/sql_functions.dart';
 
@@ -357,6 +358,120 @@ class TransactionRepository {
       out.addAll([for (final c in columns) row.read(c) ?? 0]);
     }
     return out;
+  }
+
+  /// What came in and what went out in each of [ranges], in the same order.
+  /// Many months in one pass over the date index, not one query per month.
+  Future<List<Summary>> summariesForRanges(List<DateRange> ranges) async {
+    final out = <Summary>[];
+    // Two sums per range; keep a statement well under SQLite's column limit.
+    const perQuery = _spendKeysPerQuery ~/ 2;
+    for (var i = 0; i < ranges.length; i += perQuery) {
+      final chunk = ranges.sublist(
+        i,
+        i + perQuery > ranges.length ? ranges.length : i + perQuery,
+      );
+      final received = [
+        for (final r in chunk)
+          _t.amountCents.sum(
+            filter: _t.type.equalsValue(TransactionType.income) & _inRange(r),
+          ),
+      ];
+      final spent = [
+        for (final r in chunk)
+          _t.amountCents.sum(
+            filter: _t.type.equalsValue(TransactionType.expense) & _inRange(r),
+          ),
+      ];
+      final row =
+          await (_db.selectOnly(_t)
+                ..addColumns([...received, ...spent])
+                ..where(_inRange(_spanOf(chunk))))
+              .getSingle();
+      for (var k = 0; k < chunk.length; k++) {
+        out.add(
+          Summary(
+            receivedCents: row.read(received[k]) ?? 0,
+            spentCents: row.read(spent[k]) ?? 0,
+          ),
+        );
+      }
+    }
+    return out;
+  }
+
+  /// What each category spent in each of [ranges] (a handful, newest first as
+  /// given). Only categories with spending in at least one of them.
+  Future<List<CategoryHistory>> categoryHistoryForRanges(
+    List<DateRange> ranges,
+  ) async {
+    if (ranges.isEmpty) return const [];
+    final sums = [
+      for (final r in ranges) _t.amountCents.sum(filter: _inRange(r)),
+    ];
+    final query =
+        _db.select(_t).join([innerJoin(_c, _c.id.equalsExp(_t.categoryId))])
+          ..addColumns(sums)
+          ..where(
+            _t.type.equalsValue(TransactionType.expense) &
+                _inRange(_spanOf(ranges)),
+          )
+          ..groupBy([_c.id]);
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        CategoryHistory(
+          categoryId: row.readTable(_c).id,
+          name: row.readTable(_c).name,
+          icon: row.readTable(_c).icon,
+          spent: [for (final s in sums) row.read(s) ?? 0],
+        ),
+    ];
+  }
+
+  /// The biggest expenses inside [range], biggest first (newest first among
+  /// equal amounts).
+  Future<List<TransactionWithCategory>> topExpenses(
+    DateRange range, {
+    int limit = 5,
+  }) async {
+    final query = _joined()
+      ..where(_t.type.equalsValue(TransactionType.expense) & _inRange(range))
+      ..orderBy([
+        OrderingTerm.desc(_t.amountCents),
+        OrderingTerm.desc(_t.date),
+        OrderingTerm.desc(_t.id),
+      ])
+      ..limit(limit);
+    return [for (final row in await query.get()) _toModel(row)];
+  }
+
+  /// What was spent on each day of [range] (days with no expense are left
+  /// out). Keys are date-only.
+  Future<Map<DateTime, int>> expenseByDay(DateRange range) async {
+    final total = _t.amountCents.sum();
+    final rows =
+        await (_db.selectOnly(_t)
+              ..addColumns([_t.date, total])
+              ..where(
+                _t.type.equalsValue(TransactionType.expense) & _inRange(range),
+              )
+              ..groupBy([_t.date]))
+            .get();
+    return {
+      for (final row in rows) fromIsoDate(row.read(_t.date)!): row.read(total)!,
+    };
+  }
+
+  /// The first to the last day covered by [ranges].
+  static DateRange _spanOf(List<DateRange> ranges) {
+    var from = ranges.first.start;
+    var to = ranges.first.end;
+    for (final r in ranges) {
+      if (r.start.isBefore(from)) from = r.start;
+      if (r.end.isAfter(to)) to = r.end;
+    }
+    return DateRange(from, to);
   }
 
   /// [spentForKeys], kept up to date as transactions change: one stream for

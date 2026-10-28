@@ -33,6 +33,14 @@ numbers read the same whatever language the phone is set to.
   ruler showing how far through the period you are, and a spectrum chart of
   spending by category (tap a peak for the exact share, then "See
   transactions" opens History on that category and period).
+- Trends (opened from Home, under the spending chart, or from a chart peak's
+  "See trend"): the last 6 or 12 months of money in and out as peaks, with a
+  "Show as a list" view, the share kept each month, one category over time,
+  what moved most against the months before, and how this month has run (biggest
+  expense, busiest day, days with no spending). Months follow the "month starts
+  on" setting, like budgets. Home shows a small version: six peaks and one
+  sentence on how the last month compares. Home's top holds one notice card at
+  a time (today the backup reminder).
 - Appearance settings: light, dark or follow the phone; five accent colours;
   four text fonts (Geist, Inter, Atkinson Hyperlegible, System; numbers always
   Geist Mono); and a Lab flavor switch for the playful wording.

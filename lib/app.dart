@@ -20,6 +20,7 @@ import 'providers/period_providers.dart';
 import 'providers/quick_add_providers.dart';
 import 'providers/recurring_providers.dart';
 import 'providers/settings_providers.dart';
+import 'providers/trends_providers.dart';
 import 'providers/transaction_providers.dart';
 
 /// What Home and History show. They are listened to here, above the
@@ -40,6 +41,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   budgetOverrunHintsProvider,
   backupReminderProvider,
   homeNoticeProvider,
+  trendTotalsProvider(6),
   copyProvider,
 ];
 

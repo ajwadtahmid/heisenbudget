@@ -19,6 +19,7 @@ class SpectrumChart extends StatefulWidget {
     required this.emptyText,
     this.height = 152,
     this.onOpen,
+    this.onOpenTrend,
   });
 
   final List<SpectrumBar> bars;
@@ -30,6 +31,10 @@ class SpectrumChart extends StatefulWidget {
 
   /// Called with the focused bar when the person asks to see its transactions.
   final ValueChanged<SpectrumBar>? onOpen;
+
+  /// Called with the focused bar when the person asks for its trend over the
+  /// months. Offered only for a single category, not for "Rest".
+  final ValueChanged<SpectrumBar>? onOpenTrend;
 
   @override
   State<SpectrumChart> createState() => _SpectrumChartState();
@@ -66,7 +71,7 @@ class _SpectrumChartState extends State<SpectrumChart> {
             Positioned.fill(
               top: _topInset,
               bottom: _bottomInset,
-              child: CustomPaint(painter: _GraticulePainter(c, flat: true)),
+              child: CustomPaint(painter: GraticulePainter(c, flat: true)),
             ),
             Text(
               widget.emptyText,
@@ -98,7 +103,7 @@ class _SpectrumChartState extends State<SpectrumChart> {
                 Positioned.fill(
                   top: _topInset,
                   bottom: _bottomInset,
-                  child: CustomPaint(painter: _GraticulePainter(c)),
+                  child: CustomPaint(painter: GraticulePainter(c)),
                 ),
                 TweenAnimationBuilder<double>(
                   key: ValueKey(signature),
@@ -140,6 +145,7 @@ class _SpectrumChartState extends State<SpectrumChart> {
           bar: _focus == null ? null : bars[_focus!],
           symbol: widget.symbol,
           onOpen: widget.onOpen,
+          onOpenTrend: widget.onOpenTrend,
         ),
       ],
     );
@@ -262,11 +268,13 @@ class _Readout extends StatelessWidget {
     required this.bar,
     required this.symbol,
     this.onOpen,
+    this.onOpenTrend,
   });
 
   final SpectrumBar? bar;
   final String symbol;
   final ValueChanged<SpectrumBar>? onOpen;
+  final ValueChanged<SpectrumBar>? onOpenTrend;
 
   @override
   Widget build(BuildContext context) {
@@ -277,6 +285,7 @@ class _Readout extends StatelessWidget {
       return Text('Tap a peak for detail', style: theme.textTheme.bodySmall);
     }
     final open = onOpen;
+    final trend = onOpenTrend;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -303,24 +312,40 @@ class _Readout extends StatelessWidget {
             ),
           ],
         ),
-        if (open != null && focused.categoryIds.isNotEmpty)
-          TextButton.icon(
-            key: const ValueKey('spectrum-open'),
-            onPressed: () => open(focused),
-            icon: const Icon(Icons.receipt_long_outlined, size: 18),
-            label: Text(
-              focused.isRest ? 'See these transactions' : 'See transactions',
-            ),
+        if ((open != null || trend != null) && focused.categoryIds.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            children: [
+              if (open != null)
+                TextButton.icon(
+                  key: const ValueKey('spectrum-open'),
+                  onPressed: () => open(focused),
+                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                  label: Text(
+                    focused.isRest
+                        ? 'See these transactions'
+                        : 'See transactions',
+                  ),
+                ),
+              if (trend != null && !focused.isRest)
+                TextButton.icon(
+                  key: const ValueKey('spectrum-trend'),
+                  onPressed: () => trend(focused),
+                  icon: const Icon(Icons.show_chart, size: 18),
+                  label: const Text('See trend'),
+                ),
+            ],
           ),
       ],
     );
   }
 }
 
-/// Four hairlines and a stronger baseline: the chart's graticule. With
-/// [flat] only the baseline is drawn (the "flat line" empty state).
-class _GraticulePainter extends CustomPainter {
-  const _GraticulePainter(this.colors, {this.flat = false});
+/// Four hairlines and a stronger baseline: the chart's graticule, shared by
+/// the charts (it is never drawn outside one). With [flat] only the baseline
+/// is drawn (the "flat line" empty state).
+class GraticulePainter extends CustomPainter {
+  const GraticulePainter(this.colors, {this.flat = false});
 
   final AppColors colors;
   final bool flat;
@@ -347,6 +372,6 @@ class _GraticulePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GraticulePainter old) =>
+  bool shouldRepaint(GraticulePainter old) =>
       old.colors != colors || old.flat != flat;
 }

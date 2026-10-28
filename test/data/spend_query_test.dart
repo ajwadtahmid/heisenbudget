@@ -7,6 +7,7 @@ import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/repositories/settings_repository.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/date_range.dart';
+import 'package:heisenbudget/domain/iso_date.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/providers/category_providers.dart';
 import 'package:heisenbudget/providers/database_providers.dart';
@@ -291,6 +292,200 @@ void main() {
         await settle();
         expect(prefs.getBool('onboarding_done'), isTrue);
       });
+    });
+  });
+
+  group('queries behind Trends', () {
+    final oct = DateRange(d(2026, 10, 1), d(2026, 10, 31));
+    final sep = DateRange(d(2026, 9, 1), d(2026, 9, 30));
+    final aug = DateRange(d(2026, 8, 1), d(2026, 8, 31));
+
+    Future<void> seedThreeMonths() async {
+      await add(100000, d(2026, 8, 1), type: TransactionType.income);
+      await add(3000, d(2026, 8, 31));
+      await add(120000, d(2026, 9, 5), type: TransactionType.income);
+      await add(4000, d(2026, 9, 5), category: 'Rent');
+      await add(500, d(2026, 9, 30));
+      await add(5000, d(2026, 10, 1), type: TransactionType.income);
+      await add(700, d(2026, 10, 31), category: 'Rent');
+    }
+
+    group('summariesForRanges', () {
+      test(
+        'what came in and went out in each range, in the order given',
+        () async {
+          await seedThreeMonths();
+          final out = await txs.summariesForRanges([oct, aug, sep]);
+          expect(
+            [for (final s in out) (s.receivedCents, s.spentCents)],
+            [(5000, 700), (100000, 3000), (120000, 4500)],
+          );
+        },
+      );
+
+      test('first and last days are inside, the days around are not', () async {
+        await seedThreeMonths();
+        final out = await txs.summariesForRanges([
+          DateRange(d(2026, 8, 31), d(2026, 9, 5)),
+          DateRange(d(2026, 9, 6), d(2026, 9, 29)),
+        ]);
+        expect(out[0].spentCents, 3000 + 4000);
+        expect(out[1].spentCents, 0);
+        expect(out[1].receivedCents, 0);
+      });
+
+      test('ranges may overlap, and an empty one is zeros', () async {
+        await seedThreeMonths();
+        final out = await txs.summariesForRanges([
+          DateRange(d(2026, 8, 1), d(2026, 10, 31)),
+          oct,
+          DateRange(d(2030, 1, 1), d(2030, 1, 31)),
+        ]);
+        expect(out[0].spentCents, 3000 + 4500 + 700);
+        expect(out[1].spentCents, 700);
+        expect(out[2].netCents, 0);
+      });
+
+      test('no ranges is no work', () async {
+        expect(await txs.summariesForRanges(const []), isEmpty);
+      });
+
+      test(
+        'more ranges than one statement holds still match one by one',
+        () async {
+          await seedThreeMonths();
+          final ranges = [for (var i = 0; i < 600; i++) i.isEven ? oct : sep];
+          final out = await txs.summariesForRanges(ranges);
+          expect(out, hasLength(600));
+          expect(out[0].spentCents, 700);
+          expect(out[1].spentCents, 4500);
+          expect(out[599].spentCents, 4500);
+          expect(out[300].receivedCents, 5000);
+        },
+      );
+    });
+
+    group('categoryHistoryForRanges', () {
+      test('what each category spent in each range, in range order', () async {
+        await seedThreeMonths();
+        final out = await txs.categoryHistoryForRanges([oct, sep, aug]);
+        final byName = {for (final h in out) h.name: h};
+        expect(byName['Rent']!.spent, [700, 4000, 0]);
+        expect(byName['Food']!.spent, [0, 500, 3000]);
+        expect(byName['Rent']!.categoryId, ids['Rent']);
+        expect(byName['Rent']!.icon, isNotEmpty);
+      });
+
+      test(
+        'only categories that spent something, and income is ignored',
+        () async {
+          await seedThreeMonths();
+          final out = await txs.categoryHistoryForRanges([oct]);
+          expect(out.map((h) => h.name), ['Rent']);
+          expect(
+            await txs.categoryHistoryForRanges([
+              DateRange(d(2030, 1, 1), d(2030, 1, 2)),
+            ]),
+            isEmpty,
+          );
+          expect(await txs.categoryHistoryForRanges(const []), isEmpty);
+        },
+      );
+    });
+
+    group('topExpenses', () {
+      test('the biggest first, income left out, at most the limit', () async {
+        await add(900, d(2026, 10, 2));
+        await add(5000, d(2026, 10, 3), category: 'Rent');
+        await add(300, d(2026, 10, 4));
+        await add(999999, d(2026, 10, 5), type: TransactionType.income);
+        final top = await txs.topExpenses(oct, limit: 2);
+        expect(top.map((t) => t.transaction.amountCents), [5000, 900]);
+        expect(top.first.category.name, 'Rent');
+        expect((await txs.topExpenses(oct)).length, 3);
+      });
+
+      test('equal amounts: the newer one comes first', () async {
+        await add(700, d(2026, 10, 2));
+        await add(700, d(2026, 10, 9));
+        final top = await txs.topExpenses(oct);
+        expect(top.map((t) => t.transaction.date), [
+          '2026-10-09',
+          '2026-10-02',
+        ]);
+      });
+
+      test('only inside the range, and none is none', () async {
+        await add(8000, d(2026, 9, 30));
+        expect(await txs.topExpenses(oct), isEmpty);
+      });
+    });
+
+    group('expenseByDay', () {
+      test('adds up each day, leaving out days with nothing', () async {
+        await add(300, d(2026, 10, 2));
+        await add(200, d(2026, 10, 2), category: 'Rent');
+        await add(50, d(2026, 10, 9));
+        await add(7777, d(2026, 10, 9), type: TransactionType.income);
+        await add(999, d(2026, 11, 1));
+        final days = await txs.expenseByDay(oct);
+        expect(days, {d(2026, 10, 2): 500, d(2026, 10, 9): 50});
+      });
+
+      test('its keys are date-only, so a lookup by day works', () async {
+        await add(10, d(2026, 10, 31));
+        final days = await txs.expenseByDay(oct);
+        expect(days[DateTime(2026, 10, 31)], 10);
+      });
+    });
+
+    test('a long history is still quick to read', () async {
+      // Four years of about 2,100 transactions a month (over 100,000 rows),
+      // written in one batch.
+      final rows = <TransactionsCompanion>[];
+      var n = 0;
+      for (var m = 0; m < 48; m++) {
+        for (var i = 0; i < 2100; i++) {
+          final date = DateTime(2023, 1 + m, 1 + (i % 28));
+          final income = i % 10 == 0;
+          rows.add(
+            TransactionsCompanion.insert(
+              amountCents: 100 + (n++ % 900),
+              type: income ? TransactionType.income : TransactionType.expense,
+              date: toIsoDate(date),
+              categoryId: income ? salary : ids['Food']!,
+              createdAt: date,
+              updatedAt: date,
+            ),
+          );
+        }
+      }
+      await db.batch((b) => b.insertAll(db.transactions, rows));
+      final count = await db
+          .customSelect('SELECT COUNT(*) AS c FROM transactions')
+          .getSingle();
+      expect(count.read<int>('c'), greaterThan(100000));
+
+      final months = [
+        for (var m = 0; m < 12; m++)
+          DateRange(DateTime(2026, 1 + m, 1), DateTime(2026, 2 + m, 0)),
+      ];
+      final watch = Stopwatch()..start();
+      final totals = await txs.summariesForRanges(months);
+      final history = await txs.categoryHistoryForRanges(
+        months.take(4).toList(),
+      );
+      final top = await txs.topExpenses(months.last);
+      final days = await txs.expenseByDay(months.last);
+      watch.stop();
+
+      expect(totals, hasLength(12));
+      expect(totals.every((s) => s.spentCents > 0), isTrue);
+      expect(history, isNotEmpty);
+      expect(top, hasLength(5));
+      expect(days, isNotEmpty);
+      // Generous: it is a few milliseconds on a real phone-sized database.
+      expect(watch.elapsedMilliseconds, lessThan(2000));
     });
   });
 }

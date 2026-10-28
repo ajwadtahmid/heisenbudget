@@ -26,6 +26,17 @@ class Copy {
 
   String get chartTitle => lab ? 'Spectrum' : 'Spending';
 
+  /// The page of months side by side.
+  String get trendsTitle => lab ? 'Trace' : 'Trends';
+
+  /// The trace has nothing to draw.
+  String get emptyTrends => lab
+      ? 'Flat line. Log a few transactions to see a trace.'
+      : 'Nothing logged in these months yet.';
+
+  /// The share of income kept, month by month.
+  String get purityByMonth => lab ? 'PURITY by month' : 'Saved by month';
+
   /// Under the balance: the share of income you kept. Lab flavor calls it
   /// PURITY; plain wording says SAVED.
   String purity(String percent) => lab ? 'PURITY $percent' : 'SAVED $percent';
