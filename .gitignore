@@ -31,6 +31,12 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+# Build output from the native projects (Gradle and Xcode write these when run
+# from Android Studio or Xcode, or leave reports there), and Kotlin's caches.
+android/build/
+android/app/build/
+ios/build/
+.kotlin/
 /coverage/
 
 # Symbolication related
