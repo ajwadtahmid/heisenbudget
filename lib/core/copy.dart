@@ -34,6 +34,17 @@ class Copy {
       ? 'Flat line. Log a few transactions to see a trace.'
       : 'Nothing logged in these months yet.';
 
+  /// The month-end page, and the list of earlier ones under Trends.
+  String get reportTitle => lab ? 'Lab report' : 'Month in review';
+  String get reportsLabel => lab ? 'Lab reports' : 'Monthly reviews';
+
+  /// The Home card announcing it; [month] is a month name such as `September`.
+  String reportReady(String month) =>
+      lab ? 'Your $month lab report is ready' : 'Your $month review is ready';
+
+  /// The name of the share of income kept, on its own.
+  String get purityName => lab ? 'PURITY' : 'SAVED';
+
   /// The share of income kept, month by month.
   String get purityByMonth => lab ? 'PURITY by month' : 'Saved by month';
 

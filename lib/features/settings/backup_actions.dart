@@ -1,7 +1,7 @@
-import 'dart:ui' show Rect;
-
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/backup/backup_data.dart';
 import '../../domain/iso_date.dart';
 import '../../providers/backup_providers.dart';
 import '../../providers/period_providers.dart';
@@ -50,4 +50,25 @@ Future<bool> saveBackupToFolder(WidgetRef ref) async {
       .read(settingsProvider.notifier)
       .setLastBackupAt(ref.read(nowProvider)());
   return true;
+}
+
+/// "Back up now" from a card on Home or the report: opens the share sheet from
+/// the widget at [context], and says in a snack bar when it could not.
+Future<void> backUpNow(BuildContext context, WidgetRef ref) async {
+  final box = context.findRenderObject();
+  final origin = box is RenderBox && box.hasSize
+      ? box.localToGlobal(Offset.zero) & box.size
+      : null;
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await shareBackup(ref, origin: origin);
+  } on BackupFormatException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  } catch (_) {
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Something went wrong. No backup was made.'),
+      ),
+    );
+  }
 }

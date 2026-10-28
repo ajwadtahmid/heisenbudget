@@ -32,6 +32,7 @@ class AppSettings {
     this.savedFilters = const [],
     this.backupReminders = true,
     this.backupSnoozedUntil,
+    this.reportSeenMonth,
   });
 
   final Currency currency;
@@ -83,6 +84,10 @@ class AppSettings {
   /// "Remind me later": no reminder before this day. Also phone-only.
   final DateTime? backupSnoozedUntil;
 
+  /// The latest budget month (key such as `2026-09`) whose month-end report
+  /// was opened; Home stops announcing it. Also phone-only.
+  final String? reportSeenMonth;
+
   /// What amounts are written with, e.g. `৳`.
   String get currencySymbol => currency.symbol;
 
@@ -129,6 +134,7 @@ class SettingsRepository {
   static const _savedFiltersKey = 'saved_filters';
   static const _backupRemindersKey = 'backup_reminders';
   static const _backupSnoozedKey = 'backup_snoozed_until';
+  static const _reportSeenKey = 'report_seen_month';
 
   AppSettings load() {
     final storedDay = _prefs.getInt(_weekStartDayKey) ?? 1;
@@ -159,7 +165,16 @@ class SettingsRepository {
       backupSnoozedUntil: DateTime.tryParse(
         _prefs.getString(_backupSnoozedKey) ?? '',
       ),
+      reportSeenMonth: _reportSeenMonth(),
     );
+  }
+
+  /// The stored month key, or null when it is missing or not a month.
+  String? _reportSeenMonth() {
+    final raw = _prefs.getString(_reportSeenKey);
+    return raw != null && RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(raw)
+        ? raw
+        : null;
   }
 
   /// What is stored, skipping anything unreadable instead of failing.
@@ -228,6 +243,11 @@ class SettingsRepository {
     '${day.month.toString().padLeft(2, '0')}-'
     '${day.day.toString().padLeft(2, '0')}',
   );
+
+  /// Remembers that the report for the budget month [key] (`2026-09`) was
+  /// opened.
+  Future<void> setReportSeenMonth(String key) =>
+      _prefs.setString(_reportSeenKey, key);
 
   Future<void> setLastBackupAt(DateTime when) =>
       _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());

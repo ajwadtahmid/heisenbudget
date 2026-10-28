@@ -40,7 +40,14 @@ numbers read the same whatever language the phone is set to.
   expense, busiest day, days with no spending). Months follow the "month starts
   on" setting, like budgets. Home shows a small version: six peaks and one
   sentence on how the last month compares. Home's top holds one notice card at
-  a time (today the backup reminder).
+  a time: the month-end report, then the backup reminder.
+- A month-end report ("Lab report", or "Month in review" with Lab flavor off)
+  for each finished month: what came in and went out against the month before,
+  how each budget did (with Adjust or Copy forward), what moved, the five
+  biggest expenses, how the month ran, and a few next steps (a limit for a big
+  category with none, a backup if there is no recent one). Home announces it
+  for the first week of a new month; earlier ones are listed at the bottom of
+  Trends. It only remembers which report you last opened, on this phone.
 - Appearance settings: light, dark or follow the phone; five accent colours;
   four text fonts (Geist, Inter, Atkinson Hyperlegible, System; numbers always
   Geist Mono); and a Lab flavor switch for the playful wording.

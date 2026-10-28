@@ -11,10 +11,13 @@ import '../../domain/category_spend.dart' show purityText;
 import '../../domain/iso_date.dart';
 import '../../domain/trends.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/lab_report_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../providers/trends_providers.dart';
-import '../shared/category_tile.dart';
 import '../shared/empty_state.dart';
+import '../shared/fact_row.dart';
+import 'lab_report_screen.dart';
+import 'mover_row.dart';
 import 'trace_chart.dart';
 
 /// Opens the Trends page over the app, on one category when [categoryId] is
@@ -115,7 +118,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
             SectionLabel(copy.purityByMonth),
             const SizedBox(height: Gap.s),
             for (final m in months.reversed)
-              _FactRow(
+              FactRow(
                 label: m.inProgress
                     ? '${_monthName(m)} (so far)'
                     : _monthName(m),
@@ -131,6 +134,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
           _categoryBlock(window, months, symbol),
           ..._moversBlock(symbol),
           ..._recordsBlock(symbol),
+          ..._reportsBlock(symbol),
         ],
       );
     }
@@ -225,41 +229,6 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
     if (movers == null || (movers.up.isEmpty && movers.down.isEmpty)) {
       return const [];
     }
-    Widget row(CategoryMove m, {required bool up}) => MergeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-        child: Row(
-          children: [
-            CategoryTile(iconKey: m.icon, size: 32),
-            const SizedBox(width: Gap.m),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(m.name, style: theme.textTheme.bodyMedium),
-                  Text(
-                    '${formatMoney(m.currentCents, symbol)} against '
-                    '${formatMoney(m.averageCents, symbol)} usually',
-                    style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: Gap.s),
-            Icon(
-              up ? Icons.arrow_upward : Icons.arrow_downward,
-              size: 16,
-              color: up ? c.spent : c.dim,
-            ),
-            Text(
-              formatMoney(m.deltaCents, symbol, showPlus: true),
-              style: monoText(size: 14, color: up ? c.spent : c.dim),
-            ),
-          ],
-        ),
-      ),
-    );
-
     final month = DateFormat.MMMM().format(
       DateTime(movers.month.year, movers.month.month),
     );
@@ -274,8 +243,30 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
         style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
       ),
       const SizedBox(height: Gap.s),
-      for (final m in movers.up) row(m, up: true),
-      for (final m in movers.down) row(m, up: false),
+      for (final m in movers.up) MoverRow(move: m, up: true, symbol: symbol),
+      for (final m in movers.down) MoverRow(move: m, up: false, symbol: symbol),
+    ];
+  }
+
+  /// The finished months that have a report, newest first.
+  List<Widget> _reportsBlock(String symbol) {
+    final months = ref.watch(reportMonthsProvider).value;
+    if (months == null || months.isEmpty) return const [];
+    final copy = ref.watch(copyProvider);
+    return [
+      const SizedBox(height: Gap.xl),
+      SectionLabel(copy.reportsLabel),
+      const SizedBox(height: Gap.s),
+      for (final m in months)
+        FactRow(
+          key: ValueKey('report-month-${m.month.key}'),
+          label: _monthName(m),
+          subtitle: m.purity == null
+              ? 'Nothing received'
+              : copy.purity(purityText(m.purity!)),
+          value: formatMoney(m.netCents, symbol, showPlus: true),
+          onTap: () => openLabReport(context, m.month),
+        ),
     ];
   }
 
@@ -290,7 +281,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
       const SectionLabel('This month so far'),
       const SizedBox(height: Gap.s),
       if (biggest != null)
-        _FactRow(
+        FactRow(
           label: 'Biggest expense',
           subtitle:
               '${biggest.transaction.title ?? biggest.category.name} · '
@@ -298,88 +289,25 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
           value: formatMoney(-biggest.transaction.amountCents, symbol),
         ),
       if (r.busiestDay != null)
-        _FactRow(
+        FactRow(
           label: 'Busiest day',
           subtitle: formatDate(r.busiestDay!),
           value: formatMoney(-r.busiestDayCents, symbol),
         ),
-      _FactRow(
+      FactRow(
         label: 'Average a day',
         value: formatMoney(-r.averagePerDayCents, symbol),
       ),
-      _FactRow(
+      FactRow(
         label: 'Days with no spending',
         subtitle: 'of ${days(r.days)} so far',
         value: '${r.noSpendDays}',
       ),
-      _FactRow(
+      FactRow(
         label: 'Longest run with none',
         value: days(r.longestNoSpendStreak),
         valueIsPlain: true,
       ),
     ];
-  }
-}
-
-/// A label (and a dim line under it) at the left, a value at the right. Both
-/// shrink and wrap together at large text instead of overflowing.
-class _FactRow extends StatelessWidget {
-  const _FactRow({
-    required this.label,
-    required this.value,
-    this.subtitle,
-    this.valueIsPlain = false,
-  });
-
-  final String label;
-  final String value;
-  final String? subtitle;
-
-  /// Words rather than an amount: not set in the mono figures.
-  final bool valueIsPlain;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.appColors;
-    final theme = Theme.of(context);
-    final row = Container(
-      constraints: const BoxConstraints(minHeight: 48),
-      padding: const EdgeInsets.symmetric(vertical: Gap.xs),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.hairline)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(label, style: theme.textTheme.bodyMedium),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: Gap.m),
-          Flexible(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                value,
-                style: valueIsPlain
-                    ? theme.textTheme.bodyMedium?.copyWith(color: c.dim)
-                    : monoText(size: 15, color: c.text),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    return MergeSemantics(child: row);
   }
 }

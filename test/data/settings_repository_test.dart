@@ -327,4 +327,39 @@ void main() {
       expect(r.load().backupReminders, isTrue);
     });
   });
+
+  group('report seen month', () {
+    Future<SettingsRepository> repo([Map<String, Object> initial = const {}]) =>
+        makeRepo(initial);
+
+    test('is none by default and persists', () async {
+      final r = await repo();
+      expect(r.load().reportSeenMonth, isNull);
+      await r.setReportSeenMonth('2026-09');
+      expect(r.load().reportSeenMonth, '2026-09');
+    });
+
+    test('a stored value that is not a month reads as none', () async {
+      for (final bad in ['soon', '2026-13', '2026-9', '2026-09-01', '']) {
+        final r = await repo({'report_seen_month': bad});
+        expect(r.load().reportSeenMonth, isNull, reason: bad);
+      }
+    });
+
+    test(
+      'stays on this phone: not in a backup, not changed by a restore',
+      () async {
+        final r = await repo({'report_seen_month': '2026-09'});
+        expect(r.toBackup().toJson().toString(), isNot(contains('2026-09')));
+        await r.applyBackup(BackupSettings.fromJson({'currency': 'USD'}));
+        expect(r.load().reportSeenMonth, '2026-09');
+      },
+    );
+
+    test('Erase everything forgets it', () async {
+      final r = await repo({'report_seen_month': '2026-09'});
+      await r.clearAll();
+      expect(r.load().reportSeenMonth, isNull);
+    });
+  });
 }

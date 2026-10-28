@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
-import '../../data/backup/backup_data.dart';
 import '../../domain/backup_status.dart';
 import '../../providers/backup_providers.dart';
 import '../../providers/period_providers.dart';
@@ -28,25 +27,6 @@ class BackupReminderCard extends ConsumerWidget {
         ? 'You have not saved a backup yet. If this phone is lost or reset, '
               'your data goes with it.'
         : 'Your last backup is $days days old.';
-
-    Future<void> backUp() async {
-      final box = context.findRenderObject();
-      final origin = box is RenderBox && box.hasSize
-          ? box.localToGlobal(Offset.zero) & box.size
-          : null;
-      final messenger = ScaffoldMessenger.of(context);
-      try {
-        await shareBackup(ref, origin: origin);
-      } on BackupFormatException catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      } catch (_) {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Something went wrong. No backup was made.'),
-          ),
-        );
-      }
-    }
 
     Future<void> later() => ref
         .read(settingsProvider.notifier)
@@ -102,7 +82,7 @@ class BackupReminderCard extends ConsumerWidget {
               children: [
                 FilledButton.tonal(
                   key: const ValueKey('reminder-backup-now'),
-                  onPressed: backUp,
+                  onPressed: () => backUpNow(context, ref),
                   child: const Text('Back up now'),
                 ),
                 TextButton(

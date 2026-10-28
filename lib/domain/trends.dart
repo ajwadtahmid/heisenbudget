@@ -188,6 +188,18 @@ class CategoryMove {
   return (up: up.take(count).toList(), down: down.take(count).toList());
 }
 
+/// The months a month's movers are compared with: [earlier] (newest first, at
+/// most as many as are given) without the empty ones that lie before anything
+/// was logged. Empty when fewer than two of them have something in them, which
+/// is too little to call anything "usual".
+List<MonthTotals> moverBaseline(List<MonthTotals> earlier) {
+  final kept = [...earlier];
+  while (kept.isNotEmpty && kept.last.isEmpty) {
+    kept.removeLast();
+  }
+  return kept.where((t) => !t.isEmpty).length < 2 ? const [] : kept;
+}
+
 /// How spending ran through the days of one month so far.
 class SpendingRhythm {
   const SpendingRhythm({

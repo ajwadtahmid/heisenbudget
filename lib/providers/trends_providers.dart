@@ -19,10 +19,10 @@ class TrendWindow extends Notifier<int> {
   }
 }
 
-/// A number that changes whenever a transaction does. The Trends figures are
-/// worked out again when it moves, instead of each month watching its own
-/// stream.
-final _changesProvider = StreamProvider<int>(
+/// A number that changes whenever a transaction does. The Trends and report
+/// figures are worked out again when it moves, instead of each month watching
+/// its own stream.
+final transactionChangesProvider = StreamProvider<int>(
   (ref) => ref.watch(transactionRepositoryProvider).watchChangeCount(),
 );
 
@@ -32,7 +32,7 @@ final trendTotalsProvider = FutureProvider.family<List<MonthTotals>, int>((
   ref,
   count,
 ) async {
-  await ref.watch(_changesProvider.future);
+  await ref.watch(transactionChangesProvider.future);
   final today = ref.watch(clockProvider);
   final startDay = ref.watch(monthStartDayProvider);
   final months = trendMonths(today, count, startDay);
@@ -49,7 +49,7 @@ final trendCategorySeriesProvider =
       ref,
       key,
     ) async {
-      await ref.watch(_changesProvider.future);
+      await ref.watch(transactionChangesProvider.future);
       final today = ref.watch(clockProvider);
       final startDay = ref.watch(monthStartDayProvider);
       final months = trendMonths(today, key.count, startDay);
@@ -62,7 +62,7 @@ final trendCategorySeriesProvider =
 /// (at most five): the ones offered for "a category over time".
 final trendCategoryChoicesProvider =
     FutureProvider.family<List<CategoryHistory>, int>((ref, count) async {
-      await ref.watch(_changesProvider.future);
+      await ref.watch(transactionChangesProvider.future);
       final today = ref.watch(clockProvider);
       final startDay = ref.watch(monthStartDayProvider);
       final ranges = [
@@ -105,11 +105,8 @@ final trendMoversProvider = FutureProvider<TrendMovers?>((ref) async {
   final last = finished.last;
   // Up to three months before it, newest first, without the empty ones that
   // lie before anything was logged.
-  final earlier = finished.reversed.skip(1).take(3).toList();
-  while (earlier.isNotEmpty && earlier.last.isEmpty) {
-    earlier.removeLast();
-  }
-  if (earlier.where((t) => !t.isEmpty).length < 2) return null;
+  final earlier = moverBaseline(finished.reversed.skip(1).take(3).toList());
+  if (earlier.isEmpty) return null;
   final histories = await ref
       .read(transactionRepositoryProvider)
       .categoryHistoryForRanges([
@@ -135,7 +132,7 @@ class TrendRecords {
 
 /// Null before the month has begun or when nothing was spent in it.
 final trendRecordsProvider = FutureProvider<TrendRecords?>((ref) async {
-  await ref.watch(_changesProvider.future);
+  await ref.watch(transactionChangesProvider.future);
   final today = ref.watch(clockProvider);
   final startDay = ref.watch(monthStartDayProvider);
   final range = BudgetMonth.containing(today, startDay).range(startDay);

@@ -78,6 +78,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setBackupSnoozedUntil(DateTime day) =>
       _save(() => _repo.setBackupSnoozedUntil(day));
 
+  Future<void> setReportSeenMonth(String key) =>
+      _save(() => _repo.setReportSeenMonth(key));
+
   Future<void> setLastBackupAt(DateTime when) =>
       _save(() => _repo.setLastBackupAt(when));
 
