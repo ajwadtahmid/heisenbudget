@@ -15,6 +15,7 @@ import 'providers/budget_providers.dart';
 import 'providers/comparison_providers.dart';
 import 'providers/favorite_providers.dart';
 import 'providers/history_providers.dart';
+import 'providers/home_notice_providers.dart';
 import 'providers/period_providers.dart';
 import 'providers/quick_add_providers.dart';
 import 'providers/recurring_providers.dart';
@@ -38,6 +39,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   budgetOverviewProvider,
   budgetOverrunHintsProvider,
   backupReminderProvider,
+  homeNoticeProvider,
   copyProvider,
 ];
 

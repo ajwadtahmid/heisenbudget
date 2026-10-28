@@ -74,7 +74,7 @@ class BackupReminderCard extends ConsumerWidget {
       label: '$title. $body',
       child: Container(
         key: const ValueKey('backup-reminder'),
-        margin: const EdgeInsets.only(top: Gap.l),
+        margin: const EdgeInsets.only(bottom: Gap.l),
         padding: const EdgeInsets.all(Gap.l),
         decoration: BoxDecoration(
           color: c.panel,

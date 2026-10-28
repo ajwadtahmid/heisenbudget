@@ -278,6 +278,9 @@ The balance counts to its new value in 350ms (ease-out cubic). Screen readers he
 ### Spectrum chart
 Top categories (up to five plus a Rest bar in the render) as 24dp amber peaks over a graticule of four hairlines and a stronger baseline, 152dp tall; percentage in 12sp mono above each peak, icon and name below. Tap focuses one peak: others dim to 32% and a readout line shows name, share and amount. Each peak is a labelled button. Empty state: a flat baseline with one line of text. Peaks rise left to right over 700ms. Chart labels are capped at 130% text scale.
 
+### Home notice slot
+The top of Home holds at most one notice card, so cards never stack: the backup reminder today, and the month-end report later (it will take priority). A card is a panel (panel fill, 1dp hairline, panel radius) with a title, one or two lines, and 48dp text buttons in an OverflowBar. Nothing is drawn when there is no notice.
+
 ### Transaction row
 Category tile at left, then the first line in 16sp medium: the category name, or "Title · Category" when the transaction has a title (the title is never a replacement for the category). Under it the date and note in dim (Home shows the date), amount in 16sp mono at right coloured by channel with explicit sign, closed by a hairline. Archived categories are marked "(archived)" and drawn in faint.
 

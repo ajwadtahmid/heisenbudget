@@ -24,10 +24,10 @@ import '../shared/period_selector.dart';
 import '../shared/transaction_tile.dart';
 import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
-import 'backup_reminder_card.dart';
 import 'budget_line.dart';
 import 'coming_up_tile.dart';
 import 'delta_line.dart';
+import 'home_notice_slot.dart';
 import 'spectrum_chart.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -73,6 +73,7 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
           children: [
+            const HomeNoticeSlot(),
             Text(
               appName.toUpperCase(),
               style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 2.2),
@@ -123,7 +124,6 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ],
             ),
-            const BackupReminderCard(),
             const SizedBox(height: Gap.l),
             PeriodSelector(
               period: ref.watch(selectedPeriodProvider),
