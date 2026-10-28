@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../core/constants.dart';
 import '../../core/design/section_label.dart';
 import '../../core/theme.dart';
+import '../shared/app_logo.dart';
 
 /// What the app is, which version, where the privacy policy is, and how the
 /// data is kept.
@@ -53,16 +54,29 @@ class AboutScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         children: [
-          Text(
-            appName,
-            key: const ValueKey('about-name'),
-            style: theme.textTheme.headlineMedium,
-          ),
-          const SizedBox(height: Gap.xs),
-          Text(
-            'Version $appVersion',
-            key: const ValueKey('about-version'),
-            style: monoText(size: 14, color: c.dim),
+          Row(
+            children: [
+              const AppLogo(key: ValueKey('about-logo'), size: 72),
+              const SizedBox(width: Gap.l),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      appName,
+                      key: const ValueKey('about-name'),
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: Gap.xs),
+                    Text(
+                      'Version $appVersion',
+                      key: const ValueKey('about-version'),
+                      style: monoText(size: 14, color: c.dim),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: Gap.l),
           Text(

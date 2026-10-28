@@ -13,6 +13,10 @@ const appLocale = Locale('en', 'US');
 const privacyPolicyUrl =
     'https://ajwadtahmid.github.io/privacy-policies/Heisenbudget.html';
 
+/// The logo shown in the app (About, Welcome). It is also what the launcher
+/// icons are made from (`tools/make_icon_from_logo.py` draws `logo.svg`).
+const appLogoAsset = 'assets/logos/logo.png';
+
 /// Keep in sync with `version:` in pubspec.yaml (no package_info_plus).
 const appVersion = '1.0.0';
 

@@ -1067,6 +1067,28 @@ void main() {
       await disposeEnv(tester, env);
     });
 
+    testWidgets('the first page shows the logo, as a labelled image', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final env = await createEnv(tester, prefs: {'onboarding_done': false});
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('welcome-logo')), findsOneWidget);
+      expect(find.bySemanticsLabel('Heisenbudget logo'), findsOneWidget);
+      // A real picture, drawn from the bundled file, not a missing-asset box.
+      final image = tester.widget<Image>(
+        find.descendant(
+          of: find.byKey(const ValueKey('welcome-logo')),
+          matching: find.byType(Image),
+        ),
+      );
+      expect((image.image as ResizeImage).imageProvider, isA<AssetImage>());
+      expect(tester.takeException(), isNull);
+      handle.dispose();
+      await disposeEnv(tester, env);
+    });
+
     testWidgets('fits a small screen at 200% text', (tester) async {
       final env = await createEnv(tester, prefs: {'onboarding_done': false});
       tester.view.physicalSize = const Size(360, 640);

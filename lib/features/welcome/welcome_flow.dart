@@ -6,6 +6,7 @@ import '../../core/design/text_scale.dart';
 import '../../core/money_parser.dart';
 import '../../core/theme.dart';
 import '../../providers/settings_providers.dart';
+import '../shared/app_logo.dart';
 import '../shared/appearance_pickers.dart';
 
 /// First-run tour, three short steps. Everything chosen here applies at once
@@ -119,18 +120,9 @@ class _WelcomeFlowState extends ConsumerState<WelcomeFlow> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(Radii.panel),
-                              border: Border.all(color: c.accent),
-                            ),
-                            child: Icon(
-                              Icons.science_outlined,
-                              color: c.accent,
-                              size: 32,
-                            ),
+                          const AppLogo(
+                            key: ValueKey('welcome-logo'),
+                            size: 72,
                           ),
                           const SizedBox(height: Gap.xl),
                           heading('Your money,\nmeasured.'),

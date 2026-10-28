@@ -106,6 +106,92 @@ void main() {
     expect(project, isNot(contains('com.example')));
   });
 
+  group('the logo and the launcher icons', () {
+    /// A PNG's width and height, from its header.
+    (int, int) pngSize(String path) {
+      final b = File(path).readAsBytesSync();
+      expect(b.sublist(1, 4), [0x50, 0x4E, 0x47], reason: '$path is a PNG');
+      int word(int at) =>
+          (b[at] << 24) | (b[at + 1] << 16) | (b[at + 2] << 8) | b[at + 3];
+      return (word(16), word(20));
+    }
+
+    test('the vector source has the three parts the icon script needs', () {
+      final svg = File('assets/logos/logo.svg').readAsStringSync();
+      expect(RegExp(r'<path\b').allMatches(svg), hasLength(3));
+      expect(svg, contains('<rect'), reason: 'the ground colour');
+    });
+
+    test('only the small logo is bundled in the app', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      expect(pubspec, contains('assets/logos/logo.png'));
+      // Declared assets only (the comment explaining why may name the file).
+      final declared = RegExp(
+        r'^\s*-\s*(assets/\S+)',
+        multiLine: true,
+      ).allMatches(pubspec).map((m) => m.group(1)!).toList();
+      expect(declared, contains('assets/logos/logo.png'));
+      expect(declared, isNot(contains('assets/logos/logo.svg')));
+      expect(declared.any((a) => a.contains('google_play_icon')), isFalse);
+      expect(File('assets/logos/logo.png').lengthSync(), lessThan(100 * 1024));
+      expect(File(appLogoAsset).existsSync(), isTrue);
+    });
+
+    test('the Google Play icon is 512 by 512', () {
+      expect(pngSize('assets/logos/google_play_icon_512.png'), (512, 512));
+      expect(
+        File('assets/logos/google_play_icon_512.png').lengthSync(),
+        lessThan(1024 * 1024),
+        reason: 'Play accepts up to 1 MB',
+      );
+    });
+
+    test('every iOS icon size exists, and none has transparency', () {
+      final dir = 'ios/Runner/Assets.xcassets/AppIcon.appiconset';
+      final contents = File('$dir/Contents.json').readAsStringSync();
+      for (final name in RegExp(
+        r'"filename"\s*:\s*"([^"]+)"',
+      ).allMatches(contents).map((m) => m.group(1)!)) {
+        final bytes = File('$dir/$name').readAsBytesSync();
+        // Colour type 2 is RGB: no alpha channel (the App Store refuses one).
+        expect(bytes[25], 2, reason: '$name must be opaque RGB');
+      }
+      expect(pngSize('$dir/Icon-App-1024x1024@1x.png'), (1024, 1024));
+    });
+
+    test('Android has the adaptive layers and the Android 13 themed layer', () {
+      const sizes = {
+        'mdpi': 108,
+        'hdpi': 162,
+        'xhdpi': 216,
+        'xxhdpi': 324,
+        'xxxhdpi': 432,
+      };
+      sizes.forEach((density, size) {
+        for (final layer in [
+          'ic_launcher_foreground',
+          'ic_launcher_monochrome',
+        ]) {
+          expect(
+            pngSize('android/app/src/main/res/mipmap-$density/$layer.png'),
+            (size, size),
+            reason: '$layer $density',
+          );
+        }
+      });
+      final xml = File(
+        'android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml',
+      ).readAsStringSync();
+      expect(xml, contains('<foreground'));
+      expect(
+        xml,
+        contains(
+          '<monochrome android:drawable="@mipmap/ic_launcher_monochrome"/>',
+        ),
+      );
+    });
+  });
+
   group('bundled fonts', () {
     const files = [
       'Geist-Regular.ttf',

@@ -441,6 +441,24 @@ void main() {
       await disposeEnv(tester, env);
     });
 
+    testWidgets('it shows the logo beside the name and version', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openSettings(tester, env);
+      await tapRow(tester, 'settings-about');
+      final logo = tester.getRect(find.byKey(const ValueKey('about-logo')));
+      final name = tester.getRect(find.byKey(const ValueKey('about-name')));
+      expect(logo.size, const Size(72, 72));
+      expect(logo.right, lessThanOrEqualTo(name.left));
+      expect(
+        (logo.center.dy - name.center.dy).abs(),
+        lessThan(logo.height),
+        reason: 'side by side',
+      );
+      await disposeEnv(tester, env);
+    });
+
     testWidgets('it opens the open-source licences page', (tester) async {
       final env = await createEnv(tester);
       await openSettings(tester, env);

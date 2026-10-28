@@ -34,6 +34,9 @@ flutter:
 
   assets:
     - assets/fonts/licenses/
+    # The logo shown in About and Welcome (43 KB). logo.svg, the source of the
+    # launcher icons, and the other files in assets/logos are not bundled.
+    - assets/logos/logo.png
 
   # Bundled fonts (SIL Open Font License; the licence files are in
   # assets/fonts/licenses and shown on the app's licence page). Nothing is
