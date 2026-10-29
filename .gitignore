@@ -60,3 +60,11 @@ CLAUDE.md
 
 # Local design review screenshots
 .impeccable/review/
+
+# Signing keys and passwords: never commit these. The upload keystore lives
+# outside the repo (~/.keystores/heisenbudget/); these catch a stray copy.
+*.jks
+*.keystore
+*.p12
+*.pem
+key.properties
