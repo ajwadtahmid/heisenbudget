@@ -5,11 +5,14 @@ import '../data/repositories/budget_repository.dart';
 import '../data/repositories/transaction_repository.dart';
 import '../domain/backup_status.dart';
 import '../domain/budget.dart';
+import '../domain/goals.dart';
+import '../domain/iso_date.dart';
 import '../domain/lab_report.dart';
 import '../domain/trends.dart';
 import 'budget_providers.dart';
 import 'category_providers.dart';
 import 'database_providers.dart';
+import 'goal_providers.dart';
 import 'period_providers.dart';
 import 'settings_providers.dart';
 import 'trends_providers.dart';
@@ -27,6 +30,7 @@ class LabReport {
     required this.monthsAveraged,
     required this.biggest,
     required this.rhythm,
+    required this.goals,
     required this.suggestions,
   });
 
@@ -54,6 +58,9 @@ class LabReport {
 
   /// Null when nothing was spent.
   final SpendingRhythm? rhythm;
+
+  /// Goals that had money put in or taken out during the month.
+  final List<ReportGoal> goals;
   final List<ReportSuggestion> suggestions;
 }
 
@@ -69,6 +76,8 @@ final labReportProvider = FutureProvider.family<LabReport, BudgetMonth>((
   final limits = await ref.watch(budgetLimitsProvider.future);
   final categories = await ref.watch(allCategoriesProvider.future);
   final lastBackup = ref.watch(settingsProvider.select((s) => s.lastBackupAt));
+  final goalRows = await ref.watch(goalsProvider.future);
+  final goalEntries = await ref.watch(goalEntriesProvider.future);
   final inForce = {
     for (final line
         in ref.watch(budgetOverviewProvider).value?.all ?? const <BudgetLine>[])
@@ -163,6 +172,28 @@ final labReportProvider = FutureProvider.family<LabReport, BudgetMonth>((
   final byDay = await repo.expenseByDay(range);
   final rhythm = rhythmOf(byDay, range, today);
 
+  // Goals: what went in during the month, and which were left alone.
+  final movesByGoal = <int, List<GoalMove>>{};
+  for (final e in goalEntries) {
+    movesByGoal
+        .putIfAbsent(e.goalId, () => [])
+        .add(GoalMove(fromIsoDate(e.date), e.amountCents));
+  }
+  List<GoalMove> movesOf(SavingsGoalRow g) => movesByGoal[g.id] ?? const [];
+  final reportGoals = reportGoalsOf([
+    for (final g in goalRows)
+      (id: g.id, name: g.name, targetCents: g.targetCents, moves: movesOf(g)),
+  ], range);
+  final touched = {for (final g in reportGoals) g.goalId};
+  final idleGoals = [
+    for (final g in goalRows)
+      // Made by the end of the month, not reached now, and left alone in it.
+      if (!dateOnly(g.createdAt).isAfter(range.end) &&
+          savedOf(movesOf(g)) < g.targetCents &&
+          !touched.contains(g.id))
+        (id: g.id, name: g.name),
+  ];
+
   return LabReport(
     month: month,
     totals: current,
@@ -182,10 +213,12 @@ final labReportProvider = FutureProvider.family<LabReport, BudgetMonth>((
     monthsAveraged: earlier.length,
     biggest: await repo.topExpenses(range, limit: 5),
     rhythm: rhythm == null || rhythm.totalCents == 0 ? null : rhythm,
+    goals: reportGoals,
     suggestions: suggestionsOf(
       spending: spending,
       budgetedCategoryIds: inForce,
       backup: backupFreshness(lastBackup, today),
+      idleGoals: idleGoals,
     ),
   );
 });

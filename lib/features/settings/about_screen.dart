@@ -26,7 +26,7 @@ class AboutScreen extends StatelessWidget {
     const kept = [
       (
         'It stays on this phone.',
-        'Your transactions, categories and settings are stored here. '
+        'Your transactions, categories, goals and settings are stored here. '
             '$appName has no server and sends them nowhere. If your phone\'s '
             'own backup (Google on Android, iCloud on iPhone) is switched on, '
             'it may keep a copy in your account; that is between you and '

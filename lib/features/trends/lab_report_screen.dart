@@ -11,9 +11,12 @@ import '../../domain/iso_date.dart';
 import '../../domain/lab_report.dart';
 import '../../domain/trends.dart';
 import '../../providers/budget_providers.dart';
+import '../../providers/goal_providers.dart';
 import '../../providers/lab_report_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../budgets/budget_editor.dart';
+import '../goals/goal_detail_screen.dart';
+import '../goals/goal_entry_sheet.dart';
 import '../settings/backup_actions.dart';
 import '../shared/empty_state.dart';
 import '../shared/fact_row.dart';
@@ -150,6 +153,7 @@ class _ReportBody extends ConsumerWidget {
         ..._movers(context, symbol),
         ..._biggest(context, symbol),
         ..._rhythm(symbol),
+        ..._goals(context, ref, symbol),
         ..._next(context, ref, symbol),
       ],
     );
@@ -298,6 +302,28 @@ class _ReportBody extends ConsumerWidget {
     ];
   }
 
+  List<Widget> _goals(BuildContext context, WidgetRef ref, String symbol) {
+    if (report.goals.isEmpty) return const [];
+    final copy = ref.watch(copyProvider);
+    return [
+      const SizedBox(height: Gap.xl),
+      const SectionLabel('Goals'),
+      const SizedBox(height: Gap.s),
+      for (final g in report.goals)
+        FactRow(
+          key: ValueKey('report-goal-${g.goalId}'),
+          label: g.name,
+          subtitle: g.reachedByEnd
+              ? 'Reached by the end of the month'
+              : '${formatMoney(g.savedAtEndCents, symbol)} of '
+                    '${formatMoney(g.targetCents, symbol)} · '
+                    '${copy.goalYield} ${purityText(g.permilleAtEnd)}',
+          value: formatMoney(g.movedCents, symbol, showPlus: true),
+          onTap: () => openGoal(context, g.goalId),
+        ),
+    ];
+  }
+
   List<Widget> _next(BuildContext context, WidgetRef ref, String symbol) {
     if (report.suggestions.isEmpty) return const [];
     final theme = Theme.of(context);
@@ -335,6 +361,15 @@ class _ReportBody extends ConsumerWidget {
               categoryId: s.categoryId,
               name: s.name,
             ),
+          ),
+          AddToGoalSuggestion() => row(
+            key: ValueKey('report-add-goal-${s.goalId}'),
+            text: '${s.name} had nothing added in ${_monthName(report.month)}.',
+            action: 'Add to goal',
+            onPressed: () {
+              final view = ref.read(goalViewProvider(s.goalId));
+              if (view != null) showGoalEntrySheet(context, view: view);
+            },
           ),
           BackUpSuggestion() => row(
             key: const ValueKey('report-backup'),

@@ -14,6 +14,7 @@ import 'providers/backup_providers.dart';
 import 'providers/budget_providers.dart';
 import 'providers/comparison_providers.dart';
 import 'providers/favorite_providers.dart';
+import 'providers/goal_providers.dart';
 import 'providers/history_providers.dart';
 import 'providers/home_notice_providers.dart';
 import 'providers/lab_report_providers.dart';
@@ -45,6 +46,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   reportNoticeProvider,
   trendTotalsProvider(6),
   trendCategoryProvider,
+  goalViewsProvider,
   copyProvider,
 ];
 

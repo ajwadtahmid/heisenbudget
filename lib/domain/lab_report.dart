@@ -2,6 +2,8 @@
 // report.
 import 'backup_status.dart';
 import 'budget.dart';
+import 'date_range.dart';
+import 'goals.dart';
 import 'iso_date.dart';
 
 /// The report is announced on Home for this many days after a budget month
@@ -118,6 +120,65 @@ List<ReportBudget> reportBudgetsOf(List<BudgetPeriodResult> results) {
   return out;
 }
 
+/// How a goal did over a month: what went in (net of what came out) and where
+/// it stood at the end of the month.
+class ReportGoal {
+  const ReportGoal({
+    required this.goalId,
+    required this.name,
+    required this.movedCents,
+    required this.savedAtEndCents,
+    required this.targetCents,
+  });
+
+  final int goalId;
+  final String name;
+
+  /// Net put in during the month (negative: more came out than went in).
+  final int movedCents;
+  final int savedAtEndCents;
+  final int targetCents;
+
+  int get permilleAtEnd => goalPermille(savedAtEndCents, targetCents);
+  bool get reachedByEnd => savedAtEndCents >= targetCents;
+}
+
+/// The goals that had an entry in [range], in the order given.
+List<ReportGoal> reportGoalsOf(
+  List<({int id, String name, int targetCents, List<GoalMove> moves})> goals,
+  DateRange range,
+) {
+  final first = dateOnly(range.start);
+  final last = dateOnly(range.end);
+  final out = <ReportGoal>[];
+  for (final g in goals) {
+    var moved = 0;
+    var saved = 0;
+    var any = false;
+    for (final m in g.moves) {
+      final day = dateOnly(m.date);
+      if (day.isAfter(last)) continue;
+      saved += m.cents;
+      if (!day.isBefore(first)) {
+        moved += m.cents;
+        any = true;
+      }
+    }
+    if (any) {
+      out.add(
+        ReportGoal(
+          goalId: g.id,
+          name: g.name,
+          movedCents: moved,
+          savedAtEndCents: saved,
+          targetCents: g.targetCents,
+        ),
+      );
+    }
+  }
+  return out;
+}
+
 /// What the report suggests doing next. Actions only: no advice.
 sealed class ReportSuggestion {
   const ReportSuggestion();
@@ -136,6 +197,14 @@ class SetLimitSuggestion extends ReportSuggestion {
   final int spentCents;
 }
 
+/// A goal that was being saved for had nothing added in the month.
+class AddToGoalSuggestion extends ReportSuggestion {
+  const AddToGoalSuggestion({required this.goalId, required this.name});
+
+  final int goalId;
+  final String name;
+}
+
 /// There is no recent backup.
 class BackUpSuggestion extends ReportSuggestion {
   const BackUpSuggestion();
@@ -145,19 +214,26 @@ class BackUpSuggestion extends ReportSuggestion {
 /// percent) to be worth a budget suggestion.
 const suggestLimitSharePercent = 15;
 
-/// At most [max] suggestions: a budget for each of the biggest unbudgeted
-/// categories (at most two), then a backup if there is no recent one.
+/// At most [max] suggestions, in this order: a budget for each of the biggest
+/// unbudgeted categories (at most two), the first of [idleGoals] (goals being
+/// saved for that got nothing in the month), then a backup if there is no
+/// recent one. The goal and the backup are kept before a second budget.
 /// [spending] is the month's expenses by category, biggest first.
 List<ReportSuggestion> suggestionsOf({
   required List<({int id, String name, int spentCents})> spending,
   required Set<int> budgetedCategoryIds,
   required BackupFreshness backup,
+  List<({int id, String name})> idleGoals = const [],
   int max = 3,
 }) {
+  final goal = idleGoals.isEmpty ? null : idleGoals.first;
+  final needsBackup = backup != BackupFreshness.recent;
+  final limitRoom = (max - (goal == null ? 0 : 1) - (needsBackup ? 1 : 0))
+      .clamp(0, 2);
   final total = spending.fold<int>(0, (a, s) => a + s.spentCents);
   final out = <ReportSuggestion>[];
   for (final s in spending) {
-    if (out.length >= 2) break;
+    if (out.length >= limitRoom) break;
     if (s.spentCents <= 0 || budgetedCategoryIds.contains(s.id)) continue;
     if (s.spentCents * 100 < total * suggestLimitSharePercent) continue;
     out.add(
@@ -168,6 +244,9 @@ List<ReportSuggestion> suggestionsOf({
       ),
     );
   }
-  if (backup != BackupFreshness.recent) out.add(const BackUpSuggestion());
+  if (goal != null) {
+    out.add(AddToGoalSuggestion(goalId: goal.id, name: goal.name));
+  }
+  if (needsBackup) out.add(const BackUpSuggestion());
   return out.take(max).toList();
 }
