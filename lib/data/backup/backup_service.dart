@@ -34,6 +34,12 @@ class BackupService {
       final transactions = await (_db.select(
         _db.transactions,
       )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
+      final goals = await (_db.select(
+        _db.savingsGoals,
+      )..orderBy([(g) => OrderingTerm.asc(g.id)])).get();
+      final goalEntries = await (_db.select(
+        _db.goalEntries,
+      )..orderBy([(e) => OrderingTerm.asc(e.id)])).get();
       return BackupData(
         exportedAt: now,
         settings: _settings.toBackup(),
@@ -42,6 +48,8 @@ class BackupService {
         favorites: favorites,
         budgetLimits: limits,
         transactions: transactions,
+        savingsGoals: goals,
+        goalEntries: goalEntries,
       );
     });
   }
@@ -53,8 +61,10 @@ class BackupService {
   Future<void> restore(BackupData data) async {
     await _db.transaction(() async {
       // Out in the order that respects references: transactions, then the
-      // rules and favorites that point at categories, then the categories.
-      // In is the reverse.
+      // rules and favorites that point at categories, then the categories; goal
+      // entries before the goals they belong to. In is the reverse.
+      await _db.delete(_db.goalEntries).go();
+      await _db.delete(_db.savingsGoals).go();
       await _db.delete(_db.transactions).go();
       await _db.delete(_db.favorites).go();
       await _db.delete(_db.recurringRules).go();
@@ -66,6 +76,8 @@ class BackupService {
         batch.insertAll(_db.favorites, data.favorites);
         batch.insertAll(_db.budgetLimits, data.budgetLimits);
         batch.insertAll(_db.transactions, data.transactions);
+        batch.insertAll(_db.savingsGoals, data.savingsGoals);
+        batch.insertAll(_db.goalEntries, data.goalEntries);
       });
     });
     try {
@@ -79,11 +91,13 @@ class BackupService {
     }
   }
 
-  /// Wipes everything: transactions, repeating rules, favorites, every
-  /// category, then puts the default categories back, and forgets all
-  /// settings. The database part is one transaction.
+  /// Wipes everything: transactions, repeating rules, favorites, budgets,
+  /// savings goals, every category, then puts the default categories back, and
+  /// forgets all settings. The database part is one transaction.
   Future<void> eraseEverything() async {
     await _db.transaction(() async {
+      await _db.delete(_db.goalEntries).go();
+      await _db.delete(_db.savingsGoals).go();
       await _db.delete(_db.transactions).go();
       await _db.delete(_db.favorites).go();
       await _db.delete(_db.recurringRules).go();

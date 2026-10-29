@@ -42,6 +42,12 @@ const maxFavorites = 12;
 /// Longest favorite name.
 const maxFavoriteLabelLength = 30;
 
+/// Most savings goals that are not yet reached.
+const maxActiveGoals = 20;
+
+/// Longest savings goal name.
+const maxGoalNameLength = 40;
+
 /// Characters the new-category field allows, and the longest name stored
 /// (a backup or the repository rejects more; older names may be longer than the
 /// field now allows, so the stored limit is wider).

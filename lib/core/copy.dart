@@ -39,6 +39,14 @@ class Copy {
   String reportReady(String month) =>
       lab ? 'Your $month lab report is ready' : 'Your $month review is ready';
 
+  /// The name of a goal's progress readout (saved over target).
+  String get goalYield => lab ? 'YIELD' : 'SAVED';
+
+  /// Insights: nothing to save towards yet.
+  String get emptyGoals => lab
+      ? 'Nothing in the flask yet. Set a goal to start filling it.'
+      : 'No goals yet. Set one to start saving towards it.';
+
   /// The name of the share of income kept, on its own.
   String get purityName => lab ? 'PURITY' : 'SAVED';
 

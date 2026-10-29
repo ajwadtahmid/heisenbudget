@@ -153,3 +153,40 @@ class RecurringRules extends Table {
   IntColumn get nextIndex => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
 }
+
+/// Something being saved for. Money is added to it and taken out of it with
+/// [GoalEntries]; it never touches the balance, budgets or any transaction.
+/// Reached when the entries add up to [targetCents] (worked out, not stored).
+@DataClassName('SavingsGoalRow')
+class SavingsGoals extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+
+  /// In cents, always above zero.
+  IntColumn get targetCents =>
+      integer().check(targetCents.isBiggerThanValue(0))();
+
+  /// `yyyy-MM-dd`: when the person would like to have it, or null.
+  TextColumn get targetDate => text().nullable()();
+
+  /// A key of `categoryIcons`.
+  TextColumn get icon => text().withDefault(const Constant('savings'))();
+
+  /// Position in the list, lowest first.
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+}
+
+/// Money put into (positive) or taken out of (negative) a goal on a day.
+@DataClassName('GoalEntryRow')
+class GoalEntries extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get goalId => integer().references(SavingsGoals, #id)();
+
+  /// In cents, never zero.
+  IntColumn get amountCents => integer().check(amountCents.isNotValue(0))();
+
+  /// `yyyy-MM-dd`.
+  TextColumn get date => text()();
+  DateTimeColumn get createdAt => dateTime()();
+}

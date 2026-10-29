@@ -9,3 +9,6 @@ CREATE UNIQUE INDEX budget_limits_category_start
   ON budget_limits (category_id, start) WHERE category_id IS NOT NULL;
 CREATE UNIQUE INDEX budget_limits_overall_start
   ON budget_limits (start) WHERE category_id IS NULL;
+
+-- A goal's entries in date order.
+CREATE INDEX goal_entries_goal ON goal_entries (goal_id, date);

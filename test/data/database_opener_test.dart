@@ -12,6 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ignore: depend_on_referenced_packages
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 
+import '../generated_migrations/schema_v3.dart' show DatabaseAtV3;
+
 AppDatabase openFile(File file) => AppDatabase(NativeDatabase(file));
 
 void main() {
@@ -31,11 +33,14 @@ void main() {
     return SharedPreferences.getInstance();
   }
 
-  /// A database file as an earlier schema would leave it.
+  /// A database file as an earlier schema would leave it: a real schema 3
+  /// file, stamped with [userVersion] when that is something else (an older
+  /// development build).
   Future<void> makeDatabaseFile({int userVersion = 3}) async {
-    final db = openFile(files.database);
+    final db = DatabaseAtV3(NativeDatabase(files.database));
     await db.customSelect('SELECT 1').get();
     await db.close();
+    if (userVersion == 3) return;
     final raw = sqlite.sqlite3.open(files.database.path);
     raw.execute('PRAGMA user_version = $userVersion');
     raw.close();
@@ -72,6 +77,40 @@ void main() {
       addTearDown(db.close);
       expect(await files.copyVersion(), isNull);
     });
+
+    test(
+      'schema 3 is upgraded to 4, with the schema 3 file kept as a copy',
+      () async {
+        await makeDatabaseFile();
+        final p = await prefs({schemaVersionPrefKey: 3});
+        final db = await openAppDatabase(
+          prefs: p,
+          files: files,
+          open: openFile,
+        );
+        addTearDown(db.close);
+
+        expect(await files.copyVersion(), 3);
+        expect(userVersionOf(files.database), 4);
+        expect(
+          userVersionOf(File('${dir.path}/heisenbudget.before-v3.sqlite')),
+          3,
+        );
+        // The copy has no goal tables; the live database has them, empty.
+        final raw = sqlite.sqlite3.open(
+          '${dir.path}/heisenbudget.before-v3.sqlite',
+        );
+        final tables = raw
+            .select("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .map((r) => r['name'])
+            .toList();
+        raw.close();
+        expect(tables, isNot(contains('savings_goals')));
+        expect(await db.select(db.savingsGoals).get(), isEmpty);
+        expect(await db.select(db.goalEntries).get(), isEmpty);
+        expect(p.getInt(schemaVersionPrefKey), currentSchemaVersion);
+      },
+    );
 
     test('an app that was at an older schema copies the file first', () async {
       await makeDatabaseFile();

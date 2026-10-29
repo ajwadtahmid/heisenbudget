@@ -4,7 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart' show ThemeMode;
 
-import '../../core/category_icons.dart' show defaultCategoryIconKey;
+import '../../core/category_icons.dart'
+    show defaultCategoryIconKey, defaultGoalIconKey;
 import '../../core/constants.dart';
 import '../../core/currencies.dart';
 import '../../core/design/app_colors.dart' show AccentColor;
@@ -145,6 +146,8 @@ class BackupData {
     required this.favorites,
     required this.budgetLimits,
     required this.transactions,
+    this.savingsGoals = const [],
+    this.goalEntries = const [],
   });
 
   final DateTime exportedAt;
@@ -154,6 +157,8 @@ class BackupData {
   final List<FavoriteRow> favorites;
   final List<BudgetLimitRow> budgetLimits;
   final List<TransactionRow> transactions;
+  final List<SavingsGoalRow> savingsGoals;
+  final List<GoalEntryRow> goalEntries;
 
   /// The file's text. Pretty-printed so it can be inspected in any editor.
   String encode() {
@@ -218,6 +223,28 @@ class BackupData {
             'start': b.start,
             'amountCents': b.amountCents,
             'createdAt': b.createdAt.toUtc().toIso8601String(),
+          },
+      ],
+      'savingsGoals': [
+        for (final g in savingsGoals)
+          {
+            'id': g.id,
+            'name': g.name,
+            'targetCents': g.targetCents,
+            'targetDate': g.targetDate,
+            'icon': g.icon,
+            'sortOrder': g.sortOrder,
+            'createdAt': g.createdAt.toUtc().toIso8601String(),
+          },
+      ],
+      'goalEntries': [
+        for (final e in goalEntries)
+          {
+            'id': e.id,
+            'goalId': e.goalId,
+            'amountCents': e.amountCents,
+            'date': e.date,
+            'createdAt': e.createdAt.toUtc().toIso8601String(),
           },
       ],
       'transactions': [
@@ -299,6 +326,9 @@ class BackupData {
       for (final r in rules) r.id,
     });
 
+    final goals = _parseGoals(root['savingsGoals']);
+    final goalEntries = _parseGoalEntries(root['goalEntries'], goals);
+
     final exported = root['exportedAt'];
     return BackupData(
       exportedAt:
@@ -310,6 +340,8 @@ class BackupData {
       favorites: favorites,
       budgetLimits: limits,
       transactions: transactions,
+      savingsGoals: goals,
+      goalEntries: goalEntries,
     );
   }
 }
@@ -606,6 +638,110 @@ List<FavoriteRow> _parseFavorites(
         createdAt: created,
       ),
     );
+  }
+  return rows;
+}
+
+/// Backups made before savings goals existed have no `savingsGoals`; that
+/// restores as "no goals".
+List<SavingsGoalRow> _parseGoals(Object? json) {
+  if (json == null) return const [];
+  if (json is! List) throw _damaged('savings goals', 'not a list');
+  if (json.length > 1000) throw _damaged('savings goals', 'far too many');
+  final rows = <SavingsGoalRow>[];
+  final ids = <int>{};
+  for (final item in json) {
+    if (item is! Map<String, Object?>) {
+      throw _damaged('savings goal', 'not an object');
+    }
+    final id = item['id'];
+    if (id is! int || id < 1 || !ids.add(id)) {
+      throw _damaged('savings goal', 'bad or repeated id');
+    }
+    final where = 'savings goal $id';
+    final name = item['name'];
+    if (name is! String ||
+        name.trim().isEmpty ||
+        name.trim().length > maxGoalNameLength) {
+      throw _damaged(where, 'bad name');
+    }
+    final target = item['targetCents'];
+    if (target is! int || target < 1 || target > maxAmountCents) {
+      throw _damaged(where, 'target out of range');
+    }
+    final due = item['targetDate'];
+    if (due != null && (due is! String || !_isRealDate(due))) {
+      throw _damaged(where, 'target date is not a real date');
+    }
+    final icon = item['icon'];
+    final sort = item['sortOrder'];
+    final created = _time(item['createdAt']);
+    if (created == null) throw _damaged(where, 'bad timestamp');
+    rows.add(
+      SavingsGoalRow(
+        id: id,
+        name: name.trim(),
+        targetCents: target,
+        targetDate: due as String?,
+        icon: icon is String && icon.trim().isNotEmpty
+            ? icon.trim()
+            : defaultGoalIconKey,
+        sortOrder: sort is int ? sort : 0,
+        createdAt: created,
+      ),
+    );
+  }
+  return rows;
+}
+
+/// Entries of the goals in [goals]; what each goal holds must not be below
+/// zero.
+List<GoalEntryRow> _parseGoalEntries(Object? json, List<SavingsGoalRow> goals) {
+  if (json == null) return const [];
+  if (json is! List) throw _damaged('goal entries', 'not a list');
+  if (json.length > 500000) throw _damaged('goal entries', 'far too many');
+  final goalIds = {for (final g in goals) g.id};
+  final rows = <GoalEntryRow>[];
+  final ids = <int>{};
+  final held = <int, int>{};
+  for (final item in json) {
+    if (item is! Map<String, Object?>) {
+      throw _damaged('goal entry', 'not an object');
+    }
+    final id = item['id'];
+    if (id is! int || id < 1 || !ids.add(id)) {
+      throw _damaged('goal entry', 'bad or repeated id');
+    }
+    final where = 'goal entry $id';
+    final goalId = item['goalId'];
+    if (goalId is! int || !goalIds.contains(goalId)) {
+      throw _damaged(where, 'unknown goal');
+    }
+    final amount = item['amountCents'];
+    if (amount is! int || amount == 0 || amount.abs() > maxAmountCents) {
+      throw _damaged(where, 'amount out of range');
+    }
+    final date = item['date'];
+    if (date is! String || !_isRealDate(date)) {
+      throw _damaged(where, 'date is not a real date');
+    }
+    final created = _time(item['createdAt']);
+    if (created == null) throw _damaged(where, 'bad timestamp');
+    held[goalId] = (held[goalId] ?? 0) + amount;
+    rows.add(
+      GoalEntryRow(
+        id: id,
+        goalId: goalId,
+        amountCents: amount,
+        date: date,
+        createdAt: created,
+      ),
+    );
+  }
+  for (final MapEntry(key: goalId, value: total) in held.entries) {
+    if (total < 0) {
+      throw _damaged('savings goal $goalId', 'holds less than nothing');
+    }
   }
   return rows;
 }

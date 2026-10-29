@@ -21,6 +21,10 @@ class CategoryIconOption {
 /// Used for new categories and for any unknown key.
 const defaultCategoryIconKey = 'category';
 
+/// The icon a savings goal starts with (the literal is also the column default
+/// in `tables.dart`; a test checks they match).
+const defaultGoalIconKey = 'savings';
+
 const _general = 'General';
 const _food = 'Food & drink';
 const _home = 'Home & bills';
