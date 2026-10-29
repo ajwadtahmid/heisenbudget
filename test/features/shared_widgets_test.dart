@@ -843,6 +843,13 @@ void main() {
       expect(find.byType(Divider), findsOneWidget);
     });
 
+    testWidgets('the hairline runs all the way to the end of the line', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host('Spending', width: 320));
+      expect(tester.getRect(find.byType(Divider)).right, 320);
+    });
+
     testWidgets('at large text a long label keeps the whole line and wraps '
         'between words, with no hairline', (tester) async {
       await tester.pumpWidget(

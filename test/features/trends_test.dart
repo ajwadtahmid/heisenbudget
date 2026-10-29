@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/features/home/home_screen.dart';
 import 'package:heisenbudget/features/trends/insights_screen.dart';
+import 'package:heisenbudget/features/trends/money_screen.dart';
+import 'package:heisenbudget/features/trends/this_month_screen.dart';
+import 'package:heisenbudget/features/trends/trends_screen.dart';
 import 'package:heisenbudget/providers/navigation_providers.dart';
 import 'package:heisenbudget/providers/trends_providers.dart';
 
@@ -56,17 +59,27 @@ Future<void> openHome(WidgetTester tester, TestEnv env) async {
 }
 
 Future<void> openTrendsPage(WidgetTester tester, TestEnv env) async {
-  await tester.pumpWidget(wrap(env, const InsightsScreen()));
+  await tester.pumpWidget(wrap(env, const MoneyScreen()));
+  await settle(tester);
+}
+
+Future<void> openTrendsScreen(WidgetTester tester, TestEnv env) async {
+  await tester.pumpWidget(wrap(env, const TrendsScreen()));
+  await settle(tester);
+}
+
+Future<void> openMonthScreen(WidgetTester tester, TestEnv env) async {
+  await tester.pumpWidget(wrap(env, const ThisMonthScreen()));
   await settle(tester);
 }
 
 void main() {
-  group('Insights page', () {
+  group('The Money in and out page', () {
     testWidgets('draws the months, and a month can be focused', (tester) async {
       final env = await withHistory(tester);
       await openTrendsPage(tester, env);
 
-      expect(find.text('Money in and out'.toUpperCase()), findsOneWidget);
+      expect(find.text('Money in and out'), findsOneWidget);
       for (var i = 0; i < 6; i++) {
         expect(find.byKey(ValueKey('trace-month-$i')), findsOneWidget);
       }
@@ -126,7 +139,7 @@ void main() {
 
     testWidgets('the share kept, month by month', (tester) async {
       final env = await withHistory(tester);
-      await openTrendsPage(tester, env);
+      await openTrendsScreen(tester, env);
       // July: 2,000.00 in, 100.00 out: 95.0% kept. October: nothing in.
       expect(find.text('95.0%'), findsOneWidget);
       expect(find.text('nothing received'), findsWidgets);
@@ -137,7 +150,7 @@ void main() {
       tester,
     ) async {
       final env = await withHistory(tester);
-      await openTrendsPage(tester, env);
+      await openTrendsScreen(tester, env);
       expect(find.byKey(const ValueKey('trend-category-hint')), findsOneWidget);
 
       final food = find.widgetWithText(ChoiceChip, 'Food');
@@ -146,8 +159,7 @@ void main() {
       await tester.tap(food);
       await settle(tester);
       expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
-      // Two charts now: money in and out, and Food.
-      expect(find.byKey(const ValueKey('trace-chart')), findsNWidgets(2));
+      expect(find.byKey(const ValueKey('trace-chart')), findsOneWidget);
 
       final none = find.byKey(const ValueKey('trend-category-none'));
       await tester.ensureVisible(none);
@@ -160,10 +172,8 @@ void main() {
 
     testWidgets('what moved most against the months before it', (tester) async {
       final env = await withHistory(tester);
-      await openTrendsPage(tester, env);
+      await openMonthScreen(tester, env);
       final note = find.byKey(const ValueKey('movers-note'));
-      await tester.ensureVisible(note);
-      await tester.pump();
       expect(
         tester.widget<Text>(note).data,
         'September against the 2 months before it.',
@@ -177,10 +187,8 @@ void main() {
 
     testWidgets('how this month has run so far', (tester) async {
       final env = await withHistory(tester);
-      await openTrendsPage(tester, env);
-      final label = find.text('THIS MONTH SO FAR');
-      await tester.ensureVisible(label);
-      await tester.pump();
+      await openMonthScreen(tester, env);
+      expect(find.text('THIS MONTH SO FAR'), findsOneWidget);
 
       expect(find.text('Biggest expense'), findsOneWidget);
       expect(find.text(r'-$25.00'), findsOneWidget);
@@ -202,6 +210,7 @@ void main() {
       await addExpense(tester, env, 1000, d(2026, 10, 2));
       await openTrendsPage(tester, env);
       expect(find.byKey(const ValueKey('trends-thin')), findsOneWidget);
+      await openMonthScreen(tester, env);
       expect(find.byKey(const ValueKey('movers-note')), findsNothing);
       await disposeEnv(tester, env);
     });
@@ -232,7 +241,7 @@ void main() {
           child: MaterialApp(
             theme: lightTheme(),
             darkTheme: darkTheme(),
-            home: const InsightsScreen(),
+            home: const MoneyScreen(),
           ),
         ),
       );
@@ -263,6 +272,36 @@ void main() {
       await disposeEnv(tester, env);
     });
 
+    testWidgets('the pages behind it fit at 200% text on 320dp', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
+      tester.view.physicalSize = const Size(320, 640);
+      tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await tester.pumpWidget(wrap(env, const InsightsScreen()));
+      await settle(tester);
+      for (final key in [
+        'insights-money',
+        'insights-trends',
+        'insights-month',
+        'insights-reports',
+      ]) {
+        await tester.scrollUntilVisible(
+          find.byKey(ValueKey(key)),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(ValueKey(key)));
+        await settle(tester);
+        expect(tester.takeException(), isNull, reason: key);
+        await tester.pageBack();
+        await settle(tester);
+      }
+      await disposeEnv(tester, env);
+    });
+
     testWidgets('each month is a labelled button for screen readers', (
       tester,
     ) async {
@@ -285,7 +324,7 @@ void main() {
   });
 
   group('from the spending chart', () {
-    testWidgets('See trend opens the Insights tab on that category', (
+    testWidgets('See trend opens the Trends page on that category', (
       tester,
     ) async {
       final env = await withHistory(tester); // October: Rent 25.00, Food 15.00
@@ -299,10 +338,14 @@ void main() {
       await tester.tap(trend);
       await settle(tester);
 
-      expect(selectedTab(tester), insightsTab);
-      expect(find.byType(InsightsScreen), findsOneWidget);
+      expect(find.byType(TrendsScreen), findsOneWidget);
       expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
-      expect(find.byKey(const ValueKey('trace-chart')), findsNWidgets(2));
+      expect(find.byKey(const ValueKey('trace-chart')), findsOneWidget);
+
+      // Back lands on Home, where it started.
+      await tester.pageBack();
+      await settle(tester);
+      expect(selectedTab(tester), 0);
       await disposeEnv(tester, env);
     });
 
@@ -383,12 +426,12 @@ void main() {
         findsNothing,
         reason: 'not built at start',
       );
-      expect(find.byKey(const ValueKey('trace-chart')), findsNothing);
+      expect(find.byKey(const ValueKey('insights-money')), findsNothing);
 
       await openTab(tester);
       expect(selectedTab(tester), insightsTab);
       expect(find.byType(InsightsScreen), findsOneWidget);
-      expect(find.byKey(const ValueKey('trace-chart')), findsWidgets);
+      expect(find.byKey(const ValueKey('insights-money')), findsOneWidget);
 
       // And stays built when you leave it.
       await tester.tap(
@@ -423,6 +466,12 @@ void main() {
       final env = await withHistory(tester);
       await openHome(tester, env);
       await openTab(tester);
+      Future<void> openPage() async {
+        await tester.tap(find.byKey(const ValueKey('insights-trends')));
+        await settle(tester);
+      }
+
+      await openPage();
       final chip = find.byWidgetPredicate(
         (w) =>
             w.key is ValueKey<String> &&
@@ -434,6 +483,8 @@ void main() {
       await tester.tap(chip.first);
       await settle(tester);
       expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
+      await tester.pageBack();
+      await settle(tester);
 
       await tester.tap(
         find.descendant(
@@ -443,7 +494,48 @@ void main() {
       );
       await settle(tester);
       await openTab(tester);
+      await openPage();
       expect(find.byKey(const ValueKey('trend-category-hint')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a short front page: a row to each deeper page', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+      await openTab(tester);
+      for (final key in [
+        'insights-money',
+        'insights-goals',
+        'insights-trends',
+        'insights-month',
+        'insights-reports',
+      ]) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
+      }
+      expect(find.byKey(const ValueKey('trace-chart')), findsNothing);
+      // The pages' own content is not on the front page.
+      expect(find.byKey(const ValueKey('movers-note')), findsNothing);
+      expect(find.text('THIS MONTH SO FAR'), findsNothing);
+      expect(find.byKey(const ValueKey('trend-category-none')), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('insights-money')));
+      await settle(tester);
+      expect(find.byType(MoneyScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('trace-chart')), findsOneWidget);
+      await tester.pageBack();
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('insights-month')));
+      await settle(tester);
+      expect(find.byType(ThisMonthScreen), findsOneWidget);
+      await tester.pageBack();
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('insights-trends')));
+      await settle(tester);
+      expect(find.byType(TrendsScreen), findsOneWidget);
       await disposeEnv(tester, env);
     });
 

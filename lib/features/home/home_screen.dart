@@ -26,7 +26,7 @@ import '../transaction_form/transaction_form_screen.dart';
 import '../shared/transaction_menu.dart';
 import 'budget_line.dart';
 import 'coming_up_tile.dart';
-import '../trends/insights_screen.dart';
+import '../trends/trends_screen.dart';
 import 'delta_line.dart';
 import 'home_notice_slot.dart';
 import 'spectrum_chart.dart';
@@ -181,7 +181,7 @@ class HomeScreen extends ConsumerWidget {
               emptyText: copy.emptyChart,
               onOpen: (bar) => _openHistoryFor(ref, bar),
               onOpenTrend: (bar) =>
-                  openInsights(ref, categoryId: bar.categoryIds.single),
+                  openTrends(context, ref, categoryId: bar.categoryIds.single),
             ),
             if (comingUp.isNotEmpty) ...[
               const SizedBox(height: Gap.xl),
@@ -198,7 +198,10 @@ class HomeScreen extends ConsumerWidget {
             SectionLabel(
               'Recent',
               trailing: TextButton(
-                style: TextButton.styleFrom(minimumSize: const Size(48, 40)),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 40),
+                  padding: const EdgeInsets.only(left: Gap.m),
+                ),
                 onPressed: () =>
                     ref.read(shellTabProvider.notifier).select(historyTab),
                 child: const Text('See all'),

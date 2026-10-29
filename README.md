@@ -33,13 +33,19 @@ numbers read the same whatever language the phone is set to.
   ruler showing how far through the period you are, and a spectrum chart of
   spending by category (tap a peak for the exact share, then "See
   transactions" opens History on that category and period).
-- An Insights tab (between Budgets and History; also reached from a chart
-  peak's "See trend" on Home): the last 6 or 12 months of money in and out as peaks, with a
-  "Show as a list" view, the share kept each month, one category over time,
-  what moved most against the months before, and how this month has run (biggest
-  expense, busiest day, days with no spending). Months follow the "month starts
+- An Insights tab (between Budgets and History), a row to each page: Money in
+  and out (the last 3, 6 or 12 months as peaks, with a "Show as a list" view), Goals, Trends (the share kept each month, one category over time;
+  also reached from a chart peak's "See trend" on Home), This month (biggest
+  expense, busiest day, days with no spending, and what moved most against the
+  months before) and the month-end reports. Months follow the "month starts
   on" setting, like budgets. Home's top holds one notice card at a time: the
   month-end report, then the backup reminder.
+- Savings goals (a row on the Insights tab and a button in its app bar, a Goals page and a page per goal): a name,
+  a target, an optional date and an icon; put money in or take it out with dated
+  entries. Each shows how far along it is, the pace of the last three months and
+  when that reaches the target, and what a target date asks of each month. Goals
+  are kept apart from your balance and never count as spending. They are part of
+  a backup, and the month-end report says what went into each.
 - A month-end report ("Lab report", or "Month in review" with Lab flavor off)
   for each finished month: what came in and went out against the month before,
   how each budget did (with Adjust or Copy forward), what moved, the five
@@ -243,7 +249,7 @@ lib/
   core/        constants, theme, design widgets, money parser, formatters
   data/        drift database (schema, start-up check, safety copy), repositories
                (transactions, categories, settings, repeating rules, favorites,
-               budgets), the recurring catch-up service, backup (file format,
+               budgets, savings goals), the recurring catch-up service, backup (file format,
                restore, CSV, share sheet and file picker)
   domain/      pure Dart: DateRange and Period math, budget periods, repeat
                schedules, search matching, summaries, sort options

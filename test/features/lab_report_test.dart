@@ -7,6 +7,7 @@ import 'package:heisenbudget/domain/budget.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/trends/lab_report_screen.dart';
 import 'package:heisenbudget/features/trends/insights_screen.dart';
+import 'package:heisenbudget/features/trends/reports_screen.dart';
 import 'package:heisenbudget/features/transaction_form/transaction_form_screen.dart';
 import 'package:heisenbudget/providers/lab_report_providers.dart';
 
@@ -404,21 +405,17 @@ void main() {
     });
   });
 
-  group('Reports on the Insights tab', () {
+  group('The Reports page', () {
     testWidgets('lists the finished months with something in them', (
       tester,
     ) async {
       final env = await withHistory(tester);
-      await tester.pumpWidget(wrap(env, const InsightsScreen()));
+      await tester.pumpWidget(wrap(env, const ReportsScreen()));
       await settle(tester);
 
       final sep = find.byKey(const ValueKey('report-month-2026-09'));
-      await tester.scrollUntilVisible(
-        sep,
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(find.text('LAB REPORTS'), findsOneWidget);
+      expect(find.text('Lab reports'), findsOneWidget);
+      expect(sep, findsOneWidget);
       expect(find.byKey(const ValueKey('report-month-2026-08')), findsOne);
       expect(find.byKey(const ValueKey('report-month-2026-07')), findsOne);
       // June had nothing; October is still going.
@@ -432,12 +429,29 @@ void main() {
       await disposeEnv(tester, env);
     });
 
-    testWidgets('no list before any month is finished', (tester) async {
+    testWidgets('before any month is finished, it says so', (tester) async {
       final env = await createEnv(tester);
       await addExpense(tester, env, 500, d(2026, 10, 2));
+      await tester.pumpWidget(wrap(env, const ReportsScreen()));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('reports-empty')), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('the Insights tab counts them and opens the page', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
       await tester.pumpWidget(wrap(env, const InsightsScreen()));
       await settle(tester);
-      expect(find.text('LAB REPORTS'), findsNothing);
+      final row = find.byKey(const ValueKey('insights-reports'));
+      expect(
+        find.descendant(of: row, matching: find.text('3 finished months')),
+        findsOneWidget,
+      );
+      await tester.tap(row);
+      await settle(tester);
+      expect(find.byType(ReportsScreen), findsOneWidget);
       await disposeEnv(tester, env);
     });
   });

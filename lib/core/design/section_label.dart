@@ -37,12 +37,14 @@ class SectionLabel extends StatelessWidget {
           painter.dispose();
           return Row(
             children: [
-              // Flexible so a long heading wraps at large text instead of overflowing.
-              Flexible(child: Text(label, style: style)),
               if (fits) ...[
+                // Only as wide as its text, so the hairline gets all the rest.
+                Text(label, style: style),
                 const SizedBox(width: _gap),
                 Expanded(child: Divider(color: theme.dividerColor)),
-              ],
+              ] else
+                // A long heading wraps at large text instead of overflowing.
+                Flexible(child: Text(label, style: style)),
               if (trailing != null) ...[const SizedBox(width: 4), trailing!],
             ],
           );
