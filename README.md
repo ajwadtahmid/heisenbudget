@@ -33,26 +33,29 @@ numbers read the same whatever language the phone is set to.
   ruler showing how far through the period you are, and a spectrum chart of
   spending by category (tap a peak for the exact share, then "See
   transactions" opens History on that category and period).
-- An Insights tab (between Budgets and History), a row to each page: Money in
-  and out (the last 3, 6 or 12 months as peaks, with a "Show as a list" view), Goals, Trends (the share kept each month, one category over time;
-  also reached from a chart peak's "See trend" on Home), This month (biggest
-  expense, busiest day, days with no spending, and what moved most against the
-  months before) and the month-end reports. Months follow the "month starts
-  on" setting, like budgets. Home's top holds one notice card at a time: the
+- An Insights tab (between Budgets and History) with a row to each page: Money
+  in and out (the last 3, 6 or 12 months as peaks, with a "Show as a list"
+  view), Goals, Trends (the share kept each month, one category over time; also
+  reached from a chart peak's "See trend" on Home), This month (biggest expense,
+  busiest day, days with no spending, and what moved most against the months
+  before) and the month-end reports. Months follow the "month starts on"
+  setting, like budgets. Home's top holds one notice card at a time: the
   month-end report, then the backup reminder.
-- Savings goals (a row on the Insights tab and a button in its app bar, a Goals page and a page per goal): a name,
-  a target, an optional date and an icon; put money in or take it out with dated
-  entries. Each shows how far along it is, the pace of the last three months and
-  when that reaches the target, and what a target date asks of each month. Goals
-  are kept apart from your balance and never count as spending. They are part of
+- Savings goals (a row on the Insights tab and a button in its app bar, a Goals
+  page and a page per goal): a name, a target, an optional date and an icon; put
+  money in or take it out with dated entries. Each shows how far along it is,
+  the pace of the last three months and when that reaches the target, and what
+  a target date asks of each month. Goals are numbered by priority (1 is the
+  top; drag to reorder), up to 20 at a time that are not yet reached, and are
+  kept apart from your balance: they never count as spending. They are part of
   a backup, and the month-end report says what went into each.
 - A month-end report ("Lab report", or "Month in review" with Lab flavor off)
   for each finished month: what came in and went out against the month before,
   how each budget did (with Adjust or Copy forward), what moved, the five
   biggest expenses, how the month ran, and a few next steps (a limit for a big
   category with none, a backup if there is no recent one). Home announces it
-  for the first week of a new month; earlier ones are listed at the bottom of
-  Insights. It only remembers which report you last opened, on this phone.
+  for the first week of a new month; earlier ones are on a Reports page, a row
+  on Insights. It only remembers which report you last opened, on this phone.
 - Appearance settings: light, dark or follow the phone; five accent colours;
   four text fonts (Geist, Inter, Atkinson Hyperlegible, System; numbers always
   Geist Mono); and a Lab flavor switch for the playful wording.
@@ -62,12 +65,11 @@ numbers read the same whatever language the phone is set to.
   (currency from a searchable list including BDT ৳, opening balance, calendar
   weeks or fixed 7-day blocks, and which weekday a week starts on) open their
   own pages and show what is set on the row. Manage holds Categories,
-  Repeating transactions and Favorites. Your data holds Back up, Restore,
+  Repeating transactions and Favorites (the Quick add page). Your data holds Back up, Restore,
   Export to CSV and Erase everything. About opens an About screen with the
   app name, version, a short description, the privacy policy address (with a
   Copy link button; the app itself never goes online), how your data is kept
   and the not-affiliated note.
-
 - Optional titles: give a transaction a short name, such as a shop, and its
   row reads "Corner Cafe · Food" over the date, or just "Food" when there is no
   title. Titles are kept by Duplicate, favorites and repeating transactions,
@@ -81,7 +83,7 @@ numbers read the same whatever language the phone is set to.
   Favorites appear as a Quick add row at the top of the Add sheet: tap one to
   log it dated today and close the sheet (with Undo), or press and hold to fill
   the form with it and change it first. A favorite can leave the amount empty
-  to be asked each time. Manage and reorder them under Settings > Quick add.
+  to be asked each time. Manage and reorder them under Settings > Manage > Favorites.
 - Budgets (its own tab): a limit for any expense category and, if you like,
   one for all spending, **per month or a custom length** (1 to 365 days, or
   1 to 60 months; quick picks for a week, a quarter, a year, or the rest of this
@@ -120,7 +122,7 @@ numbers read the same whatever language the phone is set to.
   income (and one for your first favorite), which open the Add sheet straight
   away. A shortcut chosen while you are typing in an Add sheet is ignored, so
   nothing is lost, and one chosen before the welcome tour is finished waits
-  for it. The first favorite's name is visible on the launcher, so Settings > Quick add has a
+  for it. The first favorite's name is visible on the launcher, so Settings > Manage > Favorites has a
   switch to turn that shortcut off.
 - Repeating transactions: turn on Repeat in the Add sheet (weekly, monthly,
   yearly or every N days, optionally ending on a date) for rent, a salary or a
@@ -129,8 +131,8 @@ numbers read the same whatever language the phone is set to.
   Repeating transactions; Home shows what is due in the next 7 days. Editing a
   rule only changes what is added from then on, and deleting one keeps the
   transactions it already made.
-- Backup (Settings): save everything (transactions, categories, settings) to
-  one JSON file, restore it later or on a new phone, or export transactions as
+- Backup (Settings): save everything (transactions, categories, budgets, repeating
+  transactions, favorites, goals and settings) to one JSON file, restore it later or on a new phone, or export transactions as
   a CSV for a spreadsheet. The app only creates the file and opens the phone's
   share sheet; where it goes is your choice. Backup and CSV files are not
   encrypted. The temporary copy made for the share sheet is deleted about ten
@@ -252,10 +254,12 @@ lib/
                budgets, savings goals), the recurring catch-up service, backup (file format,
                restore, CSV, share sheet and file picker)
   domain/      pure Dart: DateRange and Period math, budget periods, repeat
-               schedules, search matching, summaries, sort options
+               schedules, search matching, summaries, sort options, trends,
+               the month-end report and savings goals
   providers/   Riverpod providers (no code generation)
-  features/    shell, home, budgets, history, transaction_form, settings,
-               recovery, shared widgets
+  features/    shell, home, budgets, history, transaction_form, favorites,
+               goals, trends (Insights, its pages and the report), settings,
+               welcome, recovery, shared widgets
 test/          mirrors lib/
 tools/         icon scripts and the Play Store bundle script
 drift_schemas/ the frozen database schema (a migration test reads it)
