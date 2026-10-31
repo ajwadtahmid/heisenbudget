@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Heisenbudget — Play Store Feature Graphic (dark)
+  Canvas: 1024 x 500  (required dimensions)
+  Colors: app dark ground #070A09 · Assay teal #2FD6C0 · text #E6EDE9
+  The flask is the paths of logo.svg, scaled to a 200 px tile.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500" width="1024" height="500"
+     role="img" aria-label="Heisenbudget — Play Store feature graphic">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#070A09"/>
+      <stop offset="55%"  stop-color="#0A0F0D"/>
+      <stop offset="100%" stop-color="#0D1210"/>
+    </linearGradient>
+
+    <radialGradient id="logo-glow" cx="25%" cy="50%" r="42%">
+      <stop offset="0%"   stop-color="#2FD6C0" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#070A09" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="vignette" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="55%"  stop-color="#070A09" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#070A09" stop-opacity="0.2"/>
+    </linearGradient>
+
+    <!-- Rounded tile for the logo, in logo.svg coordinates (1254 square) -->
+    <clipPath id="tile">
+      <rect width="1254" height="1254" rx="251"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="500" fill="url(#bg)"/>
+  <rect width="1024" height="500" fill="url(#logo-glow)"/>
+  <rect width="1024" height="500" fill="url(#vignette)"/>
+
+  <!-- Logo tile, centered at (248, 250) -->
+  <g transform="translate(148, 150) scale(0.159490)" clip-path="url(#tile)">
+    <rect width="1254" height="1254" fill="#FBFCFC"/>
+    <path d="M 440.7757 574 H 811.1156 C 860.8948 620.7829 891 685.6206 891 754 C 891 881 826 975 729 975 H 525 C 425 975 362 883 362 755 C 362 684.0199 391.1671 620.778 440.7757 574 Z" fill="#00827D"/>
+    <path d="M 511 241 H 743 C 763 241 780 257 780 277 C 780 297 764 313 743 314 V 439 C 743 466 755 482 784 499 C 881 555 937 649 937 754 C 937 906 844 1019 729 1019 H 525 C 409 1019 317 914 317 757 C 317 647 375 556 472 500 C 497 484 511 465 511 439 V 314 C 490 313 474 297 474 277 C 474 257 490 241 511 241 Z M 543 285 H 710 C 702 297 699 307 699 322 V 439 C 699 485 722 513 761 537 C 840 582 891 665 891 754 C 891 881 826 975 729 975 H 525 C 425 975 362 883 362 755 C 362 663 411 584 490 537 C 533 512 555 484 555 439 V 322 C 555 307 551 296 543 285 Z" fill="#06120C" fill-rule="evenodd"/>
+    <path d="M 611 668 H 643 V 696 C 674 699 695 717 701 744 L 662 750 C 660 738 653 730 643 727 V 767 C 687 779 704 790 704 818 C 704 847 681 866 643 873 V 901 H 611 V 874 C 576 871 554 853 550 823 L 590 817 C 593 830 599 838 611 842 V 801 C 570 789 552 779 552 751 C 552 724 575 704 611 698 Z M 611 729 C 599 731 593 737 593 745 C 593 753 600 758 611 761 Z M 643 808 V 842 C 656 839 664 832 664 821 C 664 815 656 811 643 808 Z" fill="#FDFEFD" fill-rule="evenodd"/>
+  </g>
+
+  <!-- Subtle vertical divider -->
+  <line x1="490" y1="60" x2="490" y2="440"
+        stroke="#2FD6C0" stroke-width="0.8" opacity="0.22"/>
+
+  <!-- App name -->
+  <text x="525" y="172"
+        font-family="'Noto Sans', 'Trebuchet MS', Arial, sans-serif"
+        font-size="52" font-weight="900" letter-spacing="0"
+        fill="#E6EDE9">HEISENBUDGET</text>
+
+  <!-- Accent rule under title -->
+  <rect x="525" y="192" width="280" height="2.5" rx="1" fill="#2FD6C0" opacity="0.90"/>
+
+  <!-- Tagline line 1 -->
+  <text x="525" y="245"
+        font-family="'Open Sans', 'Trebuchet MS', Helvetica, Arial, sans-serif"
+        font-size="26" font-weight="300" letter-spacing="0.3"
+        fill="#E6EDE9">Your money, measured.</text>
+
+  <!-- Tagline line 2 -->
+  <text x="525" y="280"
+        font-family="'Open Sans', 'Trebuchet MS', Helvetica, Arial, sans-serif"
+        font-size="26" font-weight="300" letter-spacing="0.3"
+        fill="#2FD6C0">Simple, private, offline.</text>
+
+  <!-- Feature pills -->
+  <rect x="525" y="320" width="135" height="32" rx="16"
+        fill="none" stroke="#2FD6C0" stroke-width="1.3"/>
+  <text x="592.5" y="342"
+        font-family="'Open Sans', Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#2FD6C0" text-anchor="middle">100% OFFLINE</text>
+
+  <rect x="670" y="320" width="110" height="32" rx="16"
+        fill="none" stroke="#2FD6C0" stroke-width="1.3"/>
+  <text x="725" y="342"
+        font-family="'Open Sans', Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#2FD6C0" text-anchor="middle">BUDGETS</text>
+
+  <rect x="790" y="320" width="110" height="32" rx="16"
+        fill="none" stroke="#2FD6C0" stroke-width="1.3"/>
+  <text x="845" y="342"
+        font-family="'Open Sans', Arial, sans-serif"
+        font-size="13" font-weight="500" fill="#2FD6C0" text-anchor="middle">INSIGHT</text>
+</svg>
