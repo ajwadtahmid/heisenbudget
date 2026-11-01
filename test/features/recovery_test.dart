@@ -112,6 +112,15 @@ void main() {
     }
   }
 
+  /// Settles until [finder] matches (the data behind a freshly opened screen
+  /// arrives from the database a little later, and later still on a slow
+  /// machine), for at most about a minute.
+  Future<void> settleUntil(WidgetTester tester, Finder finder) async {
+    for (var i = 0; i < 200 && finder.evaluate().isEmpty; i++) {
+      await settle(tester);
+    }
+  }
+
   final title = find.byKey(const ValueKey('recovery-title'));
 
   Future<void> garbage() => files.database.writeAsBytes(List.filled(2048, 7));
@@ -213,6 +222,7 @@ void main() {
     await tap(tester, 'recovery-confirm');
 
     expect(find.byType(AppShell), findsOneWidget);
+    await settleUntil(tester, find.text('Tea'));
     expect(find.text('Tea'), findsWidgets, reason: 'the restored data');
     await stop(tester);
   });
