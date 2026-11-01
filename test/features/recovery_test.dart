@@ -11,6 +11,7 @@ import 'package:heisenbudget/data/backup/file_exchange.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/database/database_files.dart';
 import 'package:heisenbudget/data/database/database_opener.dart';
+import 'package:heisenbudget/domain/iso_date.dart';
 import 'package:heisenbudget/features/shell/app_shell.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // ignore: depend_on_referenced_packages
@@ -26,32 +27,37 @@ class _Picker extends FileExchange {
   Future<Uint8List?> pickFile() async => bytes;
 }
 
-Uint8List _backup() => Uint8List.fromList(
-  utf8.encode(
-    jsonEncode({
-      'app': 'heisenbudget',
-      'format': 1,
-      'exportedAt': '2026-10-25T12:00:00Z',
-      'settings': {'currency': 'BDT'},
-      'categories': [
-        {'id': 7, 'name': 'Tea', 'type': 'expense', 'icon': 'restaurant'},
-        {'id': 8, 'name': 'Pay', 'type': 'income', 'icon': 'salary'},
-      ],
-      'transactions': [
-        {
-          'id': 1,
-          'amountCents': 4500,
-          'type': 'expense',
-          'date': '2026-10-05',
-          'categoryId': 7,
-          'note': 'From backup',
-          'createdAt': '2026-10-05T08:00:00Z',
-          'updatedAt': '2026-10-05T08:00:00Z',
-        },
-      ],
-    }),
-  ),
-);
+/// A backup with one transaction dated today, so it shows on Home whatever day
+/// the test runs (the app is started on the real clock).
+Uint8List _backup() {
+  final today = toIsoDate(dateOnly(DateTime.now()));
+  return Uint8List.fromList(
+    utf8.encode(
+      jsonEncode({
+        'app': 'heisenbudget',
+        'format': 1,
+        'exportedAt': '2026-10-25T12:00:00Z',
+        'settings': {'currency': 'BDT'},
+        'categories': [
+          {'id': 7, 'name': 'Tea', 'type': 'expense', 'icon': 'restaurant'},
+          {'id': 8, 'name': 'Pay', 'type': 'income', 'icon': 'salary'},
+        ],
+        'transactions': [
+          {
+            'id': 1,
+            'amountCents': 4500,
+            'type': 'expense',
+            'date': today,
+            'categoryId': 7,
+            'note': 'From backup',
+            'createdAt': '${today}T08:00:00Z',
+            'updatedAt': '${today}T08:00:00Z',
+          },
+        ],
+      }),
+    ),
+  );
+}
 
 AppDatabase _openFile(File file) => AppDatabase(NativeDatabase(file));
 
