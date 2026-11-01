@@ -134,6 +134,7 @@ class _HeisenbudgetAppState extends ConsumerState<HeisenbudgetApp>
       settingsProvider.select((s) => (s.accent, s.textFont, s.themeMode)),
     );
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: ref.watch(rootMessengerKeyProvider),
       title: appName,
       theme: lightTheme(accent: look.$1, font: look.$2),

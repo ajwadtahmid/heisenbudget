@@ -164,6 +164,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
         }
         final look = _settings.load();
         return MaterialApp(
+          debugShowCheckedModeBanner: false,
           title: appName,
           theme: lightTheme(accent: look.accent, font: look.textFont),
           darkTheme: darkTheme(accent: look.accent, font: look.textFont),

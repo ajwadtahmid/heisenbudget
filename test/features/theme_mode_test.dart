@@ -107,6 +107,14 @@ void main() {
     await disposeEnv(tester, env);
   });
 
+  testWidgets('the debug banner is never drawn', (tester) async {
+    final env = await createEnv(tester);
+    await tester.pumpWidget(wholeApp(env));
+    await settle(tester);
+    expect(appWidget(tester).debugShowCheckedModeBanner, isFalse);
+    await disposeEnv(tester, env);
+  });
+
   testWidgets('System follows the phone: dark phone -> dark app', (
     tester,
   ) async {
