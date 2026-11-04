@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
+import '../../core/error_handling.dart';
 import '../../data/backup/backup_data.dart';
 import '../../data/database/database_opener.dart';
 
@@ -54,7 +55,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     } on BackupFormatException catch (e) {
       if (mounted) setState(() => _message = e.message);
     } catch (e) {
-      debugPrint('Recovery action failed: $e');
+      reportSafeError('Recovery action failed', e);
       if (mounted) {
         setState(
           () =>

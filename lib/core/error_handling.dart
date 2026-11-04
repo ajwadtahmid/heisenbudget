@@ -6,18 +6,24 @@ import 'package:flutter/material.dart';
 /// written to the debug console: the app has no network and sends nothing.
 void installErrorHandlers() {
   FlutterError.onError = (details) {
-    FlutterError.presentError(details);
+    reportSafeError('Framework error', details.exception);
   };
   // Errors nothing caught (a failed future with no listener): note them and
   // carry on, rather than ending the app.
   PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Uncaught error: $error\n$stack');
+    reportSafeError('Uncaught application error', error);
     return true;
   };
   // Debug builds keep Flutter's own red error screen, which names the cause.
   if (kReleaseMode) {
     ErrorWidget.builder = (details) => const BrokenPart();
   }
+}
+
+/// Exception strings and stacks can contain database bind values. Keep useful
+/// event/type information without copying private financial payloads to logs.
+void reportSafeError(String event, Object error) {
+  debugPrint('$event (${error.runtimeType}).');
 }
 
 /// What stands in for a part of a screen that failed to build.
