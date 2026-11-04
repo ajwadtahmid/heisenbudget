@@ -14,7 +14,7 @@ Future<void> openMoney(BuildContext context) {
       .push(MaterialPageRoute<void>(builder: (_) => const MoneyScreen()));
 }
 
-/// The last 3, 6 or 12 months of money in and out as peaks, with the same
+/// The last 6 or 12 months of money in and out as peaks, with the same
 /// months as a list.
 class MoneyScreen extends ConsumerStatefulWidget {
   const MoneyScreen({super.key});

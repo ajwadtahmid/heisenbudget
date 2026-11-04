@@ -42,7 +42,7 @@ class InsightsScreen extends ConsumerWidget {
             key: const ValueKey('insights-money'),
             icon: Icons.stacked_bar_chart,
             title: 'Money in and out',
-            subtitle: 'The last 3, 6 or 12 months side by side',
+            subtitle: 'The last 6 or 12 months side by side',
             onTap: () => openMoney(context),
           ),
           const GoalsRow(),
