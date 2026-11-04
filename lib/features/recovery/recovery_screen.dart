@@ -76,6 +76,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        scrollable: true,
         title: Text(title),
         content: Text(body),
         actions: [

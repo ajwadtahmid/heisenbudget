@@ -290,6 +290,7 @@ class _ConfirmRestoreDialog extends StatelessWidget {
         ? null
         : formatDate(data.exportedAt.toLocal());
     return AlertDialog(
+      scrollable: true,
       title: const Text('Restore this backup?'),
       content: Text(
         '${made == null ? 'This backup' : 'Backup from $made'} has '

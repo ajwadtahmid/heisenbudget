@@ -315,39 +315,58 @@ void main() {
     await disposeEnv(tester, env);
   });
 
-  testWidgets('restore preview counts goals separately from their entries', (
-    tester,
-  ) async {
-    final env = await createEnv(tester);
-    final json = jsonDecode(utf8.decode(backupBytes())) as Map<String, dynamic>;
-    json['savingsGoals'] = [
-      {
-        'id': 1,
-        'name': 'Rainy day',
-        'targetCents': 10000,
-        'createdAt': '2026-10-01T00:00:00Z',
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'restore preview counts goals separately at text scale $scale',
+      (tester) async {
+        final env = await createEnv(tester);
+        tester.view.physicalSize = const Size(360, 700);
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        final json =
+            jsonDecode(utf8.decode(backupBytes())) as Map<String, dynamic>;
+        json['savingsGoals'] = [
+          {
+            'id': 1,
+            'name': 'Rainy day',
+            'targetCents': 10000,
+            'createdAt': '2026-10-01T00:00:00Z',
+          },
+        ];
+        json['goalEntries'] = [
+          for (final id in [1, 2])
+            {
+              'id': id,
+              'goalId': 1,
+              'amountCents': 100,
+              'date': '2026-10-01',
+              'createdAt': '2026-10-01T00:00:00Z',
+            },
+        ];
+        final exchange = FakeFileExchange(
+          toPick: Uint8List.fromList(utf8.encode(jsonEncode(json))),
+        );
+        await openSettings(tester, env, exchange);
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('restore-backup')),
+          200,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tapTile(tester, 'restore-backup');
+        expect(
+          find.textContaining('Goals: 1 · Goal entries: 2'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('restore-cancel')),
+        );
+        await tester.tap(find.byKey(const ValueKey('restore-cancel')));
+        await settle(tester);
+        await disposeEnv(tester, env);
       },
-    ];
-    json['goalEntries'] = [
-      for (final id in [1, 2])
-        {
-          'id': id,
-          'goalId': 1,
-          'amountCents': 100,
-          'date': '2026-10-01',
-          'createdAt': '2026-10-01T00:00:00Z',
-        },
-    ];
-    final exchange = FakeFileExchange(
-      toPick: Uint8List.fromList(utf8.encode(jsonEncode(json))),
     );
-    await openSettings(tester, env, exchange);
-    await tapTile(tester, 'restore-backup');
-    expect(find.textContaining('Goals: 1 · Goal entries: 2'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('restore-cancel')));
-    await settle(tester);
-    await disposeEnv(tester, env);
-  });
+  }
 
   testWidgets('Restore asks first, then replaces data and settings', (
     tester,
