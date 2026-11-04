@@ -24,13 +24,13 @@ public class SharePlusMacosPlugin: NSObject, FlutterPlugin, NSSharingServicePick
       let text = args["text"] as? String
       let uri = args["uri"] as? String
       let paths = args["paths"] as? [String]
-        
+
       // Title takes preference over Subject
       // Subject should only be used for email subjects
       // But added for retrocompatibility
       let title = args["title"] as? String
       let subject = title ?? args["subject"] as? String
-        
+
       if let uri = uri {
         shareItems([uri], subject: subject, origin: origin, view: registrar.view!, callback: result)
       } else if let paths = paths {
