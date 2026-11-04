@@ -23,6 +23,7 @@ class FileExchange {
   /// handed to (a cloud drive, a mail app) may still be reading it once the
   /// share sheet has closed, and the sheet does not say when it is done.
   static const exportKeep = Duration(minutes: 10);
+  static int _exportSerial = 0;
 
   Future<Directory> _exportsDirectory() async => Directory(
     '${(await temporaryDirectory()).path}${Platform.pathSeparator}exports',
@@ -38,10 +39,14 @@ class FileExchange {
     Rect? origin,
   }) async {
     final dir = await _exportsDirectory();
-    // Drop earlier exports so old financial data does not pile up in cache.
-    if (await dir.exists()) await dir.delete(recursive: true);
+    await clearOldExports();
     await dir.create(recursive: true);
-    final file = File('${dir.path}${Platform.pathSeparator}$fileName');
+    final dot = fileName.lastIndexOf('.');
+    final stem = dot < 0 ? fileName : fileName.substring(0, dot);
+    final extension = dot < 0 ? '' : fileName.substring(dot);
+    final unique =
+        '$stem-${DateTime.now().microsecondsSinceEpoch}-${_exportSerial++}$extension';
+    final file = File('${dir.path}${Platform.pathSeparator}$unique');
     await file.writeAsBytes(bytes, flush: true);
     final result = await SharePlus.instance.share(
       ShareParams(
@@ -91,10 +96,11 @@ class FileExchange {
         failed = true;
       }
     }
-    if (failed)
+    if (failed) {
       throw const FileSystemException(
         'Temporary financial files could not be cleared.',
       );
+    }
   }
 
   /// Expire both Dart sources and plugin-owned Android attachments. Retain
@@ -107,8 +113,9 @@ class FileExchange {
         final dir = Directory('${root.path}/$name');
         if (!await dir.exists()) continue;
         await for (final entry in dir.list()) {
-          if (entry is File && (await entry.lastModified()).isBefore(cutoff))
+          if (entry is File && (await entry.lastModified()).isBefore(cutoff)) {
             await entry.delete();
+          }
         }
         if (await dir.list().isEmpty) await dir.delete();
       }

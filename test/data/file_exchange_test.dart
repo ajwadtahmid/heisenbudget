@@ -1,9 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:heisenbudget/data/backup/file_exchange.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory cache;
   late Directory exports;
   late FileExchange exchange;
@@ -24,6 +26,31 @@ void main() {
   }
 
   group('exports left in the cache after sharing', () {
+    test('a later same-name export preserves the first source with a unique identity', () async {
+      const channel = MethodChannel('dev.fluttercommunity.plus/share');
+      final paths = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            paths.add(
+              ((call.arguments as Map)['paths'] as List).single as String,
+            );
+            return 'chosen.recipient';
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      for (final byte in [1, 2]) {
+        await exchange.shareFile(
+          fileName: 'same.json',
+          mimeType: 'application/json',
+          bytes: Uint8List.fromList([byte]),
+        );
+      }
+      expect(paths.toSet(), hasLength(2));
+      expect(await File(paths.first).readAsBytes(), [1]);
+      expect(await File(paths.last).readAsBytes(), [2]);
+    });
     test(
       'plugin copies expire too, and erase removes fresh plugin attachments',
       () async {
