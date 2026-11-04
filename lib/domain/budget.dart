@@ -346,35 +346,54 @@ List<PastPeriod> pastPeriods(
   DateTime today, {
   required int monthStartDay,
   int limit = 12,
+  DateRange? endingWithin,
+  bool Function(LimitEntry)? acceptsEntry,
+  bool newestEndFirst = false,
 }) {
+  if (limit <= 0) return [];
   final day = dateOnly(today);
   final rows = entries.toList()..sort((a, b) => a.start.compareTo(b.start));
   final out = <PastPeriod>[];
   for (var i = 0; i < rows.length; i++) {
     final row = rows[i];
     final amount = row.amountCents;
-    if (amount == null) continue; // stopped
+    if (amount == null || (acceptsEntry != null && !acceptsEntry(row)))
+      continue;
     final nextStart = i + 1 < rows.length ? rows[i + 1].start : null;
-    var range = row.firstRange(monthStartDay);
-    // A period belongs to this row if it starts before the next row does. One
-    // that the next row cuts short is listed up to the day before it.
-    while (nextStart == null || range.start.isBefore(nextStart)) {
+    var cutoff = _addDays(day, -1);
+    if (nextStart != null && !nextStart.isAfter(cutoff))
+      cutoff = _addDays(nextStart, -1);
+    if (endingWithin != null && endingWithin.end.isBefore(cutoff))
+      cutoff = endingWithin.end;
+    final first = row.firstRange(monthStartDay);
+    if (cutoff.isBefore(first.start)) continue;
+    var range = row.repeats ? row.rangeAt(cutoff, monthStartDay) : first;
+    var collected = 0;
+    while (!range.start.isBefore(first.start)) {
       final cutShort = nextStart != null && !range.end.isBefore(nextStart);
       final end = cutShort ? _addDays(nextStart, -1) : range.end;
-      if (!end.isBefore(day)) break; // not finished yet
-      out.add(
-        PastPeriod(
-          entry: row,
-          range: DateRange(range.start, end),
-          limit: amount,
-          endedEarly: cutShort,
-        ),
-      );
+      if (endingWithin != null && end.isBefore(endingWithin.start)) break;
+      if (end.isBefore(day) &&
+          (endingWithin == null || !end.isAfter(endingWithin.end))) {
+        out.add(
+          PastPeriod(
+            entry: row,
+            range: DateRange(range.start, end),
+            limit: amount,
+            endedEarly: cutShort,
+          ),
+        );
+        if (++collected == limit) break;
+      }
       if (!row.repeats) break;
-      range = nextRange(range, row.unit, monthStartDay);
+      range = previousRange(range, row.unit, monthStartDay);
     }
   }
-  out.sort((a, b) => b.range.start.compareTo(a.range.start));
+  out.sort(
+    (a, b) => newestEndFirst
+        ? b.range.end.compareTo(a.range.end)
+        : b.range.start.compareTo(a.range.start),
+  );
   return out.length > limit ? out.sublist(0, limit) : out;
 }
 

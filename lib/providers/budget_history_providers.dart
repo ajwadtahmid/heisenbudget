@@ -189,6 +189,9 @@ final _candidatesProvider = FutureProvider<List<_Candidate>>((ref) async {
   final categories = await ref.watch(allCategoriesProvider.future);
   final today = ref.watch(clockProvider);
   final startDay = ref.watch(monthStartDayProvider);
+  final filter = ref.watch(budgetHistoryFilterProvider);
+  final count = ref.watch(budgetHistoryCountProvider);
+  final bounded = !filter.needsSpending && filter.sort == BudgetSort.newest;
 
   final byTarget = <int?, List<LimitEntry>>{};
   for (final row in limits) {
@@ -203,7 +206,11 @@ final _candidatesProvider = FutureProvider<List<_Candidate>>((ref) async {
       entries,
       today,
       monthStartDay: startDay,
-      limit: 1 << 30,
+      limit: bounded ? count + 1 : 1 << 30,
+      newestEndFirst: bounded,
+      acceptsEntry: bounded
+          ? (entry) => filter.acceptsKind(entry, categoryId)
+          : null,
     )) {
       out.add(_Candidate(categoryId, category, period));
     }
@@ -214,10 +221,26 @@ final _candidatesProvider = FutureProvider<List<_Candidate>>((ref) async {
 /// Names for the budgets that have history, keyed by target id (for the
 /// filter and its chips).
 final budgetHistoryTargetsProvider = Provider<Map<int, String>>((ref) {
-  final all = ref.watch(_candidatesProvider).value ?? const [];
+  final limits = ref.watch(budgetLimitsProvider).value ?? const [];
+  final categories = ref.watch(allCategoriesProvider).value ?? const [];
+  final today = ref.watch(clockProvider);
+  final start = ref.watch(monthStartDayProvider);
+  final groups = <int?, List<LimitEntry>>{};
+  for (final row in limits) {
+    groups.putIfAbsent(row.categoryId, () => []).add(row.entry);
+  }
   return {
-    for (final c in all)
-      c.categoryId ?? overallTargetId: c.category?.name ?? 'All spending',
+    for (final entry in groups.entries)
+      if (pastPeriods(
+        entry.value,
+        today,
+        monthStartDay: start,
+        limit: 1,
+      ).isNotEmpty)
+        entry.key ?? overallTargetId: entry.key == null
+            ? 'All spending'
+            : categories.where((c) => c.id == entry.key).firstOrNull?.name ??
+                  '',
   };
 });
 

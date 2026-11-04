@@ -7,6 +7,33 @@ DateTime d(int y, int m, int day) => DateTime(y, m, day);
 BudgetMonth bm(int y, int m) => BudgetMonth(y, m);
 
 void main() {
+  test(
+    'small history pages and report windows stay bounded across centuries',
+    () {
+      final row = LimitEntry(
+        categoryId: null,
+        unit: BudgetUnit.days(1),
+        repeats: true,
+        start: d(1900, 1, 1),
+        amountCents: 100,
+      );
+      final now = d(5000, 1, 1);
+      final recent = pastPeriods([row], now, monthStartDay: 1, limit: 30);
+      expect(recent, hasLength(30));
+      expect(recent.first.range.end, d(4999, 12, 31));
+      expect(recent.last.range.start, d(4999, 12, 2));
+      final window = DateRange(d(2026, 10, 1), d(2026, 10, 31));
+      final report = pastPeriods(
+        [row],
+        now,
+        monthStartDay: 1,
+        limit: 1 << 30,
+        endingWithin: window,
+      );
+      expect(report, hasLength(31));
+      expect(report.last.range.end, window.start);
+    },
+  );
   group('BudgetMonth', () {
     test('keys sort in time order and parse back', () {
       expect(bm(2026, 10).key, '2026-10');

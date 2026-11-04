@@ -126,6 +126,7 @@ final labReportProvider = FutureProvider.family<LabReport, BudgetMonth>((
       today,
       monthStartDay: startDay,
       limit: 1 << 30,
+      endingWithin: range,
     )) {
       if (p.range.end.isBefore(range.start) || p.range.end.isAfter(range.end)) {
         continue;
