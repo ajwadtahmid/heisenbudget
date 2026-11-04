@@ -30,8 +30,7 @@
 <a href="https://play.google.com/store/apps/details?id=com.ajwadtahmid.heisenbudget">
 <img src=".github/assets/images/get-it-on-play-store.png" alt="Get it on Google Play" align="center" height="54" /></a>
 
-<a href="https://apps.apple.com/app/id0000000000">
-<img src=".github/assets/images/get-it-on-app-store.png" alt="Get it on App Store" align="center" height="54" /></a>
+<span>iOS listing coming soon</span>
 
 </div>
 
@@ -135,7 +134,7 @@ Everything is stored on your phone, and the app has no server of its own.
 | Tool | Version |
 |------|---------|
 | Flutter SDK | 3.x (stable channel), Dart ^3.13.5 |
-| Android: Java | 17 |
+| Android: Java | JDK 21 for the verified Gradle build; Java 17 bytecode target |
 | iOS: Xcode | A current Xcode on a Mac (deployment target iOS 15) |
 
 ### Quick Start
