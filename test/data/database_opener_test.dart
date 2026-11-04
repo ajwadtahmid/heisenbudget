@@ -195,7 +195,7 @@ void main() {
     test('upgrade protects actual schema with preference $marker', () async {
       await makeDatabaseFile();
       final before = await files.database.readAsBytes();
-        final p = await prefs({schemaVersionPrefKey: ?marker});
+      final p = await prefs({schemaVersionPrefKey: ?marker});
       final db = await openAppDatabase(prefs: p, files: files, open: openFile);
       try {
         expect(await files.copyVersion(), 3);

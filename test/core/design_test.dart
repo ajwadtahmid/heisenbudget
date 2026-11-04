@@ -308,6 +308,33 @@ void main() {
 
   group('SectionLabel', () {
     testWidgets(
+      'long actions remain visible and usable at narrow widths and large text',
+      (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        for (final width in [200.0, 320.0]) {
+          var taps = 0;
+          await tester.pumpWidget(
+            host(
+              SectionLabel(
+                'Recent',
+                trailing: TextButton(
+                  onPressed: () => taps++,
+                  child: const Text('See all'),
+                ),
+              ),
+              width: width,
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.tap(find.text('See all'));
+          expect(taps, 1);
+        }
+      },
+    );
+
+    testWidgets(
       'upper-cases the text, rules out to the right, shows the action',
       (tester) async {
         await tester.pumpWidget(

@@ -1,17 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
-/// A section head for ledger-style screens: a tracked caps label with a
-/// hairline running out to the right, and an optional action at the end.
-///
-/// At large text the label can fill the line. Then the hairline is left out, so
-/// the label wraps between words (never inside one) and keeps the whole width.
+/// A tracked section label and rule, with an optional trailing action. The
+/// rule uses the space remaining after the action has actually been laid out.
 class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key, this.trailing});
 
   final String text;
   final Widget? trailing;
-
-  /// Room the hairline needs to be worth drawing, and the gap before it.
   static const _minLine = 24.0;
   static const _gap = 12.0;
 
@@ -30,22 +27,40 @@ class SectionLabel extends StatelessWidget {
             textScaler: MediaQuery.textScalerOf(context),
             maxLines: 1,
           )..layout();
-          // The action's width is not known; leave generous room for it.
-          final reserved = trailing == null ? 0.0 : 56.0;
-          final fits =
-              painter.width + _gap + _minLine + reserved <= box.maxWidth;
+          final labelWidth = painter.width;
           painter.dispose();
           return Row(
             children: [
-              if (fits) ...[
-                // Only as wide as its text, so the hairline gets all the rest.
-                Text(label, style: style),
-                const SizedBox(width: _gap),
-                Expanded(child: Divider(color: theme.dividerColor)),
-              ] else
-                // A long heading wraps at large text instead of overflowing.
-                Flexible(child: Text(label, style: style)),
-              if (trailing != null) ...[const SizedBox(width: 4), trailing!],
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, remaining) {
+                    if (labelWidth + _gap + _minLine <= remaining.maxWidth) {
+                      return Row(
+                        children: [
+                          Text(label, style: style),
+                          const SizedBox(width: _gap),
+                          Expanded(child: Divider(color: theme.dividerColor)),
+                        ],
+                      );
+                    }
+                    return Text(label, style: style);
+                  },
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 4),
+                // Preserve room for the label. Long actions can wrap instead of
+                // consuming an unbounded width or relying on a fixed estimate.
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: math.max(
+                      0,
+                      box.maxWidth - math.min(labelWidth, box.maxWidth / 2) - 4,
+                    ),
+                  ),
+                  child: trailing!,
+                ),
+              ],
             ],
           );
         },
