@@ -79,6 +79,7 @@ void main() {
     Map<String, Object> prefs = const {},
     FileExchange exchange = const FileExchange(),
     DatabaseOpener open = _openFile,
+    Future<DatabaseFiles> Function()? locate,
   }) async {
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1;
@@ -92,7 +93,7 @@ void main() {
     await tester.pumpWidget(
       AppBootstrap(
         prefs: p,
-        locate: () async => files,
+        locate: locate ?? () async => files,
         openDatabase: open,
         exchange: exchange,
       ),
@@ -132,6 +133,40 @@ void main() {
   final title = find.byKey(const ValueKey('recovery-title'));
 
   Future<void> garbage() => files.database.writeAsBytes(List.filled(2048, 7));
+
+  testWidgets(
+    'storage lookup failure offers retry without destructive actions',
+    (tester) async {
+      var fail = true;
+      await start(
+        tester,
+        locate: () async {
+          if (fail) throw const FileSystemException('Storage unavailable');
+          return files;
+        },
+      );
+      expect(title, findsOneWidget);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const ValueKey('recovery-restore-backup')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<TextButton>(find.byKey(const ValueKey('recovery-erase')))
+            .onPressed,
+        isNull,
+      );
+      fail = false;
+      await tap(tester, 'recovery-retry');
+      await settleUntil(tester, find.byType(AppShell));
+      expect(find.byType(AppShell), findsOneWidget);
+      await stop(tester);
+    },
+  );
 
   testWidgets('a healthy start opens the app', (tester) async {
     await tester.runAsync(() async {});

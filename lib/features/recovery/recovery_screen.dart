@@ -14,6 +14,7 @@ class RecoveryScreen extends StatefulWidget {
   const RecoveryScreen({
     super.key,
     required this.error,
+    this.storageAvailable = true,
     required this.copyMadeAt,
     required this.pickBackup,
     required this.onRetry,
@@ -23,6 +24,7 @@ class RecoveryScreen extends StatefulWidget {
   });
 
   final DatabaseOpenException error;
+  final bool storageAvailable;
 
   /// When the copy made before the last update was taken; null when there is none.
   final DateTime? copyMadeAt;
@@ -177,7 +179,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                   const SizedBox(height: Gap.s),
                   OutlinedButton(
                     key: const ValueKey('recovery-restore-copy'),
-                    onPressed: _busy ? null : _restoreCopy,
+                    onPressed: _busy || !widget.storageAvailable
+                        ? null
+                        : _restoreCopy,
                     child: Text(
                       'Restore the copy from before the update '
                       '(${formatDate(made.toLocal())})',
@@ -188,7 +192,9 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                 const SizedBox(height: Gap.s),
                 OutlinedButton(
                   key: const ValueKey('recovery-restore-backup'),
-                  onPressed: _busy ? null : _restoreBackup,
+                  onPressed: _busy || !widget.storageAvailable
+                      ? null
+                      : _restoreBackup,
                   child: const Text(
                     'Restore from a backup file',
                     textAlign: TextAlign.center,
@@ -198,7 +204,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                 TextButton(
                   key: const ValueKey('recovery-erase'),
                   style: TextButton.styleFrom(foregroundColor: c.error),
-                  onPressed: _busy ? null : _erase,
+                  onPressed: _busy || !widget.storageAvailable ? null : _erase,
                   child: const Text(
                     'Erase everything and start over',
                     textAlign: TextAlign.center,

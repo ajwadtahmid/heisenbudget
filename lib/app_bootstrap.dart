@@ -58,7 +58,7 @@ class _Boot {
 
   final AppDatabase? db;
   final DatabaseOpenException? error;
-  final DatabaseFiles files;
+  final DatabaseFiles? files;
   final DateTime? copyMadeAt;
 }
 
@@ -74,8 +74,9 @@ class _AppBootstrapState extends State<AppBootstrap> {
   );
 
   Future<_Boot> _start() async {
-    final files = await widget.locate();
+    DatabaseFiles? files;
     try {
+      files = await widget.locate();
       try {
         await _recovery(files).recoverInterrupted();
       } catch (e) {
@@ -89,12 +90,16 @@ class _AppBootstrapState extends State<AppBootstrap> {
       );
       _db = db;
       return _Boot.ready(db, files);
-    } on DatabaseOpenException catch (e) {
+    } catch (e) {
       DateTime? made;
       try {
-        made = await files.copyMadeAt();
+        made = await files?.copyMadeAt();
       } catch (_) {}
-      return _Boot.failed(e, files, made);
+      return _Boot.failed(
+        e is DatabaseOpenException ? e : DatabaseOpenException(e),
+        files,
+        made,
+      );
     }
   }
 
@@ -175,12 +180,13 @@ class _AppBootstrapState extends State<AppBootstrap> {
           themeMode: look.themeMode,
           home: RecoveryScreen(
             error: boot.error!,
+            storageAvailable: boot.files != null,
             copyMadeAt: boot.copyMadeAt,
             pickBackup: widget.exchange.pickFile,
             onRetry: _again,
-            onRestoreCopy: () => _restoreCopy(boot.files),
-            onRestoreBackup: (data) => _restoreBackup(boot.files, data),
-            onErase: () => _erase(boot.files),
+            onRestoreCopy: () => _restoreCopy(boot.files!),
+            onRestoreBackup: (data) => _restoreBackup(boot.files!, data),
+            onErase: () => _erase(boot.files!),
           ),
         );
       },
