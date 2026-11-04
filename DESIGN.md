@@ -382,3 +382,5 @@ One switch, on by default, only changes strings (lib/core/copy.dart): chart titl
 - **Don't** spread leaders, graticule or tick ruler to other screens: leaders on Home's summary rows, graticule inside the charts, ruler on the period control.
 - **Don't** use any show logo, show lettering, or hat-and-glasses silhouette, quote the show, or hard-code a "99.1%" purity figure.
 - **Don't** make the Lab flavor change layout or colour.
+
+The transaction Edit header exposes labelled Favorite, Duplicate and Delete buttons directly. It has no Close icon; dismiss with Back or the sheet gesture. The title and action group wrap at large text. Duplicate and Favorite use the saved transaction values.

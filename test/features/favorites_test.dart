@@ -286,9 +286,7 @@ void main() {
         note: 'Latte',
       );
       await openForm(tester, env, editId: id);
-      await tester.tap(find.byKey(const ValueKey('form-menu')));
-      await settle(tester);
-      await tester.tap(find.text('Duplicate'));
+      await tester.tap(find.byTooltip('Duplicate'));
       await settle(tester);
 
       expect(find.text('Add transaction'), findsOneWidget);
@@ -379,9 +377,7 @@ void main() {
         note: 'Tea',
       );
       await openForm(tester, env, editId: id);
-      await tester.tap(find.byKey(const ValueKey('form-menu')));
-      await settle(tester);
-      await tester.tap(find.text('Save as favorite'));
+      await tester.tap(find.byTooltip('Save as favorite'));
       await settle(tester);
       await tapKey(tester, 'favorite-save');
       expect((await allFavorites(tester, env)).single.label, 'Tea');
@@ -552,9 +548,7 @@ void main() {
       final tx = await addExpense(tester, env, 450, d(2026, 10, 5), note: 'x');
       await openForm(tester, env, editId: tx);
       expect(find.byKey(const ValueKey('quick-add-row')), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('form-menu')));
-      await settle(tester);
-      await tester.tap(find.text('Duplicate'));
+      await tester.tap(find.byTooltip('Duplicate'));
       await settle(tester);
       expect(find.text('Add transaction'), findsOneWidget);
       expect(find.byKey(const ValueKey('quick-add-row')), findsNothing);

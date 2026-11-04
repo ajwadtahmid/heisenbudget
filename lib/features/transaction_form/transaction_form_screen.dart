@@ -568,41 +568,43 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-            child: Row(
+            child: OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    _isEdit ? 'Edit transaction' : 'Add transaction',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                Text(
+                  _isEdit ? 'Edit transaction' : 'Add transaction',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                if (_isEdit)
-                  PopupMenuButton<_FormAction>(
-                    key: const ValueKey('form-menu'),
-                    tooltip: 'More',
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: _onAction,
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: _FormAction.duplicate,
-                        child: Text('Duplicate'),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isEdit) ...[
+                      IconButton(
+                        key: const ValueKey('form-favorite'),
+                        tooltip: 'Save as favorite',
+                        icon: const Icon(Icons.favorite_border),
+                        onPressed: () => _onAction(_FormAction.favorite),
                       ),
-                      PopupMenuItem(
-                        value: _FormAction.favorite,
-                        child: Text('Save as favorite'),
+                      IconButton(
+                        key: const ValueKey('form-duplicate'),
+                        tooltip: 'Duplicate',
+                        icon: const Icon(Icons.copy_outlined),
+                        onPressed: () => _onAction(_FormAction.duplicate),
                       ),
                     ],
-                  ),
-                if (_isEdit)
-                  IconButton(
-                    tooltip: 'Delete',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: _confirmDelete,
-                  ),
-                IconButton(
-                  tooltip: 'Close',
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
+                    if (_isEdit)
+                      IconButton(
+                        tooltip: 'Delete',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: _confirmDelete,
+                      ),
+                    if (!_isEdit)
+                      IconButton(
+                        tooltip: 'Close',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                  ],
                 ),
               ],
             ),
