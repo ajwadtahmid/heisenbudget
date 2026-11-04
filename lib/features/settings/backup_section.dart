@@ -295,8 +295,12 @@ class _ConfirmRestoreDialog extends StatelessWidget {
         '${made == null ? 'This backup' : 'Backup from $made'} has '
         '$n transaction${n == 1 ? '' : 's'} and '
         '$k categor${k == 1 ? 'y' : 'ies'}.\n\n'
-        'It replaces everything on this phone: transactions, categories and '
-        'settings. This cannot be undone.',
+        'It replaces this app’s transactions, categories, repeating rules, '
+        'favorites, budget limits, savings goals and goal entries, then applies '
+        'the backup’s portable settings. This cannot be undone.\n\n'
+        'Repeating rules: ${data.recurringRules.length} · Favorites: ${data.favorites.length} · '
+        'Budget limits: ${data.budgetLimits.length} · Goals: ${data.savingsGoals.length} · '
+        'Goal entries: ${data.goalEntries.length}.',
       ),
       actions: [
         TextButton(

@@ -124,7 +124,12 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
         title: 'Restore this backup?',
         body:
             'It has $n transaction${n == 1 ? '' : 's'} and replaces what is '
-            'on this phone now. This cannot be undone.',
+            'on this phone now: categories, transactions, repeating rules, '
+            'favorites, budget limits, goals, goal entries and portable settings. '
+            'This cannot be undone.\n\n'
+            '${data.categories.length} categories · Repeating rules: ${data.recurringRules.length} · '
+            'Favorites: ${data.favorites.length} · Budget limits: ${data.budgetLimits.length} · '
+            'Goals: ${data.savingsGoals.length} · Goal entries: ${data.goalEntries.length}.',
         action: 'Restore',
       );
       if (ok) await widget.onRestoreBackup(data);

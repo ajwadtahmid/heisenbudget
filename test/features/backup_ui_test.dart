@@ -315,6 +315,40 @@ void main() {
     await disposeEnv(tester, env);
   });
 
+  testWidgets('restore preview counts goals separately from their entries', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final json = jsonDecode(utf8.decode(backupBytes())) as Map<String, dynamic>;
+    json['savingsGoals'] = [
+      {
+        'id': 1,
+        'name': 'Rainy day',
+        'targetCents': 10000,
+        'createdAt': '2026-10-01T00:00:00Z',
+      },
+    ];
+    json['goalEntries'] = [
+      for (final id in [1, 2])
+        {
+          'id': id,
+          'goalId': 1,
+          'amountCents': 100,
+          'date': '2026-10-01',
+          'createdAt': '2026-10-01T00:00:00Z',
+        },
+    ];
+    final exchange = FakeFileExchange(
+      toPick: Uint8List.fromList(utf8.encode(jsonEncode(json))),
+    );
+    await openSettings(tester, env, exchange);
+    await tapTile(tester, 'restore-backup');
+    expect(find.textContaining('Goals: 1 · Goal entries: 2'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('restore-cancel')));
+    await settle(tester);
+    await disposeEnv(tester, env);
+  });
+
   testWidgets('Restore asks first, then replaces data and settings', (
     tester,
   ) async {
@@ -326,6 +360,12 @@ void main() {
     await tapTile(tester, 'restore-backup');
 
     expect(find.text('Restore this backup?'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Repeating rules: 0 · Favorites: 0 · Budget limits: 0 · Goals: 0 · Goal entries: 0',
+      ),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('1 transaction and 2 categories'),
       findsOneWidget,
