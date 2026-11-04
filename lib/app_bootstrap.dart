@@ -119,10 +119,18 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   Future<void> _erase(DatabaseFiles files) async {
-    await _recovery(files).discard();
-    await files.deleteDatabase();
-    await files.deleteCopies();
-    await widget.prefs.clear();
+    try {
+      await widget.exchange.clearTemporaryFiles();
+      await _recovery(files).discard();
+      await files.deleteCopies();
+      await files.deleteDatabase();
+      if (!await widget.prefs.clear()) throw StateError('Settings unavailable');
+    } catch (_) {
+      throw const BackupFormatException(
+        'Erase did not finish. Some data or settings may remain. '
+        'Choose Erase again to finish cleanup.',
+      );
+    }
     await _again();
   }
 

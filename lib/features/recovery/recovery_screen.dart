@@ -167,7 +167,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                 ),
                 const SizedBox(height: Gap.s),
                 Text(
-                  'Nothing has been deleted. Choose how to continue.',
+                  'Choose how to continue. Restoring or erasing requires confirmation.',
                   style: theme.textTheme.bodyMedium?.copyWith(color: c.dim),
                 ),
                 const SizedBox(height: Gap.l),

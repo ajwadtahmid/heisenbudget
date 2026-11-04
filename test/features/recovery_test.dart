@@ -20,7 +20,13 @@ import 'package:sqlite3/sqlite3.dart' as sqlite;
 
 import 'test_helpers.dart';
 
-class _Picker extends FileExchange {
+class _TestExchange extends FileExchange {
+  const _TestExchange();
+  @override
+  Future<void> clearTemporaryFiles() async {}
+}
+
+class _Picker extends _TestExchange {
   const _Picker(this.bytes);
   final Uint8List? bytes;
 
@@ -77,7 +83,7 @@ void main() {
   Future<void> start(
     WidgetTester tester, {
     Map<String, Object> prefs = const {},
-    FileExchange exchange = const FileExchange(),
+    FileExchange exchange = const _TestExchange(),
     DatabaseOpener open = _openFile,
     Future<DatabaseFiles> Function()? locate,
   }) async {
@@ -182,7 +188,9 @@ void main() {
     await start(tester, prefs: {schemaVersionPrefKey: currentSchemaVersion});
     expect(title, findsOneWidget);
     expect(
-      find.text('Nothing has been deleted. Choose how to continue.'),
+      find.text(
+        'Choose how to continue. Restoring or erasing requires confirmation.',
+      ),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('recovery-restore-copy')), findsNothing);
@@ -410,6 +418,29 @@ void main() {
     );
     expect(title, findsOneWidget);
     expect(await tester.runAsync(() => files.database.length()), 2048);
+    await stop(tester);
+  });
+
+  testWidgets('recovery erase removes fresh financial exports too', (
+    tester,
+  ) async {
+    late File exported;
+    final cache = Directory('${dir.path}/cache');
+    await tester.runAsync(() async {
+      await garbage();
+      await Directory('${cache.path}/exports').create(recursive: true);
+      exported = await File('${cache.path}/exports/fresh.json')
+          .writeAsString('private data');
+    });
+    await start(
+      tester,
+      prefs: {schemaVersionPrefKey: currentSchemaVersion},
+      exchange: FileExchange(temporaryDirectory: () async => cache),
+    );
+    await tap(tester, 'recovery-erase');
+    await tap(tester, 'recovery-confirm');
+    expect(await tester.runAsync(exported.exists), isFalse);
+    expect(title, findsNothing);
     await stop(tester);
   });
 
