@@ -356,13 +356,26 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     FavoriteRow favorite,
     List<CategoryRow> categories,
   ) async {
+    if (_saving) return;
     final typing = _amount.text.trim().isNotEmpty;
     if (typing || !canLogDirectly(favorite, categories)) {
       _fillFrom(favorite, categories);
       return;
     }
-    await logFavoriteNow(ref, favorite);
-    if (mounted) Navigator.of(context).pop();
+    setState(() => _saving = true);
+    try {
+      await logFavoriteNow(ref, favorite);
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not log this favorite. Try again.'),
+          ),
+        );
+      }
+    }
   }
 
   /// Puts a favorite's values in the form, ready to change before saving.

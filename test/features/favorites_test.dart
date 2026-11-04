@@ -6,6 +6,7 @@ import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
 import 'package:heisenbudget/data/repositories/favorite_repository.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
+import 'package:heisenbudget/features/favorites/favorite_chip.dart';
 
 import 'test_helpers.dart';
 
@@ -473,6 +474,24 @@ void main() {
       await tester.tap(find.byTooltip('Add transaction'));
       await settle(tester);
     }
+
+    testWidgets('overlapping favorite callbacks write one transaction', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      final id = await addFavorite(tester, env);
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+      await openAddSheet(tester);
+      final chip = tester.widget<FavoriteChip>(
+        find.byKey(ValueKey('favorite-$id')),
+      );
+      chip.onTap();
+      chip.onTap();
+      await settle(tester);
+      expect(await allTx(tester, env), hasLength(1));
+      await disposeEnv(tester, env);
+    });
 
     testWidgets('Home no longer shows a Quick add strip', (tester) async {
       final env = await createEnv(tester);
