@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/app.dart';
 import 'package:heisenbudget/data/backup/backup_data.dart';
+import 'package:heisenbudget/data/backup/backup_service.dart';
+import 'package:heisenbudget/data/repositories/settings_repository.dart';
 import 'package:heisenbudget/data/backup/file_exchange.dart';
 import 'package:heisenbudget/providers/backup_providers.dart';
 
@@ -55,9 +57,25 @@ class FakeFileExchange extends FileExchange {
   Future<Uint8List?> pickFile() async => toPick;
 
   int sweeps = 0;
+  bool cleanupFails = false;
+
+  @override
+  Future<void> clearTemporaryFiles() async {
+    if (cleanupFails) throw StateError('Temporary files unavailable');
+  }
 
   @override
   Future<void> clearOldExports() async => sweeps++;
+}
+
+class _FailingEraseSettings extends SettingsRepository {
+  _FailingEraseSettings(super.prefs) : super(defaultCurrency: 'USD');
+  bool fail = true;
+  @override
+  Future<void> clearAll() async {
+    if (fail) throw StateError('Preferences unavailable');
+    await super.clearAll();
+  }
 }
 
 Uint8List backupBytes() => Uint8List.fromList(
@@ -90,13 +108,15 @@ Uint8List backupBytes() => Uint8List.fromList(
 Future<void> openSettings(
   WidgetTester tester,
   TestEnv env,
-  FakeFileExchange exchange,
-) async {
+  FakeFileExchange exchange, {
+  BackupService? service,
+}) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         ...env.overrides,
         fileExchangeProvider.overrideWithValue(exchange),
+        if (service != null) backupServiceProvider.overrideWithValue(service),
       ],
       child: const HeisenbudgetApp(),
     ),
@@ -120,6 +140,52 @@ Future<void> tapTile(WidgetTester tester, String key) async {
 }
 
 void main() {
+  for (final settingsFail in [true, false]) {
+    testWidgets(
+      'partial erase reports completion accurately and retries cleanup (settings=$settingsFail)',
+      (tester) async {
+        final env = await createEnv(tester);
+        await addExpense(tester, env, 1200, DateTime(2026, 10, 5));
+        final settings = _FailingEraseSettings(env.prefs)..fail = settingsFail;
+        final exchange = FakeFileExchange()..cleanupFails = !settingsFail;
+        await openSettings(
+          tester,
+          env,
+          exchange,
+          service: BackupService(env.db, settings),
+        );
+        await tapTile(tester, 'erase-everything');
+        await tester.tap(find.byKey(const ValueKey('erase-continue')));
+        await settle(tester);
+        await tester.tap(find.byKey(const ValueKey('erase-confirm')));
+        for (var i = 0; i < 5; i++) {
+          await settle(tester);
+        }
+        expect(
+          await tester.runAsync(() => env.db.select(env.db.transactions).get()),
+          isEmpty,
+        );
+        expect(
+          find.textContaining('Your transaction data was erased'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Nothing was changed'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('finish-erase-cleanup')),
+          findsOneWidget,
+        );
+        settings.fail = false;
+        exchange.cleanupFails = false;
+        await tapTile(tester, 'finish-erase-cleanup');
+        for (var i = 0; i < 5; i++) {
+          await settle(tester);
+        }
+        expect(find.byKey(const ValueKey('welcome-skip')), findsOneWidget);
+        await disposeEnv(tester, env);
+      },
+    );
+  }
+
   testWidgets('Back up shares a dated JSON file that restores cleanly', (
     tester,
   ) async {

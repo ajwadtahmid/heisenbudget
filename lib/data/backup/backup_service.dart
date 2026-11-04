@@ -6,6 +6,18 @@ import '../database/seed.dart';
 import '../repositories/settings_repository.dart';
 import 'backup_data.dart';
 
+enum EraseCleanupStep { settings, safetyCopies, temporaryFiles }
+
+/// Rows were erased, but these independent cleanup steps still need retrying.
+class EraseCleanupException implements Exception {
+  const EraseCleanupException(this.remaining);
+  final Set<EraseCleanupStep> remaining;
+
+  String get message =>
+      'Your transaction data was erased, but cleanup is unfinished. '
+      'Some settings or financial copies may remain. Tap Finish erase cleanup to retry.';
+}
+
 /// Reads everything the app stores into a [BackupData] and puts one back.
 class BackupService {
   BackupService(this._db, this._settings, {this._files});
@@ -111,8 +123,23 @@ class BackupService {
       await _db.delete(_db.categories).go();
       await seedDefaultCategories(_db);
     });
-    await _settings.clearAll();
-    // The safety copy holds the same financial data, so it goes too.
-    await _files?.deleteCopies();
+    await completeEraseCleanup();
+  }
+
+  /// Retry only cleanup, never delete transactions entered since an earlier
+  /// partial erase. Attempt every independent step even if another fails.
+  Future<void> completeEraseCleanup() async {
+    final remaining = <EraseCleanupStep>{};
+    try {
+      await _settings.clearAll();
+    } catch (_) {
+      remaining.add(EraseCleanupStep.settings);
+    }
+    try {
+      await _files?.deleteCopies();
+    } catch (_) {
+      remaining.add(EraseCleanupStep.safetyCopies);
+    }
+    if (remaining.isNotEmpty) throw EraseCleanupException(remaining);
   }
 }

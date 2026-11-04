@@ -13,6 +13,18 @@ final fileExchangeProvider = Provider<FileExchange>(
   (ref) => const FileExchange(),
 );
 
+/// Keep the cleanup/retry controls reachable if preferences were cleared but
+/// another erase phase failed. Reset only once cleanup completes.
+final eraseCleanupPendingProvider = NotifierProvider<EraseCleanupPending, bool>(
+  EraseCleanupPending.new,
+);
+
+class EraseCleanupPending extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool pending) => state = pending;
+}
+
 final backupServiceProvider = Provider<BackupService>(
   (ref) => BackupService(
     ref.watch(appDatabaseProvider),

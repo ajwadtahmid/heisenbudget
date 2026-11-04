@@ -158,7 +158,7 @@ class _Root extends ConsumerWidget {
     final done = ref.watch(settingsProvider.select((s) => s.onboardingDone));
 
     final Widget child;
-    if (done) {
+    if (done || ref.watch(eraseCleanupPendingProvider)) {
       child = shell;
     } else {
       child = ref

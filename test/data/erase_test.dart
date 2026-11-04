@@ -1,7 +1,11 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/data/backup/backup_service.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
+import 'package:heisenbudget/data/database/database_files.dart';
 import 'package:heisenbudget/data/repositories/category_repository.dart';
 import 'package:heisenbudget/data/repositories/favorite_repository.dart';
 import 'package:heisenbudget/data/repositories/recurring_repository.dart';
@@ -10,6 +14,26 @@ import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/recurrence.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _FailingSettings extends SettingsRepository {
+  _FailingSettings(super.prefs) : super(defaultCurrency: 'USD');
+  bool fail = true;
+  @override
+  Future<void> clearAll() async {
+    if (fail) throw StateError('Settings unavailable');
+    await super.clearAll();
+  }
+}
+
+class _FailingCopies extends DatabaseFiles {
+  _FailingCopies(super.directory);
+  bool fail = true;
+  @override
+  Future<void> deleteCopies() async {
+    if (fail) throw const FileSystemException('Copies unavailable');
+    await super.deleteCopies();
+  }
+}
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -124,5 +148,59 @@ void main() {
     expect(await db.select(db.transactions).get(), hasLength(1));
     // Protected "Other" categories exist again.
     expect(cats.where((c) => c.isProtected), hasLength(2));
+  });
+
+  test(
+    'settings failure still deletes safety copies and reports committed erase',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('hb_erase');
+      addTearDown(() => dir.delete(recursive: true));
+      final copy = await File('${dir.path}/heisenbudget.before-v3.sqlite')
+          .writeAsString('sensitive copy');
+      final failing = _FailingSettings(await SharedPreferences.getInstance());
+      final service = BackupService(db, failing, files: DatabaseFiles(dir));
+      await expectLater(
+        service.eraseEverything(),
+        throwsA(
+          isA<EraseCleanupException>().having((e) => e.remaining, 'remaining', {
+            EraseCleanupStep.settings,
+          }),
+        ),
+      );
+      expect(await copy.exists(), isFalse);
+      expect(await db.select(db.transactions).get(), isEmpty);
+      failing.fail = false;
+      await service.completeEraseCleanup();
+      expect(failing.load().onboardingDone, isFalse);
+    },
+  );
+
+  test('cleanup retry preserves newly entered transactions', () async {
+    final dir = await Directory.systemTemp.createTemp('hb_erase');
+    addTearDown(() => dir.delete(recursive: true));
+    final files = _FailingCopies(dir);
+    final service = BackupService(db, settings, files: files);
+    await expectLater(
+      service.eraseEverything(),
+      throwsA(
+        isA<EraseCleanupException>().having((e) => e.remaining, 'remaining', {
+          EraseCleanupStep.safetyCopies,
+        }),
+      ),
+    );
+    final category = (await db.select(db.categories).get()).firstWhere(
+      (c) => c.name == 'Food',
+    );
+    await TransactionRepository(db).add(
+      TransactionInput(
+        amountCents: 1234,
+        type: TransactionType.expense,
+        date: DateTime(2026, 10, 15),
+        categoryId: category.id,
+      ),
+    );
+    files.fail = false;
+    await service.completeEraseCleanup();
+    expect((await db.select(db.transactions).get()).single.amountCents, 1234);
   });
 }

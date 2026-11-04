@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatters.dart';
 import '../../data/backup/backup_data.dart';
+import '../../data/backup/backup_service.dart';
 import '../../data/backup/csv_export.dart';
 import '../../domain/iso_date.dart';
 import '../../domain/backup_status.dart';
@@ -35,6 +36,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   @override
   Widget build(BuildContext context) {
+    final cleanupPending = ref.watch(eraseCleanupPendingProvider);
     final last = ref.watch(settingsProvider.select((s) => s.lastBackupAt));
     final today = ref.watch(clockProvider);
     final freshness = backupFreshness(last, today);
@@ -48,6 +50,15 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     };
     return Column(
       children: [
+        if (cleanupPending)
+          SettingsRow(
+            key: const ValueKey('finish-erase-cleanup'),
+            icon: Icons.warning_amber,
+            title: 'Finish erase cleanup',
+            summary: 'Transaction data was erased. Settings or temporary copies may remain.',
+            enabled: !_busy,
+            onTap: () => _run(_finishErase),
+          ),
         SettingsRow(
           key: const ValueKey('export-backup'),
           icon: Icons.ios_share_outlined,
@@ -113,6 +124,8 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     try {
       await action();
     } on BackupFormatException catch (e) {
+      _say(e.message);
+    } on EraseCleanupException catch (e) {
       _say(e.message);
     } catch (_) {
       _say('Something went wrong. Nothing was changed.');
@@ -209,10 +222,43 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     );
     if (sure != true) return;
 
-    await ref.read(backupServiceProvider).eraseEverything();
-    await ref.read(fileExchangeProvider).clearTemporaryFiles();
+    final pending = ref.read(eraseCleanupPendingProvider.notifier);
+    pending.set(true);
+    try {
+      await ref.read(backupServiceProvider).eraseEverything();
+    } on EraseCleanupException {
+      _forgetOldState();
+      // Financial rows are already gone. Still attempt temporary cleanup.
+      try {
+        await ref.read(fileExchangeProvider).clearTemporaryFiles();
+      } catch (_) {}
+      rethrow;
+    } catch (_) {
+      pending.set(false);
+      rethrow;
+    }
+    await _finishErase(serviceCleaned: true);
+  }
+
+  Future<void> _finishErase({bool serviceCleaned = false}) async {
+    // Retry all cleanup even if one store fails, without erasing rows again.
+    Object? failure;
+    try {
+      await ref.read(fileExchangeProvider).clearTemporaryFiles();
+    } catch (_) {
+      failure = const EraseCleanupException({EraseCleanupStep.temporaryFiles});
+    }
+    try {
+      if (!serviceCleaned) {
+        await ref.read(backupServiceProvider).completeEraseCleanup();
+      }
+    } on EraseCleanupException catch (e) {
+      failure = e;
+    }
     // Everything that held old state starts fresh; the welcome tour returns.
     _forgetOldState();
+    if (failure != null) throw failure;
+    ref.read(eraseCleanupPendingProvider.notifier).set(false);
     ref.invalidate(selectedPeriodProvider);
     ref.invalidate(shellTabProvider);
     ref.invalidate(needsWelcomeProvider);

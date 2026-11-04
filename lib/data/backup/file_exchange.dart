@@ -72,12 +72,10 @@ class FileExchange {
   }
 
   /// Deletes every temporary copy made for sharing (they hold financial
-  /// data). Best effort: a failure here is not worth showing.
+  /// data). Report failures so a confirmed erase cannot silently claim success.
   Future<void> clearTemporaryFiles() async {
-    try {
-      final dir = await _exportsDirectory();
-      if (await dir.exists()) await dir.delete(recursive: true);
-    } catch (_) {}
+    final dir = await _exportsDirectory();
+    if (await dir.exists()) await dir.delete(recursive: true);
   }
 
   /// Deletes the temporary copies that are older than [exportKeep]. Run when

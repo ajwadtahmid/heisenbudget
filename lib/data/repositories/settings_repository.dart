@@ -253,7 +253,11 @@ class SettingsRepository {
       _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());
 
   /// Forgets every setting (used by "Erase everything").
-  Future<void> clearAll() => _prefs.clear();
+  Future<void> clearAll() async {
+    if (!await _prefs.clear()) {
+      throw StateError('Settings could not be cleared.');
+    }
+  }
 
   Future<void> setLastCategory(TransactionType type, int categoryId) {
     final key = type == TransactionType.expense

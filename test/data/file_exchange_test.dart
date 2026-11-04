@@ -76,12 +76,18 @@ void main() {
       expect(await exports.exists(), isFalse);
     });
 
-    test('a failing cache folder is not an error', () async {
-      final broken = FileExchange(
-        temporaryDirectory: () async => throw const FileSystemException('x'),
-      );
-      await broken.clearOldExports();
-      await broken.clearTemporaryFiles();
-    });
+    test(
+      'expiry is best effort but explicit erase reports cache failures',
+      () async {
+        final broken = FileExchange(
+          temporaryDirectory: () async => throw const FileSystemException('x'),
+        );
+        await broken.clearOldExports();
+        await expectLater(
+          broken.clearTemporaryFiles(),
+          throwsA(isA<FileSystemException>()),
+        );
+      },
+    );
   });
 }
