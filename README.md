@@ -186,10 +186,13 @@ For Google Play the bundle is also built by GitHub Actions: push a tag that matc
 
 ```bash
 flutter pub get
-cd ios && pod install && cd ..
+# Generate Flutter/Xcode configuration and resolve Swift package integration.
+flutter build ios --config-only --no-codesign
 open ios/Runner.xcworkspace      # set your Team under Signing & Capabilities
 flutter build ipa --release --obfuscate --split-debug-info=build/symbols/<version>   # for the App Store
 ```
+
+This project uses Flutter’s Swift Package Manager integration (`FlutterGeneratedPluginSwiftPackage`); it has no Podfile. See the [Flutter Swift Package Manager setup](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers). These commands require validation on a Mac before release.
 
 `ITSAppUsesNonExemptEncryption` is set to false because the app has no encryption of its own. If encryption is added (locked backups, an encrypted database), decide the export-compliance answer again.
 
