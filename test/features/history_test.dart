@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/data/repositories/transaction_repository.dart';
 import 'package:heisenbudget/domain/saved_filter.dart';
 import 'package:heisenbudget/domain/sort_option.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/history/history_screen.dart';
 import 'package:heisenbudget/providers/history_providers.dart';
+import 'package:heisenbudget/providers/database_providers.dart';
 import 'package:heisenbudget/providers/settings_providers.dart';
 
 import 'test_helpers.dart';
@@ -34,6 +36,12 @@ Finder amount(String text) =>
 ProviderContainer _container(WidgetTester tester) =>
     ProviderScope.containerOf(tester.element(find.byType(HistoryScreen)));
 
+class _DeleteFailure extends TransactionRepository {
+  _DeleteFailure(super.db);
+  @override
+  Future<void> delete(int id) async => throw StateError('Write unavailable');
+}
+
 double _y(WidgetTester tester, String text) => tester
     .getTopLeft(
       text.startsWith('-') || text.startsWith('+')
@@ -53,6 +61,36 @@ Future<void> closeFilterSheet(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('a failed swipe delete returns the row with retry feedback', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final id = await addExpense(tester, env, 1234, DateTime(2026, 10, 5));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...env.overrides,
+          transactionRepositoryProvider.overrideWithValue(
+            _DeleteFailure(env.db),
+          ),
+        ],
+        child: MaterialApp(theme: lightTheme(), home: const HistoryScreen()),
+      ),
+    );
+    await settle(tester);
+    await tester.drag(find.byKey(ValueKey('tx-$id')), const Offset(-600, 0));
+    for (var i = 0; i < 4; i++) {
+      await settle(tester);
+    }
+    expect(find.byKey(ValueKey('tx-$id')), findsOneWidget);
+    expect(
+      find.text('Could not delete transaction. Try again.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    expect(await savedTransactions(tester, env), hasLength(1));
+    await disposeEnv(tester, env);
+  });
   testWidgets('groups by day with each day\'s net, newest first', (
     tester,
   ) async {

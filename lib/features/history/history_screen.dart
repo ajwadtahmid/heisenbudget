@@ -122,7 +122,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final repo = ref.read(transactionRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
     final backup = TransactionInput.fromRow(row);
-    await repo.delete(row.id);
+    try {
+      await repo.delete(row.id);
+    } catch (_) {
+      // First let the dismissed widget leave the tree, then recreate the row.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      setState(() => _dismissed.remove(row.id));
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete transaction. Try again.'),
+        ),
+      );
+      return;
+    }
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -138,6 +151,15 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(ledgerRevisionProvider, (_, _) {
+      setState(_dismissed.clear);
+    });
+    ref.listen(historyListProvider, (_, next) {
+      if (next.hasValue && !next.hasError && !next.isLoading) {
+        final ids = next.requireValue.rows.map((i) => i.transaction.id).toSet();
+        _dismissed.removeWhere((id) => !ids.contains(id));
+      }
+    });
     final filter = ref.watch(historyFilterProvider);
     final symbol = ref.watch(settingsProvider.select((s) => s.currencySymbol));
     final page = ref.watch(historyListProvider);

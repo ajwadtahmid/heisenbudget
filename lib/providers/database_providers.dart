@@ -16,6 +16,17 @@ final appDatabaseProvider = Provider<AppDatabase>(
 /// which have no files.
 final databaseFilesProvider = Provider<DatabaseFiles?>((ref) => null);
 
+/// Invalidates temporary UI state that refers to IDs from replaced data.
+final ledgerRevisionProvider = NotifierProvider<LedgerRevision, int>(
+  LedgerRevision.new,
+);
+
+class LedgerRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+  void replaced() => state++;
+}
+
 final transactionRepositoryProvider = Provider<TransactionRepository>(
   (ref) => TransactionRepository(ref.watch(appDatabaseProvider)),
 );

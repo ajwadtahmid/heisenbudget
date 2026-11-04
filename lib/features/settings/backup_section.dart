@@ -266,6 +266,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 
   /// State that points at data a restore or an erase just replaced.
   void _forgetOldState() {
+    ref.read(ledgerRevisionProvider.notifier).replaced();
     ref.invalidate(settingsProvider);
     ref.invalidate(historyFilterProvider);
     ref.invalidate(historyModeProvider);

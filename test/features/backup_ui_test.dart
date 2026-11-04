@@ -140,6 +140,49 @@ Future<void> tapTile(WidgetTester tester, String key) async {
 }
 
 void main() {
+  testWidgets('restoring a reused ID shows the row after a History swipe', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final id = await addExpense(tester, env, 1200, DateTime(2026, 10, 5));
+    final exchange = FakeFileExchange(toPick: backupBytes());
+    await openSettings(tester, env, exchange);
+    Future<void> tab(String label) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text(label),
+        ),
+      );
+      await settle(tester);
+    }
+
+    await tab('History');
+    await tester.drag(find.byKey(ValueKey('tx-$id')), const Offset(-600, 0));
+    for (var i = 0; i < 3; i++) {
+      await settle(tester);
+    }
+    expect(
+      await tester.runAsync(() => env.db.select(env.db.transactions).get()),
+      isEmpty,
+    );
+    await tab('Settings');
+    await tapTile(tester, 'restore-backup');
+    await tester.tap(find.byKey(const ValueKey('restore-confirm')));
+    for (var i = 0; i < 5; i++) {
+      await settle(tester);
+    }
+    await tab('History');
+    expect(find.byKey(const ValueKey('tx-1')), findsOneWidget);
+    expect(find.text('Tea'), findsOneWidget);
+    final rows = await tester.runAsync(
+      () => env.db.select(env.db.transactions).get(),
+    );
+    expect(rows!.single.id, id);
+    expect(rows.single.amountCents, 4500);
+    await disposeEnv(tester, env);
+  });
+
   for (final settingsFail in [true, false]) {
     testWidgets(
       'partial erase reports completion accurately and retries cleanup (settings=$settingsFail)',
