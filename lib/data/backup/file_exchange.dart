@@ -81,23 +81,37 @@ class FileExchange {
   /// Deletes every temporary copy made for sharing (they hold financial
   /// data). Report failures so a confirmed erase cannot silently claim success.
   Future<void> clearTemporaryFiles() async {
-    final dir = await _exportsDirectory();
-    if (await dir.exists()) await dir.delete(recursive: true);
+    final root = await temporaryDirectory();
+    var failed = false;
+    for (final name in ['exports', 'share_plus']) {
+      try {
+        final dir = Directory('${root.path}/$name');
+        if (await dir.exists()) await dir.delete(recursive: true);
+      } catch (_) {
+        failed = true;
+      }
+    }
+    if (failed)
+      throw const FileSystemException(
+        'Temporary financial files could not be cleared.',
+      );
   }
 
-  /// Deletes the temporary copies that are older than [exportKeep]. Run when
-  /// the app starts and each time it is opened again. Best effort.
+  /// Expire both Dart sources and plugin-owned Android attachments. Retain
+  /// fresh files so delayed recipients can still read their granted URI.
   Future<void> clearOldExports() async {
     try {
-      final dir = await _exportsDirectory();
-      if (!await dir.exists()) return;
+      final root = await temporaryDirectory();
       final cutoff = DateTime.now().subtract(exportKeep);
-      await for (final entry in dir.list()) {
-        if (entry is File && (await entry.lastModified()).isBefore(cutoff)) {
-          await entry.delete();
+      for (final name in ['exports', 'share_plus']) {
+        final dir = Directory('${root.path}/$name');
+        if (!await dir.exists()) continue;
+        await for (final entry in dir.list()) {
+          if (entry is File && (await entry.lastModified()).isBefore(cutoff))
+            await entry.delete();
         }
+        if (await dir.list().isEmpty) await dir.delete();
       }
-      if (await dir.list().isEmpty) await dir.delete();
     } catch (_) {}
   }
 

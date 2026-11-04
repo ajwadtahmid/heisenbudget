@@ -25,6 +25,25 @@ void main() {
 
   group('exports left in the cache after sharing', () {
     test(
+      'plugin copies expire too, and erase removes fresh plugin attachments',
+      () async {
+        final native = await Directory('${cache.path}/share_plus').create();
+        final old = await File('${native.path}/old.json')
+            .writeAsString('old private data');
+        await old.setLastModified(
+          DateTime.now().subtract(FileExchange.exportKeep * 2),
+        );
+        final fresh = await File('${native.path}/fresh.json')
+            .writeAsString('fresh private data');
+        await exchange.clearOldExports();
+        expect(await old.exists(), isFalse);
+        expect(await fresh.exists(), isTrue);
+        await exchange.clearTemporaryFiles();
+        expect(await fresh.exists(), isFalse);
+        expect(await native.exists(), isFalse);
+      },
+    );
+    test(
       'the ones older than the keep time are deleted, new ones stay',
       () async {
         final old = await export('old.json', age: FileExchange.exportKeep * 2);
