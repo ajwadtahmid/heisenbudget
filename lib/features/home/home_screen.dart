@@ -8,7 +8,6 @@ import '../../core/design/section_label.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../domain/category_spend.dart';
-import '../../domain/summary.dart';
 import '../../domain/transaction_type.dart';
 import '../../providers/budget_history_providers.dart';
 import '../../providers/comparison_providers.dart';
@@ -56,16 +55,22 @@ class HomeScreen extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
     final copy = ref.watch(copyProvider);
     final symbol = settings.currencySymbol;
-    final balance = ref.watch(balanceProvider).value ?? 0;
-    final summary = ref.watch(periodSummaryProvider).value ?? Summary.empty;
-    final spends = ref.watch(spendByCategoryProvider).value ?? const [];
-    final recent = ref.watch(recentTransactionsProvider).value ?? const [];
+    final balanceState = ref.watch(balanceProvider);
+    final summaryState = ref.watch(periodSummaryProvider);
+    final spendsState = ref.watch(spendByCategoryProvider);
+    final recentState = ref.watch(recentTransactionsProvider);
+    final balance = _loaded(balanceState);
+    final summary = _loaded(summaryState);
+    final spends = _loaded(spendsState);
+    final recent = _loaded(recentState);
     final comingUp = ref.watch(comingUpProvider);
     final comparison = ref.watch(comparisonViewProvider);
     final c = context.appColors;
     final theme = Theme.of(context);
 
-    final purity = purityPermille(summary.receivedCents, summary.spentCents);
+    final purity = summary == null
+        ? null
+        : purityPermille(summary.receivedCents, summary.spentCents);
 
     return Scaffold(
       floatingActionButton: const AddKey(),
@@ -82,21 +87,28 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(height: Gap.l),
             // The readout. It counts to new values and shrinks, never
             // wraps, when the amount is huge.
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: CountingText(
-                textKey: const ValueKey('balance'),
-                value: balance,
-                format: (v) => formatMoney(v, symbol),
-                style: monoText(
-                  size: 44,
-                  weight: FontWeight.w600,
-                  letterSpacing: -1,
-                  color: balance < 0 ? c.spent : c.text,
+            if (balance != null)
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: CountingText(
+                  textKey: const ValueKey('balance'),
+                  value: balance,
+                  format: (v) => formatMoney(v, symbol),
+                  style: monoText(
+                    size: 44,
+                    weight: FontWeight.w600,
+                    letterSpacing: -1,
+                    color: balance < 0 ? c.spent : c.text,
+                  ),
                 ),
               ),
-            ),
+            if (balance == null)
+              _ReadStatus(
+                section: 'balance',
+                failed: balanceState.hasError,
+                onRetry: () => ref.invalidate(balanceProvider),
+              ),
             const SizedBox(height: Gap.xs),
             Row(
               children: [
@@ -134,55 +146,76 @@ class HomeScreen extends ConsumerWidget {
               onChanged: ref.read(selectedPeriodProvider.notifier).select,
             ),
             const SizedBox(height: Gap.s),
-            LeaderRow(
-              key: const ValueKey('row-received'),
-              label: 'RECEIVED',
-              icon: Icons.arrow_downward,
-              value: formatMoney(summary.receivedCents, symbol, showPlus: true),
-              valueColor: c.received,
-            ),
-            if (comparison?.received case final delta?)
-              DeltaLine(
-                key: const ValueKey('delta-received'),
-                what: 'Received',
-                delta: delta,
-                comparison: comparison!.comparison,
-                symbol: symbol,
+            if (summary != null) ...[
+              LeaderRow(
+                key: const ValueKey('row-received'),
+                label: 'RECEIVED',
+                icon: Icons.arrow_downward,
+                value: formatMoney(
+                  summary.receivedCents,
+                  symbol,
+                  showPlus: true,
+                ),
+                valueColor: c.received,
               ),
-            LeaderRow(
-              key: const ValueKey('row-spent'),
-              label: 'SPENT',
-              icon: Icons.arrow_upward,
-              value: formatMoney(-summary.spentCents, symbol),
-              valueColor: c.spent,
-            ),
-            if (comparison?.spent case final delta?)
-              DeltaLine(
-                key: const ValueKey('delta-spent'),
-                what: 'Spent',
-                delta: delta,
-                comparison: comparison!.comparison,
-                symbol: symbol,
+              if (comparison?.received case final delta?)
+                DeltaLine(
+                  key: const ValueKey('delta-received'),
+                  what: 'Received',
+                  delta: delta,
+                  comparison: comparison!.comparison,
+                  symbol: symbol,
+                ),
+              LeaderRow(
+                key: const ValueKey('row-spent'),
+                label: 'SPENT',
+                icon: Icons.arrow_upward,
+                value: formatMoney(-summary.spentCents, symbol),
+                valueColor: c.spent,
               ),
-            LeaderRow(
-              key: const ValueKey('row-net'),
-              label: 'NET',
-              icon: Icons.drag_handle,
-              value: formatMoney(summary.netCents, symbol, showPlus: true),
-              valueColor: summary.netCents < 0 ? c.spent : c.text,
-            ),
+              if (comparison?.spent case final delta?)
+                DeltaLine(
+                  key: const ValueKey('delta-spent'),
+                  what: 'Spent',
+                  delta: delta,
+                  comparison: comparison!.comparison,
+                  symbol: symbol,
+                ),
+              LeaderRow(
+                key: const ValueKey('row-net'),
+                label: 'NET',
+                icon: Icons.drag_handle,
+                value: formatMoney(summary.netCents, symbol, showPlus: true),
+                valueColor: summary.netCents < 0 ? c.spent : c.text,
+              ),
+            ] else
+              _ReadStatus(
+                section: 'summary',
+                failed: summaryState.hasError,
+                onRetry: () => ref.invalidate(periodSummaryProvider),
+              ),
             const HomeBudgetLine(),
             const SizedBox(height: Gap.xl),
             SectionLabel(copy.chartTitle),
             const SizedBox(height: Gap.m),
-            SpectrumChart(
-              bars: buildSpectrum(spends),
-              symbol: symbol,
-              emptyText: copy.emptyChart,
-              onOpen: (bar) => _openHistoryFor(ref, bar),
-              onOpenTrend: (bar) =>
-                  openTrends(context, ref, categoryId: bar.categoryIds.single),
-            ),
+            if (spends != null)
+              SpectrumChart(
+                bars: buildSpectrum(spends),
+                symbol: symbol,
+                emptyText: copy.emptyChart,
+                onOpen: (bar) => _openHistoryFor(ref, bar),
+                onOpenTrend: (bar) => openTrends(
+                  context,
+                  ref,
+                  categoryId: bar.categoryIds.single,
+                ),
+              ),
+            if (spends == null)
+              _ReadStatus(
+                section: 'spending',
+                failed: spendsState.hasError,
+                onRetry: () => ref.invalidate(spendByCategoryProvider),
+              ),
             if (comingUp.isNotEmpty) ...[
               const SizedBox(height: Gap.xl),
               const SectionLabel('Coming up'),
@@ -207,7 +240,13 @@ class HomeScreen extends ConsumerWidget {
                 child: const Text('See all'),
               ),
             ),
-            if (recent.isEmpty)
+            if (recent == null)
+              _ReadStatus(
+                section: 'recent transactions',
+                failed: recentState.hasError,
+                onRetry: () => ref.invalidate(recentTransactionsProvider),
+              )
+            else if (recent.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: Gap.l),
                 child: EmptyState(
@@ -232,4 +271,42 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Never present cached/empty-derived money as a current successful read.
+T? _loaded<T>(AsyncValue<T> state) =>
+    state.hasError || state.isLoading ? null : state.value;
+
+class _ReadStatus extends StatelessWidget {
+  const _ReadStatus({
+    required this.section,
+    required this.failed,
+    required this.onRetry,
+  });
+  final String section;
+  final bool failed;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: Gap.m),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            failed ? "Couldn't load $section." : 'Loading $section…',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        if (failed)
+          TextButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: Text('Retry $section'),
+          ),
+      ],
+    ),
+  );
 }

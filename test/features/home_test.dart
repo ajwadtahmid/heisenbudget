@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,8 @@ import 'package:heisenbudget/features/home/home_screen.dart';
 import 'package:heisenbudget/providers/navigation_providers.dart';
 import 'package:heisenbudget/providers/period_providers.dart';
 import 'package:heisenbudget/providers/settings_providers.dart';
+import 'package:heisenbudget/providers/transaction_providers.dart';
+import 'package:heisenbudget/domain/summary.dart';
 
 import 'test_helpers.dart';
 
@@ -38,6 +42,91 @@ ProviderContainer _container(WidgetTester tester) =>
     ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
 
 void main() {
+  testWidgets('loading money does not display a fabricated zero', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final balance = StreamController<int>();
+    final summary = StreamController<Summary>();
+    addTearDown(balance.close);
+    addTearDown(summary.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...env.overrides,
+          balanceProvider.overrideWith((ref) => balance.stream),
+          periodSummaryProvider.overrideWith((ref) => summary.stream),
+        ],
+        child: MaterialApp(theme: lightTheme(), home: const HomeScreen()),
+      ),
+    );
+    await settle(tester);
+    expect(find.text('Loading balance…'), findsOneWidget);
+    expect(find.byKey(const ValueKey('balance')), findsNothing);
+    expect(find.byKey(const ValueKey('row-received')), findsNothing);
+    balance.add(12345);
+    summary.add(Summary.empty);
+    await settle(tester);
+    expect(find.byKey(const ValueKey('balance')), findsOneWidget);
+    expect(find.byKey(const ValueKey('row-received')), findsOneWidget);
+    balance.addError(StateError('Read unavailable'));
+    summary.addError(StateError('Read unavailable'));
+    await settle(tester);
+    expect(find.text("Couldn't load balance."), findsOneWidget);
+    expect(find.byKey(const ValueKey('balance')), findsNothing);
+    expect(find.byKey(const ValueKey('row-received')), findsNothing);
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('failed financial reads show independent retry controls', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    var failing = true;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...env.overrides,
+          balanceProvider.overrideWith(
+            (ref) => failing
+                ? Stream.error(StateError('private diagnostics'))
+                : Stream.value(12345),
+          ),
+          periodSummaryProvider.overrideWith(
+            (ref) => Stream.error(StateError('unavailable')),
+          ),
+          spendByCategoryProvider.overrideWith(
+            (ref) => Stream.error(StateError('unavailable')),
+          ),
+          recentTransactionsProvider.overrideWith(
+            (ref) => Stream.error(StateError('unavailable')),
+          ),
+        ],
+        child: MaterialApp(theme: lightTheme(), home: const HomeScreen()),
+      ),
+    );
+    await settle(tester);
+    for (final section in [
+      'balance',
+      'summary',
+      'spending',
+      'recent transactions',
+    ]) {
+      expect(find.text("Couldn't load $section."), findsOneWidget);
+      expect(find.text('Retry $section'), findsOneWidget);
+    }
+    expect(find.byKey(const ValueKey('balance')), findsNothing);
+    expect(find.byKey(const ValueKey('row-received')), findsNothing);
+    expect(find.textContaining('private diagnostics'), findsNothing);
+    failing = false;
+    await tester.tap(find.text('Retry balance'));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('balance')), findsOneWidget);
+    expect(find.text("Couldn't load summary."), findsOneWidget);
+    expect(find.text("Couldn't load recent transactions."), findsOneWidget);
+    await disposeEnv(tester, env);
+  });
+
   testWidgets('empty state shows when there are no transactions', (
     tester,
   ) async {
