@@ -25,6 +25,7 @@ class FakeFileExchange extends FileExchange {
 
   Uint8List? toPick;
   bool shareFails;
+  FileShareOutcome outcome = FileShareOutcome.selected;
 
   /// The person closes the save dialog without choosing a folder.
   bool saveCancelled;
@@ -32,7 +33,7 @@ class FakeFileExchange extends FileExchange {
   final shared = <({String name, String mime, Uint8List bytes})>[];
 
   @override
-  Future<void> shareFile({
+  Future<FileShareOutcome> shareFile({
     required String fileName,
     required String mimeType,
     required Uint8List bytes,
@@ -40,6 +41,7 @@ class FakeFileExchange extends FileExchange {
   }) async {
     if (shareFails) throw StateError('no share target');
     shared.add((name: fileName, mime: mimeType, bytes: bytes));
+    return outcome;
   }
 
   @override
@@ -140,6 +142,22 @@ Future<void> tapTile(WidgetTester tester, String key) async {
 }
 
 void main() {
+  for (final outcome in [
+    FileShareOutcome.dismissed,
+    FileShareOutcome.unavailable,
+  ]) {
+    testWidgets(
+      'an unconfirmed share does not reset backup reminders ($outcome)',
+      (tester) async {
+        final env = await createEnv(tester);
+        final exchange = FakeFileExchange()..outcome = outcome;
+        await openSettings(tester, env, exchange);
+        await tapTile(tester, 'export-backup');
+        expect(env.prefs.getString('last_backup_at'), isNull);
+        await disposeEnv(tester, env);
+      },
+    );
+  }
   testWidgets('restoring a reused ID shows the row after a History swipe', (
     tester,
   ) async {

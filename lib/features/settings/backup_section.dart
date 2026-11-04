@@ -43,9 +43,9 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     final status = switch (freshness) {
       BackupFreshness.never => 'Not backed up yet',
       BackupFreshness.recent =>
-        'Last backup file: ${formatDate(last!.toLocal())}',
+        'Last backup action: ${formatDate(last!.toLocal())}',
       BackupFreshness.stale =>
-        'Last backup file: ${formatDate(last!.toLocal())} · '
+        'Last backup action: ${formatDate(last!.toLocal())} · '
             '${daysSinceBackup(last, today)} days ago',
     };
     return Column(
@@ -72,7 +72,7 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           key: const ValueKey('save-backup-folder'),
           icon: Icons.folder_outlined,
           title: 'Save to a folder',
-          summary: 'Pick where on this phone the backup file goes.',
+          summary: 'Pick where the file is saved. Sharing alone does not confirm a saved copy.',
           enabled: !_busy,
           onTap: () => _run(_saveToFolder),
         ),

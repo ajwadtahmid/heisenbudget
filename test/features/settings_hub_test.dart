@@ -20,13 +20,14 @@ class FakeExchange extends FileExchange {
   int cleared = 0;
 
   @override
-  Future<void> shareFile({
+  Future<FileShareOutcome> shareFile({
     required String fileName,
     required String mimeType,
     required Uint8List bytes,
     Rect? origin,
   }) async {
     shared.add(fileName);
+    return FileShareOutcome.selected;
   }
 
   @override
@@ -301,7 +302,7 @@ void main() {
       expect(exchange.shared.single, 'heisenbudget-backup-2026-10-15.json');
       expect(
         summaryOf(tester, 'export-backup'),
-        'Last backup file: Oct 15, 2026',
+        'Last backup action: Oct 15, 2026',
       );
       expect(env.prefs.getString('last_backup_at'), isNotNull);
       await disposeEnv(tester, env);
@@ -330,7 +331,7 @@ void main() {
       await openSettings(tester, env, exchange: FakeExchange());
       expect(
         summaryOf(tester, 'export-backup'),
-        'Last backup file: Sep 15, 2026',
+        'Last backup action: Sep 15, 2026',
       );
       await disposeEnv(tester, env);
 
@@ -343,7 +344,7 @@ void main() {
       await openSettings(tester, env2, exchange: FakeExchange());
       expect(
         summaryOf(tester, 'export-backup'),
-        'Last backup file: Sep 14, 2026 · 31 days ago',
+        'Last backup action: Sep 14, 2026 · 31 days ago',
       );
       final text = tester.widget<Text>(
         find.descendant(

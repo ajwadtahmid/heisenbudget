@@ -9,6 +9,8 @@ import 'package:share_plus/share_plus.dart';
 
 import 'backup_data.dart';
 
+enum FileShareOutcome { selected, dismissed, unavailable }
+
 /// The only place that talks to the phone's share sheet and file picker.
 /// Tests replace it with a fake.
 class FileExchange {
@@ -29,7 +31,7 @@ class FileExchange {
   /// Writes [bytes] to a temporary file and opens the share sheet, where the
   /// user chooses where it goes (Files, Drive, email, ...). Nothing is sent
   /// anywhere by the app itself.
-  Future<void> shareFile({
+  Future<FileShareOutcome> shareFile({
     required String fileName,
     required String mimeType,
     required Uint8List bytes,
@@ -41,7 +43,7 @@ class FileExchange {
     await dir.create(recursive: true);
     final file = File('${dir.path}${Platform.pathSeparator}$fileName');
     await file.writeAsBytes(bytes, flush: true);
-    await SharePlus.instance.share(
+    final result = await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: mimeType)],
         subject: fileName,
@@ -51,6 +53,11 @@ class FileExchange {
     // The copy has done its job once the other app has had time to take it.
     // (If the app is closed before then, the next start removes it.)
     Timer(exportKeep + const Duration(seconds: 5), clearOldExports);
+    return switch (result.status) {
+      ShareResultStatus.success => FileShareOutcome.selected,
+      ShareResultStatus.dismissed => FileShareOutcome.dismissed,
+      ShareResultStatus.unavailable => FileShareOutcome.unavailable,
+    };
   }
 
   /// Opens the phone's save dialog so the person picks the folder (and may

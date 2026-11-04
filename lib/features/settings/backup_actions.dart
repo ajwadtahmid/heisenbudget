@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/backup/backup_data.dart';
+import '../../data/backup/file_exchange.dart';
 import '../../domain/iso_date.dart';
 import '../../providers/backup_providers.dart';
 import '../../providers/period_providers.dart';
@@ -18,7 +19,7 @@ Future<void> shareBackup(WidgetRef ref, {Rect? origin}) async {
   final data = await ref
       .read(backupServiceProvider)
       .snapshot(now: ref.read(nowProvider)());
-  await ref
+  final outcome = await ref
       .read(fileExchangeProvider)
       .shareFile(
         fileName: _backupFileName(ref),
@@ -26,6 +27,8 @@ Future<void> shareBackup(WidgetRef ref, {Rect? origin}) async {
         bytes: await data.toBytes(),
         origin: origin,
       );
+  if (outcome != FileShareOutcome.selected) return;
+  // A selected recipient is a share action, not proof of durable storage.
   await ref
       .read(settingsProvider.notifier)
       .setLastBackupAt(ref.read(nowProvider)());
