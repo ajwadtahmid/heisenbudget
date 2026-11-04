@@ -71,7 +71,9 @@ void main() {
     );
 
     test('the same schema as last time makes no copy', () async {
-      await makeDatabaseFile();
+      final initial = openFile(files.database);
+      await initial.customSelect('SELECT 1').get();
+      await initial.close();
       final p = await prefs({schemaVersionPrefKey: currentSchemaVersion});
       final db = await openAppDatabase(prefs: p, files: files, open: openFile);
       addTearDown(db.close);
@@ -119,8 +121,8 @@ void main() {
       final db = await openAppDatabase(prefs: p, files: files, open: openFile);
       addTearDown(db.close);
 
-      expect(await files.copyVersion(), 2);
-      final copy = File('${dir.path}/heisenbudget.before-v2.sqlite');
+      expect(await files.copyVersion(), 3);
+      final copy = File('${dir.path}/heisenbudget.before-v3.sqlite');
       expect(await copy.readAsBytes(), before);
       expect(p.getInt(schemaVersionPrefKey), currentSchemaVersion);
     });
@@ -158,7 +160,7 @@ void main() {
     test('a copy that cannot be made stops the upgrade', () async {
       await makeDatabaseFile();
       // A directory where the copy's file should go makes the copy fail.
-      await Directory('${dir.path}/heisenbudget.before-v2.sqlite').create();
+      await Directory('${dir.path}/heisenbudget.before-v3.sqlite').create();
       final p = await prefs({schemaVersionPrefKey: 2});
       var opened = false;
       await expectLater(
@@ -175,6 +177,26 @@ void main() {
       expect(opened, isFalse, reason: 'never touched without its copy');
     });
   });
+
+  for (final marker in <Object?>[null, 4, 2, 99, 'invalid']) {
+    test('upgrade protects actual schema with preference $marker', () async {
+      await makeDatabaseFile();
+      final before = await files.database.readAsBytes();
+      final p = await prefs({if (marker != null) schemaVersionPrefKey: marker});
+      final db = await openAppDatabase(prefs: p, files: files, open: openFile);
+      try {
+        expect(await files.copyVersion(), 3);
+        expect(
+          await File('${dir.path}/heisenbudget.before-v3.sqlite').readAsBytes(),
+          before,
+        );
+        expect(userVersionOf(files.database), 4);
+        expect(p.getInt(schemaVersionPrefKey), 4);
+      } finally {
+        await db.close();
+      }
+    });
+  }
 
   group('the safety copy', () {
     test('is replaced by the next one, and restored on request', () async {

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 
 /// The database file on the phone, and the one safety copy made before an
 /// update changes how data is stored (`heisenbudget.before-v3.sqlite`, the
@@ -37,6 +38,21 @@ class DatabaseFiles {
   File _copy(int version) => _file('$_name.before-v$version.sqlite');
 
   Future<bool> get databaseExists => database.exists();
+
+  /// Reads SQLite's actual version, including committed WAL state, without
+  /// creating a database or trusting preferences from another installation.
+  Future<int?> schemaVersion() async {
+    if (!await database.exists()) return null;
+    final db = sqlite.sqlite3.open(
+      database.path,
+      mode: sqlite.OpenMode.readOnly,
+    );
+    try {
+      return db.select('PRAGMA user_version').single.values.single as int;
+    } finally {
+      db.close();
+    }
+  }
 
   /// Copies the database (and any side files) to a new safety copy at
   /// [version], replacing any earlier copy. Call it before the database is

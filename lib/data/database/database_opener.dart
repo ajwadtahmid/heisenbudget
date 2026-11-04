@@ -6,8 +6,8 @@ import 'app_database.dart';
 import 'database_files.dart';
 
 /// The schema the database was last opened at, kept on the phone only (not in
-/// the backup file). When it is lower than the app's, this launch is about to
-/// run an upgrade, so a safety copy is made first.
+/// the backup file). Informational only: migration protection uses SQLite's
+/// actual schema rather than this potentially missing or outdated preference.
 const schemaVersionPrefKey = 'db_schema_version';
 
 /// The database could not be opened or upgraded. [cause] is the original
@@ -26,7 +26,7 @@ typedef DatabaseOpener = AppDatabase Function(File file);
 
 /// Opens (and, if needed, upgrades) the app's database.
 ///
-/// 1. When the last launch was at an older schema and a database exists, a
+/// 1. When the database itself is at an older schema, a
 ///    copy of it is made before anything touches it.
 /// 2. The database is opened and one query forces any upgrade to run now, so a
 ///    failure shows up here, not later on some screen.
@@ -39,9 +39,10 @@ Future<AppDatabase> openAppDatabase({
   DatabaseOpener open = AppDatabase.open,
   DateTime Function()? now,
 }) async {
-  final stored = prefs.getInt(schemaVersionPrefKey);
   try {
+    final stored = await files.schemaVersion();
     if (stored != null &&
+        stored > 0 &&
         stored < currentSchemaVersion &&
         await files.databaseExists) {
       await files.copyBeforeUpgrade(stored);
