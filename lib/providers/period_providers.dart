@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/repositories/settings_repository.dart';
@@ -16,12 +18,30 @@ final clockProvider = NotifierProvider<ClockNotifier, DateTime>(
 );
 
 class ClockNotifier extends Notifier<DateTime> {
+  Timer? _timer;
   @override
-  DateTime build() => dateOnly(ref.read(nowProvider)());
+  DateTime build() {
+    ref.onDispose(() => _timer?.cancel());
+    _schedule();
+    return dateOnly(ref.read(nowProvider)());
+  }
+
+  void _schedule() {
+    _timer?.cancel();
+    final now = ref.read(nowProvider)();
+    final midnight = DateTime(now.year, now.month, now.day + 1);
+    final remaining = midnight.difference(now);
+    // Recheck clock/time-zone changes while foregrounded as well as midnight.
+    final delay = remaining < const Duration(minutes: 1)
+        ? remaining
+        : const Duration(minutes: 1);
+    _timer = Timer(delay, refresh);
+  }
 
   void refresh() {
     final today = dateOnly(ref.read(nowProvider)());
     if (today != state) state = today;
+    _schedule();
   }
 }
 
