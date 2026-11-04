@@ -121,7 +121,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     setState(() => _dismissed.add(row.id));
     final repo = ref.read(transactionRepositoryProvider);
     final messenger = ScaffoldMessenger.of(context);
-    final backup = TransactionInput.fromRow(row);
+    final backup = row;
     try {
       await repo.delete(row.id);
     } catch (_) {
@@ -143,7 +143,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           content: const Text('Transaction deleted'),
           action: SnackBarAction(
             label: 'Undo',
-            onPressed: () => repo.add(backup),
+            onPressed: () => restoreDeletedTransaction(repo, backup, messenger),
           ),
         ),
       );

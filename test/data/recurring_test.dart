@@ -64,6 +64,21 @@ void main() {
 
   group('creating a rule with its first transaction', () {
     test(
+      'Undo preserves row identity, timestamps and its recurrence slot',
+      () async {
+        await rules.addWithRule(
+          firstRent(d(2026, 11, 1)),
+          monthlyRent(d(2026, 11, 1)),
+        );
+        final original = (await allTx()).single;
+        await txs.delete(original.id);
+        expect(await txs.restoreDeleted(original), isTrue);
+        expect((await allTx()).single, original);
+        expect(await txs.restoreDeleted(original), isFalse);
+        expect(await allTx(), hasLength(1));
+      },
+    );
+    test(
       'saves the transaction as occurrence 0 and the rule at occurrence 1',
       () async {
         final txId = await rules.addWithRule(

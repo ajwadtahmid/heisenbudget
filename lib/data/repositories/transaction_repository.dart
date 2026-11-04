@@ -139,6 +139,37 @@ class TransactionRepository {
     await (_db.delete(_t)..where((t) => t.id.equals(id))).go();
   }
 
+  /// Restores the exact deleted row without overwriting a reused ID or a
+  /// recurrence occurrence created while Undo was available.
+  Future<bool> restoreDeleted(TransactionRow row) => _db.transaction(() async {
+    if (await (_db.select(
+          _t,
+        )..where((t) => t.id.equals(row.id))).getSingleOrNull() !=
+        null)
+      return false;
+    var restored = row;
+    final ruleId = row.recurringRuleId;
+    if (ruleId != null) {
+      final rule = await (_db.select(
+        _db.recurringRules,
+      )..where((r) => r.id.equals(ruleId))).getSingleOrNull();
+      if (rule == null) {
+        restored = row.copyWith(recurringRuleId: const Value(null));
+      } else {
+        final occupied =
+            await (_db.select(_t)..where(
+                  (t) =>
+                      t.recurringRuleId.equals(ruleId) &
+                      t.date.equals(row.date),
+                ))
+                .getSingleOrNull();
+        if (occupied != null) return false;
+      }
+    }
+    await _db.into(_t).insert(restored);
+    return true;
+  });
+
   /// Deletes several transactions at once (Undo of a recurring catch-up).
   Future<void> deleteMany(Iterable<int> ids) async {
     await (_db.delete(_t)..where((t) => t.id.isIn(ids))).go();

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../../data/database/app_database.dart';
 import '../../domain/transaction_type.dart';
 import '../../providers/database_providers.dart';
 import '../../providers/recurring_providers.dart';
@@ -19,7 +20,7 @@ Future<void> deleteTransactionWithUndo(
 ) async {
   final repo = ref.read(transactionRepositoryProvider);
   final messenger = ref.read(rootMessengerKeyProvider);
-  final backup = TransactionInput.fromRow(item.transaction);
+  final backup = item.transaction;
   await repo.delete(item.transaction.id);
   messenger.currentState
     ?..hideCurrentSnackBar()
@@ -28,10 +29,28 @@ Future<void> deleteTransactionWithUndo(
         content: const Text('Transaction deleted'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => repo.add(backup),
+          onPressed: () =>
+              restoreDeletedTransaction(repo, backup, messenger.currentState),
         ),
       ),
     );
+}
+
+Future<void> restoreDeletedTransaction(
+  TransactionRepository repo,
+  TransactionRow row,
+  ScaffoldMessengerState? messenger,
+) async {
+  try {
+    if (await repo.restoreDeleted(row)) return;
+  } catch (_) {}
+  messenger?.showSnackBar(
+    const SnackBar(
+      content: Text(
+        'Could not restore this transaction. Its data may have changed.',
+      ),
+    ),
+  );
 }
 
 /// The menu a long-press on a transaction row opens: Edit, Duplicate, Save as
