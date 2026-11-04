@@ -6,7 +6,12 @@ import '../database/seed.dart';
 import '../repositories/settings_repository.dart';
 import 'backup_data.dart';
 
-enum EraseCleanupStep { settings, safetyCopies, temporaryFiles }
+enum EraseCleanupStep {
+  settings,
+  safetyCopies,
+  temporaryFiles,
+  databaseRemnants,
+}
 
 /// Rows were erased, but these independent cleanup steps still need retrying.
 class EraseCleanupException implements Exception {
@@ -130,6 +135,18 @@ class BackupService {
   /// partial erase. Attempt every independent step even if another fails.
   Future<void> completeEraseCleanup() async {
     final remaining = <EraseCleanupStep>{};
+    try {
+      // Rebuild free pages left by older app versions as well as clearing WAL
+      // generations. This preserves any rows entered before a cleanup retry.
+      await _db.customStatement('VACUUM');
+      final checkpoint = await _db
+          .customSelect('PRAGMA wal_checkpoint(TRUNCATE)')
+          .getSingle();
+      if (checkpoint.data.values.first != 0)
+        throw StateError('Database is busy');
+    } catch (_) {
+      remaining.add(EraseCleanupStep.databaseRemnants);
+    }
     try {
       await _settings.clearAll();
     } catch (_) {

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 
 import 'dart:io';
 
@@ -36,6 +37,44 @@ class _FailingCopies extends DatabaseFiles {
 }
 
 void main() {
+  test(
+    'erase removes plaintext left in free pages by an older connection',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('hb_erase_bytes');
+      final file = File('${directory.path}/ledger.sqlite');
+      final marker = List.filled(100, 'PRIVATE_SYNTHETIC_MARKER').join();
+      var db = AppDatabase(NativeDatabase(file));
+      try {
+        await db.customSelect('SELECT 1').get();
+        await db.customStatement('PRAGMA secure_delete = OFF');
+        await db.customStatement('CREATE TABLE retired_data (note TEXT)');
+        await db.customStatement('INSERT INTO retired_data VALUES (?)', [
+          marker,
+        ]);
+        await db.customStatement('DROP TABLE retired_data');
+        await db.close();
+        expect(
+          String.fromCharCodes(await file.readAsBytes()),
+          contains('PRIVATE_SYNTHETIC_MARKER'),
+        );
+        db = AppDatabase(NativeDatabase(file));
+        SharedPreferences.setMockInitialValues({});
+        final settings = SettingsRepository(
+          await SharedPreferences.getInstance(),
+          defaultCurrency: 'USD',
+        );
+        await BackupService(db, settings).eraseEverything();
+        await db.close();
+        expect(
+          String.fromCharCodes(await file.readAsBytes()),
+          isNot(contains('PRIVATE_SYNTHETIC_MARKER')),
+        );
+      } finally {
+        await db.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
   late AppDatabase db;
