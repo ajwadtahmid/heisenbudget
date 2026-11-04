@@ -27,7 +27,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Extract version from tag
         id: version
@@ -50,10 +50,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           # The version releases are verified with locally; bump it together
           # with the local toolchain, not whenever stable moves.
@@ -78,9 +78,9 @@ jobs:
     needs: [test, extract-version]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
           distribution: "temurin"
           # AGP 9's bundled lint has crashed under JDK 17 (NoSuchMethodError on
@@ -89,7 +89,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: "3.47.9"
           channel: "stable"
@@ -140,7 +140,7 @@ jobs:
         run: mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/heisenbudget-release-v${{ needs.extract-version.outputs.version }}.aab
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: heisenbudget-android
           path: build/app/outputs/bundle/release/heisenbudget-release-v${{ needs.extract-version.outputs.version }}.aab
@@ -150,7 +150,7 @@ jobs:
       # the obfuscated names back). Artifacts expire: download this for every
       # release you publish and keep it.
       - name: Upload debug symbols
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: heisenbudget-symbols-v${{ needs.extract-version.outputs.version }}
           path: build/symbols/
@@ -162,16 +162,16 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download Android artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: heisenbudget-android
           path: android-build/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: |
             android-build/heisenbudget-release-v${{ needs.extract-version.outputs.version }}.aab
