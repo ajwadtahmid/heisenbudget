@@ -57,7 +57,7 @@ jobs:
         with:
           # The version releases are verified with locally; bump it together
           # with the local toolchain, not whenever stable moves.
-          flutter-version: "3.47.8"
+          flutter-version: "3.47.9"
           channel: "stable"
           cache: true
 
@@ -91,7 +91,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.47.8"
+          flutter-version: "3.47.9"
           channel: "stable"
           cache: true
 
