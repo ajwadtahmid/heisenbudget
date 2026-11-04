@@ -59,6 +59,21 @@ class BackupService {
   /// existing data is left exactly as it was. If only the settings step fails
   /// afterwards, a [BackupFormatException] says the data was restored.
   Future<void> restore(BackupData data) async {
+    await restoreDatabase(data);
+    try {
+      await _settings.applyBackup(data.settings);
+    } catch (_) {
+      // The data is already replaced, so say that rather than "nothing changed".
+      throw const BackupFormatException(
+        'Your data was restored, but some settings could not be saved. '
+        'Check Appearance and Money & dates.',
+      );
+    }
+  }
+
+  /// Restores only database rows, for recovery to prepare a separate file
+  /// without changing the live preferences before the replacement is ready.
+  Future<void> restoreDatabase(BackupData data) async {
     await _db.transaction(() async {
       // Out in the order that respects references: transactions, then the
       // rules and favorites that point at categories, then the categories; goal
@@ -80,15 +95,6 @@ class BackupService {
         batch.insertAll(_db.goalEntries, data.goalEntries);
       });
     });
-    try {
-      await _settings.applyBackup(data.settings);
-    } catch (_) {
-      // The data is already replaced, so say that rather than "nothing changed".
-      throw const BackupFormatException(
-        'Your data was restored, but some settings could not be saved. '
-        'Check Appearance and Money & dates.',
-      );
-    }
   }
 
   /// Wipes everything: transactions, repeating rules, favorites, budgets,

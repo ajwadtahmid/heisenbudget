@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show LazyDatabase, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,6 +78,7 @@ void main() {
     WidgetTester tester, {
     Map<String, Object> prefs = const {},
     FileExchange exchange = const FileExchange(),
+    DatabaseOpener open = _openFile,
   }) async {
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1;
@@ -91,7 +93,7 @@ void main() {
       AppBootstrap(
         prefs: p,
         locate: () async => files,
-        openDatabase: _openFile,
+        openDatabase: open,
         exchange: exchange,
       ),
     );
@@ -182,6 +184,55 @@ void main() {
     await stop(tester);
   });
 
+  testWidgets('retry keeps recovery actions disabled until opening finishes', (
+    tester,
+  ) async {
+    await tester.runAsync(garbage);
+    final gate = Completer<void>();
+    var waiting = false;
+    await start(
+      tester,
+      open: (file) {
+        if (!waiting) return _openFile(file);
+        return AppDatabase(
+          LazyDatabase(() async {
+            await gate.future;
+            return NativeDatabase(file);
+          }),
+        );
+      },
+    );
+    waiting = true;
+    await tester.tap(find.byKey(const ValueKey('recovery-retry')));
+    await settle(tester);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('recovery-retry')))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(const ValueKey('recovery-restore-backup')),
+          )
+          .onPressed,
+      isNull,
+    );
+    gate.complete();
+    for (var i = 0; i < 10; i++) {
+      await settle(tester);
+    }
+    expect(title, findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('recovery-retry')))
+          .onPressed,
+      isNotNull,
+    );
+    await stop(tester);
+  });
+
   testWidgets('the copy from before the update can be restored', (
     tester,
   ) async {
@@ -230,6 +281,80 @@ void main() {
     expect(find.byType(AppShell), findsOneWidget);
     await settleUntil(tester, find.text('Tea'));
     expect(find.text('Tea'), findsWidgets, reason: 'the restored data');
+    await stop(tester);
+  });
+
+  testWidgets('failed recovery restore preserves the original through retry '
+      'and restart', (tester) async {
+    late List<int> original;
+    await tester.runAsync(() async {
+      final db = _openFile(files.database);
+      await db.customSelect('SELECT 1').get();
+      await db.customStatement('''
+        INSERT INTO transactions
+          (id, amount_cents, type, date, category_id, note, created_at, updated_at)
+        VALUES (77, 1234, 'expense', '2026-10-15', 1,
+          'Original expense', 0, 0)
+      ''');
+      await db.close();
+      final raw = sqlite.sqlite3.open(files.database.path);
+      raw.execute('PRAGMA user_version = 99');
+      raw.close();
+      original = await files.database.readAsBytes();
+    });
+    await start(
+      tester,
+      prefs: {schemaVersionPrefKey: 99},
+      exchange: _Picker(_backup()),
+      open: (file) {
+        if (file.path != files.database.path) {
+          throw const FileSystemException('Injected replacement open failure');
+        }
+        return _openFile(file);
+      },
+    );
+    await tap(tester, 'recovery-restore-backup');
+    await tap(tester, 'recovery-confirm');
+    expect(title, findsOneWidget);
+    expect(find.byKey(const ValueKey('recovery-message')), findsOneWidget);
+    expect(await tester.runAsync(files.database.readAsBytes), original);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt(schemaVersionPrefKey), 99);
+    expect(prefs.getString('currency_code'), 'USD');
+
+    await tap(tester, 'recovery-retry');
+    expect(title, findsOneWidget);
+    expect(find.byType(AppShell), findsNothing);
+    await stop(tester);
+    // Simulate a process stopping after the original has been saved and
+    // the live file removed. Startup must roll back before opening SQLite.
+    await tester.runAsync(() async {
+      final work = await Directory('${dir.path}/heisenbudget.restore').create();
+      await files.database.copy('${work.path}/original.sqlite');
+      await File('${work.path}/pending.json').writeAsString(
+        jsonEncode({
+          'files': [''],
+          'preferences': {
+            for (final key in prefs.getKeys()) key: prefs.get(key),
+          },
+        }),
+        flush: true,
+      );
+      await files.deleteDatabase();
+    });
+    await start(tester, prefs: {schemaVersionPrefKey: 99});
+    expect(title, findsOneWidget);
+    expect(find.byType(AppShell), findsNothing);
+    await tester.runAsync(() async {
+      final raw = sqlite.sqlite3.open(files.database.path);
+      expect(
+        raw
+            .select('SELECT note FROM transactions WHERE id = 77')
+            .single['note'],
+        'Original expense',
+      );
+      raw.close();
+    });
     await stop(tester);
   });
 

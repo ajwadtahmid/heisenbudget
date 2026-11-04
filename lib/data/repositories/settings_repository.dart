@@ -285,29 +285,56 @@ class SettingsRepository {
   /// last-used categories, and marks the welcome tour as done: someone
   /// restoring a backup has already set the app up.
   Future<void> applyBackup(BackupSettings b) async {
-    if (b.currency != null) await _prefs.setString(_currencyKey, b.currency!);
+    if (b.currency != null) {
+      await _saveBackupValue(_prefs.setString(_currencyKey, b.currency!));
+    }
     if (b.themeMode != null) {
-      await _prefs.setString(_themeModeKey, b.themeMode!);
+      await _saveBackupValue(_prefs.setString(_themeModeKey, b.themeMode!));
     }
-    if (b.accent != null) await _prefs.setString(_accentKey, b.accent!);
-    if (b.textFont != null) await _prefs.setString(_textFontKey, b.textFont!);
-    if (b.labFlavor != null) await _prefs.setBool(_labFlavorKey, b.labFlavor!);
+    if (b.accent != null) {
+      await _saveBackupValue(_prefs.setString(_accentKey, b.accent!));
+    }
+    if (b.textFont != null) {
+      await _saveBackupValue(_prefs.setString(_textFontKey, b.textFont!));
+    }
+    if (b.labFlavor != null) {
+      await _saveBackupValue(_prefs.setBool(_labFlavorKey, b.labFlavor!));
+    }
     if (b.openingBalanceCents != null) {
-      await _prefs.setInt(_openingBalanceKey, b.openingBalanceCents!);
+      await _saveBackupValue(
+        _prefs.setInt(_openingBalanceKey, b.openingBalanceCents!),
+      );
     }
-    if (b.weekMode != null) await _prefs.setString(_weekModeKey, b.weekMode!);
+    if (b.weekMode != null) {
+      await _saveBackupValue(_prefs.setString(_weekModeKey, b.weekMode!));
+    }
     if (b.weekStartDay != null) {
-      await _prefs.setInt(_weekStartDayKey, b.weekStartDay!);
+      await _saveBackupValue(_prefs.setInt(_weekStartDayKey, b.weekStartDay!));
     }
     if (b.monthStartDay != null) {
-      await _prefs.setInt(_monthStartDayKey, b.monthStartDay!);
+      await _saveBackupValue(
+        _prefs.setInt(_monthStartDayKey, b.monthStartDay!),
+      );
     }
     if (b.favoriteShortcut != null) {
-      await _prefs.setBool(_favoriteShortcutKey, b.favoriteShortcut!);
+      await _saveBackupValue(
+        _prefs.setBool(_favoriteShortcutKey, b.favoriteShortcut!),
+      );
     }
-    if (b.savedFilters != null) await setSavedFilters(b.savedFilters!);
-    await _prefs.remove(_lastExpenseKey);
-    await _prefs.remove(_lastIncomeKey);
-    await _prefs.setBool(_onboardingKey, true);
+    if (b.savedFilters != null) {
+      await _saveBackupValue(
+        _prefs.setString(
+          _savedFiltersKey,
+          jsonEncode([for (final f in b.savedFilters!) f.toJson()]),
+        ),
+      );
+    }
+    await _saveBackupValue(_prefs.remove(_lastExpenseKey));
+    await _saveBackupValue(_prefs.remove(_lastIncomeKey));
+    await _saveBackupValue(_prefs.setBool(_onboardingKey, true));
+  }
+
+  Future<void> _saveBackupValue(Future<bool> write) async {
+    if (!await write) throw StateError('Backup settings could not be saved.');
   }
 }

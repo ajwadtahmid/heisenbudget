@@ -8,8 +8,8 @@ import 'app.dart';
 import 'core/constants.dart';
 import 'core/theme.dart';
 import 'data/backup/backup_data.dart';
-import 'data/backup/backup_service.dart';
 import 'data/backup/file_exchange.dart';
+import 'data/backup/recovery_restore.dart';
 import 'data/database/app_database.dart';
 import 'data/database/database_files.dart';
 import 'data/database/database_opener.dart';
@@ -76,6 +76,11 @@ class _AppBootstrapState extends State<AppBootstrap> {
   Future<_Boot> _start() async {
     final files = await widget.locate();
     try {
+      try {
+        await _recovery(files).recoverInterrupted();
+      } catch (e) {
+        throw DatabaseOpenException(e);
+      }
       final db = await openAppDatabase(
         prefs: widget.prefs,
         files: files,
@@ -93,48 +98,47 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
   }
 
-  void _again() {
+  Future<void> _again() async {
+    final attempt = _start();
     setState(() {
-      _boot = _start();
+      _boot = attempt;
     });
+    await attempt;
   }
 
   Future<void> _restoreCopy(DatabaseFiles files) async {
+    await _recovery(files).recoverInterrupted();
     final version = await files.restoreCopy();
     await widget.prefs.setInt(schemaVersionPrefKey, version);
-    _again();
+    await _again();
   }
 
   Future<void> _erase(DatabaseFiles files) async {
+    await _recovery(files).discard();
     await files.deleteDatabase();
     await files.deleteCopies();
     await widget.prefs.clear();
-    _again();
+    await _again();
   }
 
   Future<void> _restoreBackup(DatabaseFiles files, BackupData data) async {
-    // The file was read and checked first; only now is the old data replaced.
-    await files.deleteDatabase();
-    await widget.prefs.remove(schemaVersionPrefKey);
-    final db = await openAppDatabase(
-      prefs: widget.prefs,
-      files: files,
-      open: widget.openDatabase,
-      now: widget.now,
-    );
-    try {
-      await BackupService(db, _settings, files: files).restore(data);
-    } catch (_) {
+    final db = await _recovery(files).restore(data);
+    if (!mounted) {
       await db.close();
-      rethrow;
+      return;
     }
     _db = db;
-    if (mounted) {
-      setState(() {
-        _boot = Future.value(_Boot.ready(db, files));
-      });
-    }
+    setState(() {
+      _boot = Future.value(_Boot.ready(db, files));
+    });
   }
+
+  RecoveryRestore _recovery(DatabaseFiles files) => RecoveryRestore(
+    files,
+    widget.prefs,
+    _settings,
+    open: widget.openDatabase,
+  );
 
   @override
   void dispose() {
@@ -173,7 +177,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
             error: boot.error!,
             copyMadeAt: boot.copyMadeAt,
             pickBackup: widget.exchange.pickFile,
-            onRetry: () async => _again(),
+            onRetry: _again,
             onRestoreCopy: () => _restoreCopy(boot.files),
             onRestoreBackup: (data) => _restoreBackup(boot.files, data),
             onErase: () => _erase(boot.files),
