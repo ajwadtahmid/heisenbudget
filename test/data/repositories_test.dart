@@ -54,6 +54,59 @@ void main() {
   }
 
   group('TransactionRepository', () {
+    test(
+      'invalid dates and category types cannot create or overwrite rows',
+      () async {
+        final id = await addExpense(100, d(2026, 10, 5));
+        final original = (await txs.getById(id))!.transaction;
+        for (final input in [
+          TransactionInput(
+            amountCents: 100,
+            type: TransactionType.expense,
+            date: d(1899, 12, 31),
+            categoryId: food.id,
+          ),
+          TransactionInput(
+            amountCents: 100,
+            type: TransactionType.expense,
+            date: d(3000, 1, 1),
+            categoryId: food.id,
+          ),
+          TransactionInput(
+            amountCents: 100,
+            type: TransactionType.expense,
+            date: d(2026, 10, 5),
+            categoryId: salary.id,
+          ),
+          TransactionInput(
+            amountCents: 100,
+            type: TransactionType.expense,
+            date: d(2026, 10, 5),
+            categoryId: 999999,
+          ),
+        ]) {
+          await expectLater(txs.add(input), throwsArgumentError);
+          await expectLater(txs.update(id, input), throwsArgumentError);
+          expect((await txs.getById(id))!.transaction, original);
+          expect(await db.select(db.transactions).get(), hasLength(1));
+        }
+      },
+    );
+
+    test('supported date edges remain writable and archived categories remain editable', () async {
+      final first = await addExpense(100, d(1900, 1, 1));
+      await cats.archive(food.id);
+      await txs.update(
+        first,
+        TransactionInput(
+          amountCents: 200,
+          type: TransactionType.expense,
+          date: d(2999, 12, 31),
+          categoryId: food.id,
+        ),
+      );
+      expect((await txs.getById(first))!.transaction.date, '2999-12-31');
+    });
     test('add, getById, update, delete', () async {
       final id = await txs.add(
         TransactionInput(

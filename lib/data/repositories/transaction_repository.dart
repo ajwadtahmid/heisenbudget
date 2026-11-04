@@ -52,6 +52,9 @@ class TransactionInput {
   );
 
   void validate() {
+    if (date.year < minDataYear || date.year > maxDataYear) {
+      throw RangeError.range(date.year, minDataYear, maxDataYear, 'year');
+    }
     if (amountCents < 1 || amountCents > maxAmountCents) {
       throw RangeError.range(amountCents, 1, maxAmountCents, 'amountCents');
     }
@@ -97,20 +100,23 @@ class TransactionRepository {
   Future<int> add(TransactionInput input) async {
     input.validate();
     final now = DateTime.now();
-    return _db
-        .into(_t)
-        .insert(
-          TransactionsCompanion.insert(
-            amountCents: input.amountCents,
-            type: input.type,
-            date: toIsoDate(input.date),
-            categoryId: input.categoryId,
-            note: Value(_cleanNote(input.note)),
-            title: Value(_cleanNote(input.title)),
-            createdAt: now,
-            updatedAt: now,
-          ),
-        );
+    return _db.transaction(() async {
+      await _validateCategory(input);
+      return _db
+          .into(_t)
+          .insert(
+            TransactionsCompanion.insert(
+              amountCents: input.amountCents,
+              type: input.type,
+              date: toIsoDate(input.date),
+              categoryId: input.categoryId,
+              note: Value(_cleanNote(input.note)),
+              title: Value(_cleanNote(input.title)),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+    });
   }
 
   /// Saves edits. [unlinkRule] detaches the transaction from its repeating
@@ -121,18 +127,32 @@ class TransactionRepository {
     bool unlinkRule = false,
   }) async {
     input.validate();
-    await (_db.update(_t)..where((t) => t.id.equals(id))).write(
-      TransactionsCompanion(
-        amountCents: Value(input.amountCents),
-        type: Value(input.type),
-        date: Value(toIsoDate(input.date)),
-        categoryId: Value(input.categoryId),
-        note: Value(_cleanNote(input.note)),
-        title: Value(_cleanNote(input.title)),
-        updatedAt: Value(DateTime.now()),
-        recurringRuleId: unlinkRule ? const Value(null) : const Value.absent(),
-      ),
-    );
+    await _db.transaction(() async {
+      await _validateCategory(input);
+      await (_db.update(_t)..where((t) => t.id.equals(id))).write(
+        TransactionsCompanion(
+          amountCents: Value(input.amountCents),
+          type: Value(input.type),
+          date: Value(toIsoDate(input.date)),
+          categoryId: Value(input.categoryId),
+          note: Value(_cleanNote(input.note)),
+          title: Value(_cleanNote(input.title)),
+          updatedAt: Value(DateTime.now()),
+          recurringRuleId: unlinkRule
+              ? const Value(null)
+              : const Value.absent(),
+        ),
+      );
+    });
+  }
+
+  Future<void> _validateCategory(TransactionInput input) async {
+    final category = await (_db.select(
+      _c,
+    )..where((c) => c.id.equals(input.categoryId))).getSingleOrNull();
+    if (category == null || category.type != input.type) {
+      throw ArgumentError('Choose a category matching the transaction type.');
+    }
   }
 
   Future<void> delete(int id) async {
