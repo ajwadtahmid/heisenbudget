@@ -26,6 +26,15 @@ void main() {
   }
 
   group('exports left in the cache after sharing', () {
+    test('confirmed erase also removes nested picker import copies', () async {
+      final pick = await Directory('${cache.path}/file_picker/42')
+          .create(recursive: true);
+      final imported = await File('${pick.path}/private-backup.json')
+          .writeAsString('private import');
+      await exchange.clearTemporaryFiles();
+      expect(await imported.exists(), isFalse);
+      expect(await Directory('${cache.path}/file_picker').exists(), isFalse);
+    });
     test('a later same-name export preserves the first source with a unique identity', () async {
       const channel = MethodChannel('dev.fluttercommunity.plus/share');
       final paths = <String>[];

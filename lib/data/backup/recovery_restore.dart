@@ -32,7 +32,7 @@ class RecoveryRestore {
   /// Only for an explicitly confirmed erase. Remove saved recovery originals
   /// too, so the next startup cannot resurrect data the user chose to erase.
   Future<void> discard() async {
-    if (await _work.exists()) await _work.delete(recursive: true);
+    await files.deleteRecoveryOriginals();
   }
 
   /// A pending replacement is rolled back before any database is opened.

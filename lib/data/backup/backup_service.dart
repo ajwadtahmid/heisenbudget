@@ -11,6 +11,7 @@ enum EraseCleanupStep {
   safetyCopies,
   temporaryFiles,
   databaseRemnants,
+  recoveryCopies,
 }
 
 /// Rows were erased, but these independent cleanup steps still need retrying.
@@ -157,6 +158,11 @@ class BackupService {
       await _files?.deleteCopies();
     } catch (_) {
       remaining.add(EraseCleanupStep.safetyCopies);
+    }
+    try {
+      await _files?.deleteRecoveryOriginals();
+    } catch (_) {
+      remaining.add(EraseCleanupStep.recoveryCopies);
     }
     if (remaining.isNotEmpty) throw EraseCleanupException(remaining);
   }

@@ -36,6 +36,18 @@ class _FailingCopies extends DatabaseFiles {
   }
 }
 
+class _FailingRecoveryCopies extends DatabaseFiles {
+  _FailingRecoveryCopies(super.directory);
+  bool fail = true;
+  @override
+  Future<void> deleteRecoveryOriginals() async {
+    if (fail) {
+      throw const FileSystemException('Recovery copies unavailable');
+    }
+    await super.deleteRecoveryOriginals();
+  }
+}
+
 void main() {
   test(
     'erase removes plaintext left in free pages by an older connection',
@@ -242,4 +254,55 @@ void main() {
     await service.completeEraseCleanup();
     expect((await db.select(db.transactions).get()).single.amountCents, 1234);
   });
+
+  test('confirmed erase clears recovery originals without adding them to age pruning', () async {
+    final dir = await Directory.systemTemp.createTemp('hb_recovery_erase');
+    addTearDown(() => dir.delete(recursive: true));
+    final recovery = await Directory('${dir.path}/heisenbudget.restore')
+        .create();
+    final original = await File('${recovery.path}/original.sqlite')
+        .writeAsString('private original');
+    await File('${recovery.path}/committed.json').writeAsString('{}');
+    final oldCopy = await File('${dir.path}/heisenbudget.before-v3.sqlite')
+        .writeAsString('old copy');
+    await oldCopy.setLastModified(
+      DateTime.now().subtract(const Duration(days: 15)),
+    );
+    final files = DatabaseFiles(dir);
+    await files.pruneCopies(DateTime.now());
+    expect(await oldCopy.exists(), isFalse);
+    expect(
+      await original.exists(),
+      isTrue,
+      reason: 'only an explicit erase discards recovery originals',
+    );
+    await BackupService(db, settings, files: files).eraseEverything();
+    expect(await recovery.exists(), isFalse);
+  });
+
+  test(
+    'recovery-copy cleanup failure is reported and can be retried',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('hb_recovery_retry');
+      addTearDown(() => dir.delete(recursive: true));
+      final recovery = await Directory('${dir.path}/heisenbudget.restore')
+          .create();
+      await File('${recovery.path}/original.sqlite')
+          .writeAsString('private original');
+      final files = _FailingRecoveryCopies(dir);
+      final service = BackupService(db, settings, files: files);
+      await expectLater(
+        service.eraseEverything(),
+        throwsA(
+          isA<EraseCleanupException>().having((e) => e.remaining, 'remaining', {
+            EraseCleanupStep.recoveryCopies,
+          }),
+        ),
+      );
+      expect(await recovery.exists(), isTrue);
+      files.fail = false;
+      await service.completeEraseCleanup();
+      expect(await recovery.exists(), isFalse);
+    },
+  );
 }

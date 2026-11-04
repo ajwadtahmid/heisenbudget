@@ -217,6 +217,13 @@ class DatabaseFiles {
     await _deleteCopiesExcept(null);
   }
 
+  /// Explicit erasure also removes originals retained by an interrupted or
+  /// committed backup replacement. Ordinary safety-copy pruning must not.
+  Future<void> deleteRecoveryOriginals() async {
+    final recovery = Directory('${directory.path}/heisenbudget.restore');
+    if (await recovery.exists()) await recovery.delete(recursive: true);
+  }
+
   Future<void> pruneCopies(DateTime now) async {
     final made = await copyMadeAt();
     if (made != null && now.difference(made).inDays >= copyKeepDays) {

@@ -88,7 +88,7 @@ class FileExchange {
   Future<void> clearTemporaryFiles() async {
     final root = await temporaryDirectory();
     var failed = false;
-    for (final name in ['exports', 'share_plus']) {
+    for (final name in ['exports', 'share_plus', 'file_picker']) {
       try {
         final dir = Directory('${root.path}/$name');
         if (await dir.exists()) await dir.delete(recursive: true);
