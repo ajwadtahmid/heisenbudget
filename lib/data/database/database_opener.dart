@@ -40,6 +40,7 @@ Future<AppDatabase> openAppDatabase({
   DateTime Function()? now,
 }) async {
   try {
+    await files.recoverInterruptedRestore();
     final stored = await files.schemaVersion();
     if (stored != null &&
         stored > 0 &&

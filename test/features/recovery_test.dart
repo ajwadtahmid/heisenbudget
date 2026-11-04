@@ -249,6 +249,7 @@ void main() {
     await tap(tester, 'recovery-restore-copy');
     expect(find.text('Go back to the copy?'), findsOneWidget);
     await tap(tester, 'recovery-confirm');
+    await settleUntil(tester, find.byType(AppShell));
     expect(find.byType(AppShell), findsOneWidget);
     await stop(tester);
   });

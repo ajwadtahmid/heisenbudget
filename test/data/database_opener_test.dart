@@ -16,6 +16,23 @@ import '../generated_migrations/schema_v3.dart' show DatabaseAtV3;
 
 AppDatabase openFile(File file) => AppDatabase(NativeDatabase(file));
 
+class _CopyFailure extends DatabaseFiles {
+  _CopyFailure(super.directory);
+  @override
+  Future<void> copyBeforeUpgrade(int version) async {
+    throw const FileSystemException('Copy unavailable');
+  }
+}
+
+class _SwapFailure extends DatabaseFiles {
+  _SwapFailure(super.directory);
+  @override
+  Future<void> deleteDatabase() async {
+    await super.deleteDatabase();
+    throw const FileSystemException('Interrupted swap');
+  }
+}
+
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
@@ -94,14 +111,9 @@ void main() {
 
         expect(await files.copyVersion(), 3);
         expect(userVersionOf(files.database), 4);
-        expect(
-          userVersionOf(File('${dir.path}/heisenbudget.before-v3.sqlite')),
-          3,
-        );
+        expect(userVersionOf((await files.safetyCopy)!), 3);
         // The copy has no goal tables; the live database has them, empty.
-        final raw = sqlite.sqlite3.open(
-          '${dir.path}/heisenbudget.before-v3.sqlite',
-        );
+        final raw = sqlite.sqlite3.open((await files.safetyCopy)!.path);
         final tables = raw
             .select("SELECT name FROM sqlite_master WHERE type = 'table'")
             .map((r) => r['name'])
@@ -122,7 +134,7 @@ void main() {
       addTearDown(db.close);
 
       expect(await files.copyVersion(), 3);
-      final copy = File('${dir.path}/heisenbudget.before-v3.sqlite');
+      final copy = (await files.safetyCopy)!;
       expect(await copy.readAsBytes(), before);
       expect(p.getInt(schemaVersionPrefKey), currentSchemaVersion);
     });
@@ -160,7 +172,8 @@ void main() {
     test('a copy that cannot be made stops the upgrade', () async {
       await makeDatabaseFile();
       // A directory where the copy's file should go makes the copy fail.
-      await Directory('${dir.path}/heisenbudget.before-v3.sqlite').create();
+      await Directory('${dir.path}/heisenbudget.copy-staging-block').create();
+      files = _CopyFailure(dir);
       final p = await prefs({schemaVersionPrefKey: 2});
       var opened = false;
       await expectLater(
@@ -182,14 +195,11 @@ void main() {
     test('upgrade protects actual schema with preference $marker', () async {
       await makeDatabaseFile();
       final before = await files.database.readAsBytes();
-      final p = await prefs({if (marker != null) schemaVersionPrefKey: marker});
+        final p = await prefs({schemaVersionPrefKey: ?marker});
       final db = await openAppDatabase(prefs: p, files: files, open: openFile);
       try {
         expect(await files.copyVersion(), 3);
-        expect(
-          await File('${dir.path}/heisenbudget.before-v3.sqlite').readAsBytes(),
-          before,
-        );
+        expect(await (await files.safetyCopy)!.readAsBytes(), before);
         expect(userVersionOf(files.database), 4);
         expect(p.getInt(schemaVersionPrefKey), 4);
       } finally {
@@ -199,13 +209,78 @@ void main() {
   }
 
   group('the safety copy', () {
+    test(
+      'a failed new copy preserves the previous usable generation',
+      () async {
+        await makeDatabaseFile();
+        await files.copyBeforeUpgrade(3);
+        final previous = (await files.safetyCopy)!;
+        final bytes = await previous.readAsBytes();
+        await files.database.writeAsBytes([1, 2, 3]);
+        await expectLater(
+          files.copyBeforeUpgrade(4),
+          throwsA(isA<Exception>()),
+        );
+        expect((await files.safetyCopy)!.path, previous.path);
+        expect(await previous.readAsBytes(), bytes);
+      },
+    );
+
+    test('invalid legacy copies cannot overwrite a usable original', () async {
+      await makeDatabaseFile();
+      final original = await files.database.readAsBytes();
+      await File('${dir.path}/heisenbudget.before-v3.sqlite')
+          .writeAsBytes([1, 2, 3]);
+      await expectLater(files.restoreCopy(), throwsA(isA<Exception>()));
+      expect(await files.database.readAsBytes(), original);
+    });
+
+    test(
+      'a failed swap restores the original and keeps the safety copy',
+      () async {
+        await makeDatabaseFile();
+        await files.copyBeforeUpgrade(3);
+        final original = await files.database.readAsBytes();
+        final interrupted = _SwapFailure(dir);
+        await expectLater(
+          interrupted.restoreCopy(),
+          throwsA(isA<FileSystemException>()),
+        );
+        expect(await files.database.readAsBytes(), original);
+        expect(await files.copyVersion(), 3);
+      },
+    );
+
+    test(
+      'startup rolls back an interrupted safety-copy installation',
+      () async {
+        await makeDatabaseFile();
+        final original = await files.database.readAsBytes();
+        final work = await Directory('${dir.path}/heisenbudget.copy-restore')
+            .create();
+        await files.database.copy('${work.path}/original.sqlite');
+        await File('${work.path}/pending.json')
+            .writeAsString('[""]', flush: true);
+        await files.deleteDatabase();
+        final p = await prefs();
+        final db = await openAppDatabase(
+          prefs: p,
+          files: files,
+          open: openFile,
+        );
+        await db.close();
+        expect(userVersionOf(files.database), 4);
+        expect(await files.copyVersion(), 3);
+        expect(await (await files.safetyCopy)!.readAsBytes(), original);
+      },
+    );
+
     test('is replaced by the next one, and restored on request', () async {
       await makeDatabaseFile(userVersion: 2);
       await files.copyBeforeUpgrade(2);
       final copyBytes = await files.database.readAsBytes();
-      await files.database.writeAsBytes([1, 2, 3]); // the live file changes
-      await files.copyBeforeUpgrade(1); // an earlier copy is replaced
-      expect(await files.copyVersion(), 1);
+      await files.copyBeforeUpgrade(2);
+      expect(await files.copyVersion(), 2);
       // Put the real copy back for the restore.
       await files.deleteCopies();
       await files.database.writeAsBytes(copyBytes);
@@ -224,7 +299,7 @@ void main() {
     test('is deleted after $kKeep days, kept before', () async {
       await makeDatabaseFile();
       await files.copyBeforeUpgrade(2);
-      final copy = File('${dir.path}/heisenbudget.before-v2.sqlite');
+      final copy = (await files.safetyCopy)!;
       final now = DateTime(2026, 11, 1);
 
       await copy.setLastModified(now.subtract(const Duration(days: 13)));
