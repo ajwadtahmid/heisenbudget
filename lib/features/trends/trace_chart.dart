@@ -228,7 +228,7 @@ class _MonthColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.appColors;
     final theme = Theme.of(context);
-    final labelColor = dimmed ? c.faint : (focused ? c.text : c.dim);
+    final labelColor = focused ? c.text : c.dim;
     final spoken = StringBuffer(point.title);
     if (point.inProgress) spoken.write(', so far');
     if (point.received != null) {

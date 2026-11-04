@@ -181,7 +181,7 @@ class _PeakColumn extends StatelessWidget {
     final c = context.appColors;
     final theme = Theme.of(context);
     final barColor = c.spentFill.withValues(alpha: dimmed ? 0.32 : 1);
-    final labelColor = dimmed ? c.faint : (focused ? c.text : c.dim);
+    final labelColor = focused ? c.text : c.dim;
 
     return Semantics(
       button: true,
