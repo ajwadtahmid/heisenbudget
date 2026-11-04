@@ -142,8 +142,9 @@ class BackupService {
       final checkpoint = await _db
           .customSelect('PRAGMA wal_checkpoint(TRUNCATE)')
           .getSingle();
-      if (checkpoint.data.values.first != 0)
+      if (checkpoint.data.values.first != 0) {
         throw StateError('Database is busy');
+      }
     } catch (_) {
       remaining.add(EraseCleanupStep.databaseRemnants);
     }

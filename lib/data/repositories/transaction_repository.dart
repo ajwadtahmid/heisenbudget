@@ -145,8 +145,9 @@ class TransactionRepository {
     if (await (_db.select(
           _t,
         )..where((t) => t.id.equals(row.id))).getSingleOrNull() !=
-        null)
+        null) {
       return false;
+    }
     var restored = row;
     final ruleId = row.recurringRuleId;
     if (ruleId != null) {

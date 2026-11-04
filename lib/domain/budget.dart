@@ -357,14 +357,17 @@ List<PastPeriod> pastPeriods(
   for (var i = 0; i < rows.length; i++) {
     final row = rows[i];
     final amount = row.amountCents;
-    if (amount == null || (acceptsEntry != null && !acceptsEntry(row)))
+    if (amount == null || (acceptsEntry != null && !acceptsEntry(row))) {
       continue;
+    }
     final nextStart = i + 1 < rows.length ? rows[i + 1].start : null;
     var cutoff = _addDays(day, -1);
-    if (nextStart != null && !nextStart.isAfter(cutoff))
+    if (nextStart != null && !nextStart.isAfter(cutoff)) {
       cutoff = _addDays(nextStart, -1);
-    if (endingWithin != null && endingWithin.end.isBefore(cutoff))
+    }
+    if (endingWithin != null && endingWithin.end.isBefore(cutoff)) {
       cutoff = endingWithin.end;
+    }
     final first = row.firstRange(monthStartDay);
     if (cutoff.isBefore(first.start)) continue;
     var range = row.repeats ? row.rangeAt(cutoff, monthStartDay) : first;
