@@ -70,8 +70,8 @@ class AppSettings {
   final int? lastExpenseCategoryId;
   final int? lastIncomeCategoryId;
 
-  /// When a backup file was last handed to the share sheet, or null if
-  /// never. Kept on this phone only: it is not part of a backup file.
+  /// When a backup was last saved to a folder or a share recipient selected.
+  /// A selected recipient does not establish durable storage. Kept on this phone only: it is not part of a backup file.
   final DateTime? lastBackupAt;
 
   /// History filters the person named and kept, oldest first.

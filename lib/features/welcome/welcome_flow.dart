@@ -136,7 +136,7 @@ class _WelcomeFlowState extends ConsumerState<WelcomeFlow> {
                           ),
                           fact(
                             Icons.lock_outline,
-                            'Nothing ever leaves this phone',
+                            'Offline, exports by choice',
                           ),
                         ],
                       ),

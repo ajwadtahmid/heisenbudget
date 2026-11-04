@@ -236,7 +236,9 @@ Only `drift` generates code (`build_runner`); Riverpod is written by hand.
   - **iPhone:** if iCloud Backup (or a computer backup) is on, the app's data is included and restored onto a new device.
 
   That copy is held by Google or Apple under their terms; the developer cannot see it. Turn the phone's backup off in the phone's settings if you do not want it. Erase everything and deleting the app do not delete older copies in those backups.
-- **Backup and CSV files are not encrypted.** The temporary copy made for the share sheet is deleted about ten minutes later, and at the next start. Keep the files you keep somewhere you trust.
+- **Backup and CSV files are not encrypted.** App and Android sharing-cache copies expire after about ten minutes while the app runs; expired copies are also cleaned on launch or resume. Cleanup failures during Erase are reported for retry. Files saved to another app or folder and older OS backups are outside this cleanup. Keep the files you keep somewhere you trust.
+- **Recovery copies.** A pre-update copy is pruned on launch once at least fourteen days old. An interrupted restore can retain original files/settings until recovery completes or you confirm Erase.
+- **Diagnostics.** App error handlers log event/type information without raw exception text, financial values or database parameters.
 - **Privacy policy.** The full policy is published at the address shown in the app's About screen.
 
 ---

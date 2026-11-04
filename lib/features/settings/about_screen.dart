@@ -26,7 +26,7 @@ class AboutScreen extends StatelessWidget {
     const kept = [
       (
         'It stays on this phone.',
-        'Your transactions, categories, goals and settings are stored here. '
+        'Your transactions, categories, budgets, repeats, favorites, goals and settings are stored here. '
             '$appName has no server and sends them nowhere. If your phone\'s '
             'own backup (Google on Android, iCloud on iPhone) is switched on, '
             'it may keep a copy in your account; that is between you and '
@@ -43,9 +43,17 @@ class AboutScreen extends StatelessWidget {
             'sheet. Where it goes is your choice.',
       ),
       (
-        'Deleting the app deletes the data.',
-        'Back up first if you might want it again. Restore brings a backup '
-            'file back, here or on a new phone.',
+        'Control the copies you keep.',
+        'Erase everything clears app data and app-managed copies, and reports '
+            'unfinished cleanup so you can retry. Files you saved or shared '
+            'and older phone backups are separate copies you must manage yourself.',
+      ),
+      (
+        'Temporary copies and recovery.',
+        'Share attachments expire after about ten minutes while the app runs; '
+            'expired files are also cleaned on launch or resume. Pre-update '
+            'copies are pruned on launch after fourteen days. Interrupted '
+            'restores keep originals until recovery completes or you confirm Erase.',
       ),
     ];
 
