@@ -22,13 +22,6 @@ dependencies:
   # for the database (lib/data/database/sql_functions.dart) uses its API.
   sqlite3: ^3.8.0
 
-dependency_overrides:
-  android_file_picker:
-    path: third_party/android_file_picker
-  # Preserve delayed native recipients of earlier attachments.
-  share_plus:
-    path: third_party/share_plus
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
