@@ -1229,7 +1229,7 @@ void main() {
     });
   });
 
-  group('review fixes', () {
+  group('visual details', () {
     testWidgets('the add key is the same small icon key at every text size', (
       tester,
     ) async {

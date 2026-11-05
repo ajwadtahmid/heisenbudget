@@ -506,7 +506,7 @@ void main() {
     });
   });
 
-  group('review fixes', () {
+  group('accent and key shape', () {
     test('the default accent is visibly different from the Received green', () {
       for (final brightness in Brightness.values) {
         final c = AppColors.resolve(brightness, AccentColor.assay);
