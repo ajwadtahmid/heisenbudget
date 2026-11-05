@@ -366,7 +366,7 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('settings-about')));
       await tester.pump();
       expect(find.text('About Heisenbudget'), findsOneWidget);
-      expect(summaryOf(tester, 'settings-about'), 'Version 1.0.0');
+      expect(summaryOf(tester, 'settings-about'), 'Version $appVersion');
       for (final key in [
         'settings-version',
         'settings-data-kept',
@@ -394,7 +394,7 @@ void main() {
           tester.widget<Text>(find.byKey(const ValueKey('about-name'))).data,
           'Heisenbudget',
         );
-        expect(find.text('Version 1.0.0'), findsOneWidget);
+        expect(find.text('Version $appVersion'), findsOneWidget);
         expect(
           find.textContaining('private expense and income tracker'),
           findsOneWidget,

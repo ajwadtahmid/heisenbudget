@@ -18,7 +18,7 @@ const privacyPolicyUrl =
 const appLogoAsset = 'assets/logos/logo.png';
 
 /// Keep in sync with `version:` in pubspec.yaml (no package_info_plus).
-const appVersion = '1.0.0';
+const appVersion = '1.1.0';
 
 /// The years a stored date may fall in. Backups accept this whole span, so
 /// every date picker offers it too (a restored date must always be editable).
