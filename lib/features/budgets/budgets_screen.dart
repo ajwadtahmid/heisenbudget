@@ -12,6 +12,7 @@ import '../shared/category_tile.dart';
 import '../shared/empty_state.dart';
 import 'budget_editor.dart';
 import 'budget_gauge.dart';
+import 'budget_setup_sheet.dart';
 
 /// Every budget in force now: a gauge for the current period of each, the ones
 /// in trouble first. Earlier periods are in History > Budgets.
@@ -123,6 +124,14 @@ class BudgetsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.add),
                   label: const Text('Add a limit'),
                 ),
+              if (overview.withoutLimit.length >= 2)
+                OutlinedButton.icon(
+                  key: const ValueKey('budget-setup'),
+                  onPressed: () =>
+                      showBudgetSetup(context, overview.withoutLimit),
+                  icon: const Icon(Icons.playlist_add),
+                  label: const Text('Set several limits'),
+                ),
             ],
           ),
           const SizedBox(height: Gap.l),
@@ -143,17 +152,7 @@ class BudgetsScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Budgets'),
-        actions: [
-          IconButton(
-            key: const ValueKey('budgets-past'),
-            tooltip: 'Past budgets',
-            icon: const Icon(Icons.history),
-            onPressed: () => showPast(ref),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Budgets')),
       body: body,
     );
   }
@@ -191,6 +190,19 @@ class BudgetsScreen extends ConsumerWidget {
                     categoryId: null,
                     name: 'All spending',
                   );
+                },
+              ),
+            if (overview.withoutLimit.length >= 2)
+              ListTile(
+                key: const ValueKey('budget-pick-several'),
+                leading: const Icon(Icons.playlist_add),
+                title: const Text('Several categories'),
+                subtitle: const Text(
+                  'Monthly limits, filled in from your history',
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  showBudgetSetup(context, overview.withoutLimit);
                 },
               ),
             for (final category in overview.withoutLimit)

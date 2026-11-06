@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:heisenbudget/core/money_parser.dart';
 import 'package:heisenbudget/data/database/app_database.dart';
 import 'package:heisenbudget/data/repositories/budget_repository.dart';
 import 'package:heisenbudget/data/repositories/favorite_repository.dart';
@@ -1172,48 +1173,117 @@ void main() {
     });
   });
 
-  group('past budgets', () {
-    testWidgets(
-      'the app bar button and the link open History on its Budgets side',
-      (tester) async {
-        final env = await createEnv(tester);
-        await limit(tester, env, 'Food', 20000);
-        await openBudgets(tester, env);
-        await tester.tap(find.byKey(const ValueKey('budgets-past')));
-        await settle(tester);
-        expect(
-          tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          historyTab,
-        );
-        expect(
-          find.byKey(const ValueKey('budget-filter-button')),
-          findsOneWidget,
-        );
+  group('setting several limits at once', () {
+    testWidgets('fills in from history, saves what is ticked in one go', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await addExpense(
+        tester,
+        env,
+        30000,
+        DateTime(2026, 9, 10),
+        category: 'Food',
+      );
+      await openBudgets(tester, env);
+      await tester.tap(find.text('Set a limit'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('budget-pick-several')));
+      await settle(tester);
 
-        await goToTab(tester, 'Budgets');
-        // Back on Transactions first, so the link has something to change.
-        await goToTab(tester, 'History');
-        await tester.tap(
-          find.byKey(const ValueKey('history-mode-transactions')),
-        );
-        await settle(tester);
-        await goToTab(tester, 'Budgets');
-        await tapKey(tester, 'budgets-past-link');
-        expect(
-          tester
-              .widget<NavigationBar>(find.byType(NavigationBar))
-              .selectedIndex,
-          historyTab,
-        );
-        expect(
-          find.byKey(const ValueKey('budget-filter-button')),
-          findsOneWidget,
-        );
-        await disposeEnv(tester, env);
-      },
-    );
+      final food = await catId(tester, env, 'Food');
+      final rent = await catId(tester, env, 'Rent');
+      expect(
+        tester.widget<Checkbox>(find.byKey(ValueKey('setup-tick-$food'))).value,
+        isTrue,
+      );
+      expect(
+        tester.widget<Checkbox>(find.byKey(ValueKey('setup-tick-$rent'))).value,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(ValueKey('setup-amount-$food')))
+            .controller!
+            .text,
+        isNotEmpty,
+      );
+
+      // Typing an amount ticks the row.
+      await tester.enterText(
+        find.byKey(ValueKey('setup-amount-$rent')),
+        '1,200.50',
+      );
+      await tester.pump();
+      expect(
+        tester.widget<Checkbox>(find.byKey(ValueKey('setup-tick-$rent'))).value,
+        isTrue,
+      );
+      await tester.tap(find.byKey(const ValueKey('setup-save')));
+      await settle(tester);
+
+      final rows = await limitRows(tester, env);
+      expect(rows.map((r) => r.categoryId), unorderedEquals([food, rent]));
+      expect(rows.firstWhere((r) => r.categoryId == rent).amountCents, 120050);
+      expect(find.byKey(ValueKey('gauge-$rent')), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a bad amount blocks the save and names the row', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await tester.tap(find.text('Set a limit'));
+      await settle(tester);
+      await tester.tap(find.byKey(const ValueKey('budget-pick-several')));
+      await settle(tester);
+
+      final food = await catId(tester, env, 'Food');
+      await tester.enterText(find.byKey(ValueKey('setup-amount-$food')), 'abc');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('setup-save')));
+      await settle(tester);
+
+      expect(find.text(errorInvalidAmount), findsOneWidget);
+      expect(await limitRows(tester, env), isEmpty);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('past budgets', () {
+    testWidgets('the link opens History on its Budgets side', (tester) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 20000);
+      await openBudgets(tester, env);
+      await tester.tap(find.byKey(const ValueKey('budgets-past-link')));
+      await settle(tester);
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        historyTab,
+      );
+      expect(
+        find.byKey(const ValueKey('budget-filter-button')),
+        findsOneWidget,
+      );
+
+      await goToTab(tester, 'Budgets');
+      // Back on Transactions first, so the link has something to change.
+      await goToTab(tester, 'History');
+      await tester.tap(find.byKey(const ValueKey('history-mode-transactions')));
+      await settle(tester);
+      await goToTab(tester, 'Budgets');
+      await tapKey(tester, 'budgets-past-link');
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        historyTab,
+      );
+      expect(
+        find.byKey(const ValueKey('budget-filter-button')),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    });
   });
 
   group('Home', () {
