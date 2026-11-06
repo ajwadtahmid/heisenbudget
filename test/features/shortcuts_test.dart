@@ -283,6 +283,9 @@ void main() {
       );
       await tester.tap(find.byTooltip('Close'));
       await settle(tester);
+      // Something was typed, so closing asks first.
+      await tester.tap(find.byKey(const ValueKey('discard-entry')));
+      await settle(tester);
       expect(
         find.text('Add transaction'),
         findsNothing,

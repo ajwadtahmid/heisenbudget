@@ -108,6 +108,17 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
   bool _saving = false;
   String? _saveError;
 
+  /// How many were saved with "Save and add another" since the sheet opened.
+  int _addedCount = 0;
+
+  // What the sheet opened with, to tell whether anything was changed.
+  late final String _initialAmount;
+  late final String _initialNote;
+  late final String _initialTitle;
+  late final TransactionType _initialType;
+  late final String _initialDate;
+  late final int? _initialCategory;
+
   /// How this new (or not yet repeating) transaction repeats; null = once.
   RepeatChoice? _repeat;
 
@@ -134,6 +145,56 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     );
     _note = TextEditingController(text: tx?.note ?? draft?.note ?? '');
     _title = TextEditingController(text: tx?.title ?? draft?.title ?? '');
+    _initialAmount = _amount.text;
+    _initialNote = _note.text;
+    _initialTitle = _title.text;
+    _initialType = _type;
+    _initialDate = toIsoDate(_date);
+    _initialCategory = _categoryId;
+  }
+
+  /// Whether closing now would throw away something typed or changed. Only
+  /// text, a repeat, and (when editing) the type, date or category count; a
+  /// category tapped on an empty new form does not.
+  bool get _dirty {
+    if (_amount.text != _initialAmount ||
+        _note.text != _initialNote ||
+        _title.text != _initialTitle ||
+        _repeat != null) {
+      return true;
+    }
+    return _isEdit &&
+        (_type != _initialType ||
+            toIsoDate(_date) != _initialDate ||
+            _categoryId != _initialCategory);
+  }
+
+  Future<void> _askDiscard(bool didPop, Object? result) async {
+    if (didPop) return;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(_isEdit ? 'Discard your changes?' : 'Discard this entry?'),
+        content: Text(
+          _isEdit
+              ? 'The transaction stays as it was saved.'
+              : 'What you typed will not be saved.',
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('keep-editing'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            key: const ValueKey('discard-entry'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true && mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -234,7 +295,7 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     if (result != null && mounted) setState(() => _repeat = result.choice);
   }
 
-  Future<void> _save(List<CategoryRow> active) async {
+  Future<void> _save(List<CategoryRow> active, {bool another = false}) async {
     if (_saving) return;
     final categoryId = _selectedCategory(active);
     setState(
@@ -314,7 +375,22 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
     try {
       await _afterSave(categoryId, input, repeat, existing == null);
     } catch (_) {}
-    if (mounted) Navigator.of(context).pop();
+    if (!mounted) return;
+    if (another && existing == null) {
+      // Keep the type, date and category; clear what is specific to one entry.
+      _formKey.currentState?.reset();
+      _amount.clear();
+      _title.clear();
+      _note.clear();
+      setState(() {
+        _saving = false;
+        _repeat = null;
+        _addedCount++;
+      });
+      _amountFocus.requestFocus();
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _afterSave(
@@ -560,226 +636,261 @@ class _TransactionFormState extends ConsumerState<_TransactionForm> {
       chips.addAll(archived);
     }
 
-    return Padding(
-      // Lift the sheet above the keyboard.
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-            child: OverflowBar(
-              alignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _isEdit ? 'Edit transaction' : 'Add transaction',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_isEdit) ...[
-                      IconButton(
-                        key: const ValueKey('form-favorite'),
-                        tooltip: 'Save as favorite',
-                        icon: const Icon(Icons.favorite_border),
-                        onPressed: () => _onAction(_FormAction.favorite),
-                      ),
-                      IconButton(
-                        key: const ValueKey('form-duplicate'),
-                        tooltip: 'Duplicate',
-                        icon: const Icon(Icons.copy_outlined),
-                        onPressed: () => _onAction(_FormAction.duplicate),
-                      ),
-                    ],
-                    if (_isEdit)
-                      IconButton(
-                        tooltip: 'Delete',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: _confirmDelete,
-                      ),
-                    if (!_isEdit)
-                      IconButton(
-                        tooltip: 'Close',
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Flexible(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+    return ListenableBuilder(
+      listenable: Listenable.merge([_amount, _note, _title]),
+      builder: (context, child) => PopScope(
+        canPop: _saving || !_dirty,
+        onPopInvokedWithResult: _askDiscard,
+        child: child!,
+      ),
+      child: Padding(
+        // Lift the sheet above the keyboard.
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+              child: OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _quickAddRow(context, all),
-                  SegmentedButton<TransactionType>(
-                    segments: const [
-                      ButtonSegment(
-                        value: TransactionType.expense,
-                        label: Text('Expense'),
-                        icon: Icon(Icons.arrow_upward),
-                      ),
-                      ButtonSegment(
-                        value: TransactionType.income,
-                        label: Text('Income'),
-                        icon: Icon(Icons.arrow_downward),
-                      ),
-                    ],
-                    selected: {_type},
-                    onSelectionChanged: (s) => _setType(s.first),
-                  ),
-                  const SizedBox(height: 16),
-                  ClampedTextScale(
-                    child: TextFormField(
-                      key: const ValueKey('amount-field'),
-                      controller: _amount,
-                      focusNode: _amountFocus,
-                      autofocus: !_isEdit,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\s]')),
-                      ],
-                      // The thing being measured: a large mono readout.
-                      style: monoText(
-                        size: 32,
-                        weight: FontWeight.w600,
-                        color: context.appColors.text,
-                      ),
-                      cursorHeight: 30,
-                      decoration: InputDecoration(
-                        labelText: 'Amount',
-                        prefixText: '$symbol ',
-                        prefixStyle: monoText(
-                          size: 32,
-                          weight: FontWeight.w500,
-                          color: context.appColors.dim,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 18,
-                        ),
-                      ),
-                      validator: (value) => parseMoney(value ?? '').error,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    key: const ValueKey('title-field'),
-                    controller: _title,
-                    maxLength: maxTitleLength,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Title (optional)',
-                      hintText: 'A shop or a short name',
-                      counterText: '',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ListTile(
-                    key: const ValueKey('date-tile'),
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.calendar_today),
-                    title: const Text('Date'),
-                    subtitle: Text(formatDate(_date)),
-                    onTap: _pickDate,
-                  ),
-
-                  if (_canSetRepeat)
-                    ..._repeatRows(context)
-                  else
-                    ..._linkedRuleRows(context),
-                  const SizedBox(height: 8),
                   Text(
-                    'Category',
-                    style: Theme.of(context).textTheme.labelLarge,
+                    _isEdit ? 'Edit transaction' : 'Add transaction',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    // Chips keep a 48dp touch target, which already adds
-                    // about 16dp between lines, so no extra run spacing.
-                    spacing: 12,
-                    runSpacing: 0,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (final c in chips)
-                        ChoiceChip(
-                          key: ValueKey('category-${c.id}'),
-                          // The icon says "selected" with colour; a checkmark
-                          // would draw on top of it.
-                          showCheckmark: false,
-                          avatar: Icon(
-                            categoryIconFor(c.icon).icon,
-                            size: 18,
-                            color: c.id == selected
-                                ? context.appColors.accent
-                                : context.appColors.text,
-                          ),
-                          label: Text(
-                            c.isArchived ? '${c.name} (archived)' : c.name,
-                          ),
-                          selected: c.id == selected,
-                          onSelected: (_) => setState(() {
-                            _categoryId = c.id;
-                            _categoryError = null;
-                          }),
+                      if (_isEdit) ...[
+                        IconButton(
+                          key: const ValueKey('form-favorite'),
+                          tooltip: 'Save as favorite',
+                          icon: const Icon(Icons.favorite_border),
+                          onPressed: () => _onAction(_FormAction.favorite),
                         ),
-                      ActionChip(
-                        key: const ValueKey('new-category'),
-                        avatar: const Icon(Icons.add, size: 18),
-                        label: const Text('New'),
-                        onPressed: _addCategory,
-                      ),
+                        IconButton(
+                          key: const ValueKey('form-duplicate'),
+                          tooltip: 'Duplicate',
+                          icon: const Icon(Icons.copy_outlined),
+                          onPressed: () => _onAction(_FormAction.duplicate),
+                        ),
+                      ],
+                      if (_isEdit)
+                        IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: _confirmDelete,
+                        ),
+                      if (!_isEdit)
+                        IconButton(
+                          tooltip: 'Close',
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).maybePop(),
+                        ),
                     ],
-                  ),
-                  if (_categoryError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        _categoryError!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    key: const ValueKey('note-field'),
-                    controller: _note,
-                    maxLength: maxNoteLength,
-                    maxLines: 2,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'Note (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_saveError != null) ...[
-                    Text(
-                      _saveError!,
-                      key: const ValueKey('save-error'),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  FilledButton(
-                    key: const ValueKey('save-button'),
-                    onPressed: _saving ? null : () => _save(active),
-                    child: const Text('Save'),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            Flexible(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  children: [
+                    _quickAddRow(context, all),
+                    SegmentedButton<TransactionType>(
+                      segments: const [
+                        ButtonSegment(
+                          value: TransactionType.expense,
+                          label: Text('Expense'),
+                          icon: Icon(Icons.arrow_upward),
+                        ),
+                        ButtonSegment(
+                          value: TransactionType.income,
+                          label: Text('Income'),
+                          icon: Icon(Icons.arrow_downward),
+                        ),
+                      ],
+                      selected: {_type},
+                      onSelectionChanged: (s) => _setType(s.first),
+                    ),
+                    const SizedBox(height: 16),
+                    ClampedTextScale(
+                      child: TextFormField(
+                        key: const ValueKey('amount-field'),
+                        controller: _amount,
+                        focusNode: _amountFocus,
+                        autofocus: !_isEdit,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9.,\s]'),
+                          ),
+                        ],
+                        // The thing being measured: a large mono readout.
+                        style: monoText(
+                          size: 32,
+                          weight: FontWeight.w600,
+                          color: context.appColors.text,
+                        ),
+                        cursorHeight: 30,
+                        decoration: InputDecoration(
+                          labelText: 'Amount',
+                          prefixText: '$symbol ',
+                          prefixStyle: monoText(
+                            size: 32,
+                            weight: FontWeight.w500,
+                            color: context.appColors.dim,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 18,
+                          ),
+                        ),
+                        validator: (value) => parseMoney(value ?? '').error,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      key: const ValueKey('title-field'),
+                      controller: _title,
+                      maxLength: maxTitleLength,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Title (optional)',
+                        hintText: 'A shop or a short name',
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      key: const ValueKey('date-tile'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.calendar_today),
+                      title: const Text('Date'),
+                      subtitle: Text(formatDate(_date)),
+                      onTap: _pickDate,
+                    ),
+
+                    if (_canSetRepeat)
+                      ..._repeatRows(context)
+                    else
+                      ..._linkedRuleRows(context),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Category',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      // Chips keep a 48dp touch target, which already adds
+                      // about 16dp between lines, so no extra run spacing.
+                      spacing: 12,
+                      runSpacing: 0,
+                      children: [
+                        for (final c in chips)
+                          ChoiceChip(
+                            key: ValueKey('category-${c.id}'),
+                            // The icon says "selected" with colour; a checkmark
+                            // would draw on top of it.
+                            showCheckmark: false,
+                            avatar: Icon(
+                              categoryIconFor(c.icon).icon,
+                              size: 18,
+                              color: c.id == selected
+                                  ? context.appColors.accent
+                                  : context.appColors.text,
+                            ),
+                            label: Text(
+                              c.isArchived ? '${c.name} (archived)' : c.name,
+                            ),
+                            selected: c.id == selected,
+                            onSelected: (_) => setState(() {
+                              _categoryId = c.id;
+                              _categoryError = null;
+                            }),
+                          ),
+                        ActionChip(
+                          key: const ValueKey('new-category'),
+                          avatar: const Icon(Icons.add, size: 18),
+                          label: const Text('New'),
+                          onPressed: _addCategory,
+                        ),
+                      ],
+                    ),
+                    if (_categoryError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          _categoryError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      key: const ValueKey('note-field'),
+                      controller: _note,
+                      maxLength: maxNoteLength,
+                      maxLines: 2,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Note (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_saveError != null) ...[
+                      Text(
+                        _saveError!,
+                        key: const ValueKey('save-error'),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (_addedCount > 0) ...[
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          _addedCount == 1
+                              ? 'Added 1. Enter the next one.'
+                              : 'Added $_addedCount. Enter the next one.',
+                          key: const ValueKey('added-count'),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    FilledButton(
+                      key: const ValueKey('save-button'),
+                      onPressed: _saving ? null : () => _save(active),
+                      child: const Text('Save'),
+                    ),
+                    if (!_isEdit) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        key: const ValueKey('save-another-button'),
+                        onPressed: _saving
+                            ? null
+                            : () => _save(active, another: true),
+                        child: const Text('Save and add another'),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

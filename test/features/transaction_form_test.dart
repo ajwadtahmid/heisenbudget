@@ -16,6 +16,47 @@ Future<void> tapSave(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('Save and add another keeps the sheet open for the next entry', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    await openForm(tester, env);
+
+    final another = find.byKey(const ValueKey('save-another-button'));
+    await tester.enterText(_amountField, '12.50');
+    await tester.ensureVisible(another);
+    await tester.tap(another);
+    await settle(tester);
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('Added 1. Enter the next one.'), findsOneWidget);
+    expect(
+      tester.widget<TextFormField>(_amountField).controller!.text,
+      isEmpty,
+    );
+
+    await tester.enterText(_amountField, '3');
+    await tapSave(tester);
+
+    expect(find.byType(BottomSheet), findsNothing);
+    final saved = await savedTransactions(tester, env);
+    expect(
+      saved.map((t) => t.transaction.amountCents),
+      unorderedEquals([1250, 300]),
+    );
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('Save and add another is not offered when editing', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final id = await addExpense(tester, env, 4550, DateTime(2026, 10, 3));
+    await openForm(tester, env, editId: id);
+    expect(find.byKey(const ValueKey('save-another-button')), findsNothing);
+    await disposeEnv(tester, env);
+  });
+
   testWidgets('the form opens as a bottom sheet over the page', (tester) async {
     final env = await createEnv(tester);
     await openForm(tester, env);
@@ -34,11 +75,72 @@ void main() {
     await openForm(tester, env);
 
     await tester.enterText(_amountField, '12');
+    await tester.pump();
     await tester.tap(find.byTooltip('Close'));
+    await settle(tester);
+
+    // Something was typed, so closing asks first.
+    expect(find.text('Discard this entry?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('discard-entry')));
     await settle(tester);
 
     expect(find.byType(BottomSheet), findsNothing);
     expect(await savedTransactions(tester, env), isEmpty);
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('Close with nothing typed does not ask', (tester) async {
+    final env = await createEnv(tester);
+    await openForm(tester, env);
+
+    await tester.tap(find.byTooltip('Close'));
+    await settle(tester);
+
+    expect(find.text('Discard this entry?'), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('Keep editing leaves the typed amount in place', (tester) async {
+    final env = await createEnv(tester);
+    await openForm(tester, env);
+
+    await tester.enterText(_amountField, '12');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Close'));
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey('keep-editing')));
+    await settle(tester);
+
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(tester.widget<TextFormField>(_amountField).controller!.text, '12');
+    await disposeEnv(tester, env);
+  });
+
+  testWidgets('going back from a changed edit asks before discarding', (
+    tester,
+  ) async {
+    final env = await createEnv(tester);
+    final id = await addExpense(tester, env, 4550, DateTime(2026, 10, 3));
+    await openForm(tester, env, editId: id);
+
+    // Untouched: back closes at once.
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expect(find.byType(BottomSheet), findsNothing);
+
+    await openForm(tester, env, editId: id);
+    await tester.enterText(_amountField, '99');
+    await tester.pump();
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expect(find.text('Discard your changes?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('discard-entry')));
+    await settle(tester);
+
+    expect(find.byType(BottomSheet), findsNothing);
+    final saved = await savedTransactions(tester, env);
+    expect(saved.single.transaction.amountCents, 4550);
     await disposeEnv(tester, env);
   });
 
