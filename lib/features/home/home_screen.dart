@@ -202,6 +202,8 @@ class HomeScreen extends ConsumerWidget {
             if (spends != null)
               SpectrumChart(
                 bars: buildSpectrum(spends),
+                // A few categories need less room, which keeps Recent in view.
+                height: buildSpectrum(spends).length <= 3 ? 112 : 152,
                 symbol: symbol,
                 emptyText: copy.emptyChart,
                 onOpen: (bar) => _openHistoryFor(ref, bar),
