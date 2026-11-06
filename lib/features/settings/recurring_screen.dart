@@ -9,6 +9,7 @@ import '../../domain/transaction_type.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/recurring_providers.dart';
 import '../../providers/settings_providers.dart';
+import '../home/upcoming_screen.dart';
 import '../shared/category_tile.dart';
 import '../shared/recurring_catch_up.dart';
 import '../shared/empty_state.dart';
@@ -71,7 +72,19 @@ class RecurringScreen extends ConsumerWidget {
           );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Repeating transactions')),
+      appBar: AppBar(
+        title: const Text('Repeating transactions'),
+        actions: [
+          IconButton(
+            key: const ValueKey('recurring-upcoming'),
+            tooltip: 'Upcoming',
+            icon: const Icon(Icons.event_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const UpcomingScreen()),
+            ),
+          ),
+        ],
+      ),
       body: failed
           ? Column(
               children: [

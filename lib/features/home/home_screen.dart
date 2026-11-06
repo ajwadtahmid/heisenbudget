@@ -29,6 +29,7 @@ import '../trends/trends_screen.dart';
 import 'delta_line.dart';
 import 'home_notice_slot.dart';
 import 'spectrum_chart.dart';
+import 'upcoming_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -218,7 +219,22 @@ class HomeScreen extends ConsumerWidget {
               ),
             if (comingUp.isNotEmpty) ...[
               const SizedBox(height: Gap.xl),
-              const SectionLabel('Coming up'),
+              SectionLabel(
+                'Coming up',
+                trailing: TextButton(
+                  key: const ValueKey('upcoming-see-all'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(48, 40),
+                    padding: const EdgeInsets.only(left: Gap.m),
+                  ),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const UpcomingScreen(),
+                    ),
+                  ),
+                  child: const Text('See all'),
+                ),
+              ),
               for (final item in comingUp)
                 ComingUpTile(
                   key: ValueKey('coming-up-${item.rule.id}'),

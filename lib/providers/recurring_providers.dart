@@ -91,3 +91,41 @@ final comingUpProvider = Provider<List<ComingUp>>((ref) {
   });
   return soon.take(comingUpLimit).toList();
 });
+
+/// How far the full schedule can look ahead, in days, and how many entries it
+/// shows at most (a daily rule would otherwise list hundreds).
+const upcomingWindows = [30, 60, 90];
+const upcomingLimit = 200;
+
+/// Every transaction the active repeating rules will add in the next [days]
+/// days, soonest first, a rule appearing once for each date. Worked out on the
+/// fly, never stored and never part of any total. Today and earlier are left
+/// out: anything due by today is added when the app opens.
+final upcomingProvider = Provider.family<List<ComingUp>, int>((ref, days) {
+  final rules = ref.watch(recurringRulesProvider).value ?? const [];
+  final categories = ref.watch(allCategoriesProvider).value ?? const [];
+  final today = ref.watch(clockProvider);
+  final horizon = DateTime(today.year, today.month, today.day + days);
+  final planned = <ComingUp>[];
+  for (final rule in rules) {
+    if (!rule.isActive) continue;
+    CategoryRow? category;
+    for (final c in categories) {
+      if (c.id == rule.categoryId) category = c;
+    }
+    final recurrence = rule.recurrence;
+    // The guard stops a rule that is far behind from looping for long.
+    for (var k = rule.nextIndex, steps = 0; steps < 400; k++, steps++) {
+      final date = recurrence.occurrence(k);
+      if (date == null || date.isAfter(horizon)) break;
+      if (date.isAfter(today)) {
+        planned.add(ComingUp(rule, category, dateOnly(date)));
+      }
+    }
+  }
+  planned.sort((a, b) {
+    final byDate = a.date.compareTo(b.date);
+    return byDate != 0 ? byDate : a.rule.id.compareTo(b.rule.id);
+  });
+  return planned.take(upcomingLimit).toList();
+});

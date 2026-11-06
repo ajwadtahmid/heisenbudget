@@ -746,6 +746,57 @@ void main() {
     });
   });
 
+  group('upcoming schedule', () {
+    testWidgets('lists each coming date and widens with the window', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      final id = await addRentRule(tester, env, d(2026, 9, 18));
+      await tester.pumpWidget(wholeApp(env));
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('upcoming-see-all')));
+      await settle(tester);
+      expect(find.text('Upcoming'), findsOneWidget);
+      // Today is Oct 15: only the 18th falls in 30 days.
+      expect(
+        find.byKey(ValueKey('upcoming-$id-${d(2026, 10, 18)}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('upcoming-$id-${d(2026, 11, 18)}')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('upcoming-90')));
+      await settle(tester);
+      for (final month in [10, 11, 12]) {
+        expect(
+          find.byKey(ValueKey('upcoming-$id-${d(2026, month, 18)}')),
+          findsOneWidget,
+        );
+      }
+      expect(
+        tester.widget<Text>(find.byKey(const ValueKey('upcoming-totals'))).data,
+        contains('-\$3,600.00'),
+      );
+      // Planned only: the balance did not change.
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a paused rule is not planned', (tester) async {
+      final env = await createEnv(tester);
+      await addRentRule(tester, env, d(2026, 9, 18), active: false);
+      await tester.pumpWidget(wholeApp(env));
+      await openRecurringList(tester);
+      await tester.tap(find.byKey(const ValueKey('recurring-upcoming')));
+      await settle(tester);
+
+      expect(find.text('Nothing is due in this time.'), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+  });
+
   group('large text', () {
     Future<void> smallScreen(WidgetTester tester) async {
       tester.view.physicalSize = const Size(360, 640);
