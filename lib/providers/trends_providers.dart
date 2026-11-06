@@ -7,12 +7,12 @@ import 'budget_providers.dart';
 import 'database_providers.dart';
 import 'period_providers.dart';
 
-/// How many months the Trends page shows (6 or 12).
+/// How many months the Trends page shows (3, 6 or 12; 6 to start).
 final trendWindowProvider = NotifierProvider<TrendWindow, int>(TrendWindow.new);
 
 class TrendWindow extends Notifier<int> {
   @override
-  int build() => trendWindows.first;
+  int build() => 6;
 
   void set(int months) {
     if (trendWindows.contains(months)) state = months;

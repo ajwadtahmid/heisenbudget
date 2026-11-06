@@ -5,7 +5,7 @@ import '../../core/theme.dart';
 import '../../domain/trends.dart';
 import '../../providers/trends_providers.dart';
 
-/// The 6 / 12 month choice shared by the Insights tab and the Trends page.
+/// The 3 / 6 / 12 month choice shared by the Insights tab and the Trends page.
 /// Each chip's key is `<keyPrefix>-<months>`.
 class TrendWindowChips extends ConsumerWidget {
   const TrendWindowChips({super.key, required this.keyPrefix});

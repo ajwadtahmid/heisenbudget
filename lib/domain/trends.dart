@@ -8,7 +8,7 @@ import 'iso_date.dart';
 import 'summary.dart';
 
 /// How many months the trace can show.
-const trendWindows = [6, 12];
+const trendWindows = [3, 6, 12];
 
 /// The budget months ending with the one that holds [today], oldest first.
 /// Budget months follow the "month starts on" setting, so Trends, budgets and
