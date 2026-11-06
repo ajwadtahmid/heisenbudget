@@ -16,6 +16,11 @@ void main() {
       '.5': 50,
       '999999999.99': 99999999999,
       '1 2 . 5 0': 1250,
+      '1,234.56': 123456,
+      '1,234,567': 123456700,
+      '12,345.6': 1234560,
+      '1.234,56': 123456,
+      '1.234.567,5': 123456750,
     };
     cases.forEach((input, cents) {
       test('"$input" -> $cents', () {
@@ -42,9 +47,10 @@ void main() {
       '1000000000': errorTooLarge,
       '999999999.99999': errorTooManyDecimals,
       '99999999999999999999': errorTooLarge,
-      '1,234.56': errorThousandsSeparator,
       '1,234': errorThousandsSeparator,
-      '1,234,567': errorThousandsSeparator,
+      '1,2345.60': errorThousandsSeparator,
+      '12,34,567': errorThousandsSeparator,
+      '1,234.567': errorTooManyDecimals,
     };
     cases.forEach((input, error) {
       test('"$input" -> "$error"', () {
@@ -73,8 +79,9 @@ void main() {
     test('still rejects a lone minus, garbage and thousands separators', () {
       expect(parseMoney('-', allowNegative: true).isValid, isFalse);
       expect(parseMoney('-abc', allowNegative: true).isValid, isFalse);
+      expect(parseMoney('-1,234.56', allowNegative: true).cents, -123456);
       expect(
-        parseMoney('-1,234.56', allowNegative: true).error,
+        parseMoney('-1,234', allowNegative: true).error,
         errorThousandsSeparator,
       );
     });

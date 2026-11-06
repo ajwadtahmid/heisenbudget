@@ -803,7 +803,7 @@ void main() {
       await open(tester);
       await tester.enterText(
         find.byKey(const ValueKey('opening-balance-field')),
-        '1,234.56',
+        '1,234',
       );
       await tester.tap(find.text('Save'));
       await settle(tester);
@@ -920,7 +920,7 @@ void main() {
 
       await tester.enterText(
         find.byKey(const ValueKey('opening-field')),
-        '1,234.56',
+        '1,234',
       );
       await tester.tap(find.byKey(const ValueKey('welcome-next')));
       await settle(tester);

@@ -19,11 +19,28 @@ const errorTooManyDecimals = 'Use at most 2 decimal places';
 const errorThousandsSeparator = 'Enter the amount without thousands separators';
 const errorTooLarge = 'Amount is too large';
 
+/// Removes thousands separators when the grouping is unmistakable, so
+/// `1,234.56`, `1,234,567` and `1.234,56` read as numbers. Returns null for
+/// anything else, including a lone `1,234` or `1.234`, which could mean either
+/// a grouped thousand or a decimal.
+String? _withoutGrouping(String s) {
+  final us = RegExp(r'^\d{1,3}(,\d{3})+(\.\d*)?$');
+  if (us.hasMatch(s) && (s.contains('.') || ','.allMatches(s).length > 1)) {
+    return s.replaceAll(',', '');
+  }
+  final eu = RegExp(r'^\d{1,3}(\.\d{3})+(,\d*)?$');
+  if (eu.hasMatch(s) && (s.contains(',') || '.'.allMatches(s).length > 1)) {
+    return s.replaceAll('.', '').replaceAll(',', '.');
+  }
+  return null;
+}
+
 /// Reads text such as `12`, `12.5`, `12.50` or `12,50` into integer cents.
 ///
-/// Spaces are ignored. Thousands separators (`1,234.56`) are rejected on
-/// purpose: `1,234` could mean 1.234 or 1234. A single comma followed by one
-/// or two digits is read as a decimal comma.
+/// Spaces are ignored. Thousands separators are accepted only when the grouping
+/// is unmistakable (`1,234.56`, `1,234,567`, `1.234,56`). A lone `1,234` is
+/// rejected on purpose: it could mean 1.234 or 1234. A single comma followed by
+/// one or two digits is read as a decimal comma.
 ///
 /// By default the amount must be greater than zero. The starting balance
 /// passes [allowNegative] and [allowZero].
@@ -42,6 +59,8 @@ MoneyParseResult parseMoney(
     s = s.substring(1);
     if (s.isEmpty) return const MoneyParseResult.error(errorInvalidAmount);
   }
+
+  s = _withoutGrouping(s) ?? s;
 
   final commas = ','.allMatches(s).length;
   final dots = '.'.allMatches(s).length;
