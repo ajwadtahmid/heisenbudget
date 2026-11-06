@@ -415,6 +415,30 @@ void main() {
       await disposeEnv(tester, env);
     });
 
+    testWidgets('a future date says it counts now but not toward pace', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      final id = await addGoal(tester, env);
+      await openDetail(tester, env, id);
+
+      await tapKey(tester, 'goal-add-money');
+      expect(
+        find.byKey(const ValueKey('goal-entry-future-note')),
+        findsNothing,
+      );
+      await tapKey(tester, 'goal-entry-date');
+      await tester.tap(find.text('25')); // Oct 25; today is Oct 15
+      await tester.tap(find.text('OK'));
+      await settle(tester);
+
+      expect(
+        find.byKey(const ValueKey('goal-entry-future-note')),
+        findsOneWidget,
+      );
+      await disposeEnv(tester, env);
+    });
+
     testWidgets('Add money puts it in the goal and the history', (
       tester,
     ) async {

@@ -192,6 +192,18 @@ class _GoalEntrySheetState extends ConsumerState<_GoalEntrySheet> {
                       label: Text(formatDate(_date)),
                     ),
                   ),
+                  if (_date.isAfter(dateOnly(ref.read(clockProvider))))
+                    Padding(
+                      padding: const EdgeInsets.only(top: Gap.s),
+                      child: Text(
+                        'This date is ahead. It counts toward the saved total '
+                        'now, but not toward your recent pace.',
+                        key: const ValueKey('goal-entry-future-note'),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: c.dim,
+                        ),
+                      ),
+                    ),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: Gap.s),
