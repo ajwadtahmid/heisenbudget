@@ -33,6 +33,7 @@ class AppSettings {
     this.backupReminders = true,
     this.backupSnoozedUntil,
     this.reportSeenMonth,
+    this.tipsDismissed = false,
   });
 
   final Currency currency;
@@ -88,6 +89,9 @@ class AppSettings {
   /// was opened; Home stops announcing it. Also phone-only.
   final String? reportSeenMonth;
 
+  /// The "Make logging faster" card on Home was dismissed. Also phone-only.
+  final bool tipsDismissed;
+
   /// What amounts are written with, e.g. `৳`.
   String get currencySymbol => currency.symbol;
 
@@ -135,6 +139,7 @@ class SettingsRepository {
   static const _backupRemindersKey = 'backup_reminders';
   static const _backupSnoozedKey = 'backup_snoozed_until';
   static const _reportSeenKey = 'report_seen_month';
+  static const _tipsDismissedKey = 'tips_dismissed';
 
   AppSettings load() {
     final storedDay = _prefs.getInt(_weekStartDayKey) ?? 1;
@@ -166,6 +171,7 @@ class SettingsRepository {
         _prefs.getString(_backupSnoozedKey) ?? '',
       ),
       reportSeenMonth: _reportSeenMonth(),
+      tipsDismissed: _prefs.getBool(_tipsDismissedKey) ?? false,
     );
   }
 
@@ -248,6 +254,10 @@ class SettingsRepository {
   /// opened.
   Future<void> setReportSeenMonth(String key) =>
       _prefs.setString(_reportSeenKey, key);
+
+  /// Remembers that the "Make logging faster" card was dismissed.
+  Future<void> setTipsDismissed(bool value) =>
+      _prefs.setBool(_tipsDismissedKey, value);
 
   Future<void> setLastBackupAt(DateTime when) =>
       _prefs.setString(_lastBackupKey, when.toUtc().toIso8601String());

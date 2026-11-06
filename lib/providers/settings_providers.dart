@@ -81,6 +81,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setReportSeenMonth(String key) =>
       _save(() => _repo.setReportSeenMonth(key));
 
+  Future<void> setTipsDismissed(bool value) =>
+      _save(() => _repo.setTipsDismissed(value));
+
   Future<void> setLastBackupAt(DateTime when) =>
       _save(() => _repo.setLastBackupAt(when));
 
