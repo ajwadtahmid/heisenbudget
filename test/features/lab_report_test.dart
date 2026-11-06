@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/core/theme.dart';
 import 'package:heisenbudget/data/repositories/budget_repository.dart';
 import 'package:heisenbudget/domain/budget.dart';
+import 'package:heisenbudget/providers/backup_providers.dart';
 import 'package:heisenbudget/domain/transaction_type.dart';
 import 'package:heisenbudget/features/trends/lab_report_screen.dart';
 import 'package:heisenbudget/features/trends/insights_screen.dart';
@@ -11,6 +12,7 @@ import 'package:heisenbudget/features/trends/reports_screen.dart';
 import 'package:heisenbudget/features/transaction_form/transaction_form_screen.dart';
 import 'package:heisenbudget/providers/lab_report_providers.dart';
 
+import 'backup_ui_test.dart' show FakeFileExchange;
 import 'test_helpers.dart';
 
 DateTime d(int y, int m, int day) => DateTime(y, m, day);
@@ -484,6 +486,117 @@ void main() {
       );
       await settle(tester);
       expect(card(), findsNothing);
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('sharing the report as a picture', () {
+    testWidgets('sends a PNG of the top of the report', (tester) async {
+      final env = await withHistory(tester);
+      final exchange = FakeFileExchange();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...env.overrides,
+            fileExchangeProvider.overrideWithValue(exchange),
+          ],
+          child: MaterialApp(
+            theme: lightTheme(),
+            home: const LabReportScreen(month: september),
+          ),
+        ),
+      );
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('report-share')));
+      // Drawing the picture needs real time, not the test clock.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+
+      expect(exchange.shared, hasLength(1));
+      final file = exchange.shared.single;
+      expect(file.name, 'heisenbudget-report-2026-09.png');
+      expect(file.mime, 'image/png');
+      // The PNG signature.
+      expect(file.bytes.take(4), [0x89, 0x50, 0x4E, 0x47]);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a failed share says so and the button works again', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
+      final exchange = FakeFileExchange(shareFails: true);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...env.overrides,
+            fileExchangeProvider.overrideWithValue(exchange),
+          ],
+          child: MaterialApp(
+            theme: lightTheme(),
+            home: const LabReportScreen(month: september),
+          ),
+        ),
+      );
+      await settle(tester);
+
+      await tester.tap(find.byKey(const ValueKey('report-share')));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pump();
+
+      expect(find.text('Could not share the picture.'), findsOneWidget);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const ValueKey('report-share')))
+            .onPressed,
+        isNotNull,
+      );
+      await disposeEnv(tester, env);
+    });
+  });
+
+  group('the quiet row on Home', () {
+    testWidgets('stays after the first days and opens last month', (
+      tester,
+    ) async {
+      final env = await withHistory(tester, now: d(2026, 10, 20));
+      await openHome(tester, env);
+
+      expect(find.byKey(const ValueKey('report-notice')), findsNothing);
+      expect(find.byKey(const ValueKey('home-last-report')), findsOneWidget);
+      expect(find.text('September lab report'), findsOneWidget);
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('home-last-report')),
+      );
+      await tester.tap(find.byKey(const ValueKey('home-last-report')));
+      await settle(tester);
+      expect(find.byKey(const ValueKey('report-month')), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('is not shown beside the card in the first days', (
+      tester,
+    ) async {
+      final env = await withHistory(tester);
+      await openHome(tester, env);
+
+      expect(find.byKey(const ValueKey('report-notice')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-last-report')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('is absent when last month had nothing', (tester) async {
+      final env = await createEnv(tester, now: d(2026, 10, 20));
+      await addExpense(tester, env, 1000, d(2026, 10, 2), category: 'Food');
+      await openHome(tester, env);
+
+      expect(find.byKey(const ValueKey('home-last-report')), findsNothing);
       await disposeEnv(tester, env);
     });
   });

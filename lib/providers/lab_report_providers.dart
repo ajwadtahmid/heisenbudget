@@ -252,6 +252,22 @@ final reportNoticeProvider = Provider<BudgetMonth?>((ref) {
   return month == null || month.isEmpty ? null : due;
 });
 
+/// The last finished budget month, when it has something to report and its
+/// card is not on Home (it was opened or dismissed, or the first days are
+/// over). Home keeps a quiet row to it for the rest of the month.
+final lastReportProvider = Provider<BudgetMonth?>((ref) {
+  if (ref.watch(reportNoticeProvider) != null) return null;
+  final startDay = ref.watch(monthStartDayProvider);
+  final month = BudgetMonth.containing(
+    ref.watch(clockProvider),
+    startDay,
+  ).shift(-1);
+  final totals = ref.watch(trendTotalsProvider(6)).value;
+  if (totals == null) return null;
+  final found = totals.where((t) => t.month.key == month.key).firstOrNull;
+  return found == null || found.isEmpty ? null : month;
+});
+
 /// Remembers that the report for [month] was opened (an older report never
 /// brings back a newer one's card).
 Future<void> markReportSeen(WidgetRef ref, BudgetMonth month) async {

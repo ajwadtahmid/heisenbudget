@@ -44,6 +44,7 @@ final _keptFresh = <ProviderListenable<Object?>>[
   backupReminderProvider,
   homeNoticeProvider,
   reportNoticeProvider,
+  lastReportProvider,
   trendTotalsProvider(6),
   trendCategoryProvider,
   goalViewsProvider,

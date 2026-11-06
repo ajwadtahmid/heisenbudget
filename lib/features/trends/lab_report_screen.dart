@@ -1,7 +1,11 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants.dart';
 import '../../core/design/section_label.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
@@ -10,6 +14,7 @@ import '../../domain/category_spend.dart' show purityText;
 import '../../domain/iso_date.dart';
 import '../../domain/lab_report.dart';
 import '../../domain/trends.dart';
+import '../../providers/backup_providers.dart';
 import '../../providers/budget_providers.dart';
 import '../../providers/goal_providers.dart';
 import '../../providers/lab_report_providers.dart';
@@ -45,6 +50,62 @@ class LabReportScreen extends ConsumerStatefulWidget {
 }
 
 class _LabReportScreenState extends ConsumerState<LabReportScreen> {
+  final _cardKey = GlobalKey();
+  final _scroll = ScrollController();
+  bool _sharing = false;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Shares the top of the report (the month, what came in and went out, the
+  /// share kept) as a picture, through the phone's share sheet. The person
+  /// chooses where it goes; nothing is sent by the app itself.
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final exchange = ref.read(fileExchangeProvider);
+    final origin = _shareOrigin();
+    try {
+      // The card must be on screen to be drawn.
+      if (_scroll.hasClients && _scroll.offset > 0) {
+        _scroll.jumpTo(0);
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      final boundary =
+          _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) throw StateError('The card is not on screen');
+      final image = await boundary.toImage(pixelRatio: 3);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('The picture could not be made');
+      final m = widget.month;
+      final name =
+          'heisenbudget-report-${m.year}-${m.month.toString().padLeft(2, '0')}.png';
+      await exchange.shareFile(
+        fileName: name,
+        mimeType: 'image/png',
+        bytes: data.buffer.asUint8List(),
+        origin: origin,
+      );
+    } catch (_) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Could not share the picture.')),
+        );
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Rect? _shareOrigin() {
+    final box = context.findRenderObject() as RenderBox?;
+    return box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,19 +132,42 @@ class _LabReportScreenState extends ConsumerState<LabReportScreen> {
     } else if (report.value == null) {
       body = const Center(child: CircularProgressIndicator());
     } else {
-      body = _ReportBody(report: report.value!);
+      body = _ReportBody(
+        report: report.value!,
+        cardKey: _cardKey,
+        controller: _scroll,
+      );
     }
     return Scaffold(
-      appBar: AppBar(title: Text(copy.reportTitle)),
+      appBar: AppBar(
+        title: Text(copy.reportTitle),
+        actions: [
+          if (report.value != null)
+            IconButton(
+              key: const ValueKey('report-share'),
+              tooltip: 'Share as a picture',
+              icon: const Icon(Icons.ios_share),
+              onPressed: _sharing ? null : _share,
+            ),
+        ],
+      ),
       body: body,
     );
   }
 }
 
 class _ReportBody extends ConsumerWidget {
-  const _ReportBody({required this.report});
+  const _ReportBody({
+    required this.report,
+    required this.cardKey,
+    required this.controller,
+  });
 
   final LabReport report;
+
+  /// Marks the top of the report, the part that is shared as a picture.
+  final GlobalKey cardKey;
+  final ScrollController controller;
 
   static String _monthName(BudgetMonth m) =>
       DateFormat.MMMM().format(DateTime(m.year, m.month));
@@ -110,44 +194,66 @@ class _ReportBody extends ConsumerWidget {
         : _against(of(t) - of(before), symbol, beforeName);
 
     return ListView(
+      controller: controller,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
       children: [
-        Text(
-          DateFormat.yMMMM().format(
-            DateTime(report.month.year, report.month.month),
+        RepaintBoundary(
+          key: cardKey,
+          child: ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: Gap.m),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    DateFormat.yMMMM().format(
+                      DateTime(report.month.year, report.month.month),
+                    ),
+                    key: const ValueKey('report-month'),
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                  Text(
+                    formatRange(report.month.range(startDay)),
+                    style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
+                  ),
+                  const SizedBox(height: Gap.l),
+                  const SectionLabel('The month'),
+                  const SizedBox(height: Gap.s),
+                  FactRow(
+                    label: 'Received',
+                    subtitle: versus((m) => m.receivedCents),
+                    value: formatMoney(t.receivedCents, symbol, showPlus: true),
+                  ),
+                  FactRow(
+                    label: 'Spent',
+                    subtitle: versus((m) => m.spentCents),
+                    value: formatMoney(-t.spentCents, symbol),
+                  ),
+                  FactRow(
+                    label: 'Net',
+                    subtitle: versus((m) => m.netCents),
+                    value: formatMoney(t.netCents, symbol, showPlus: true),
+                  ),
+                  FactRow(
+                    label: copy.purityName,
+                    subtitle: before?.purity == null
+                        ? null
+                        : '$beforeName: ${purityText(before!.purity!)}',
+                    value: t.purity == null
+                        ? 'nothing received'
+                        : purityText(t.purity!),
+                    valueIsPlain: t.purity == null,
+                  ),
+                  const SizedBox(height: Gap.s),
+                  Text(
+                    appName,
+                    style: theme.textTheme.labelSmall?.copyWith(color: c.dim),
+                  ),
+                ],
+              ),
+            ),
           ),
-          key: const ValueKey('report-month'),
-          style: theme.textTheme.headlineSmall,
-        ),
-        Text(
-          formatRange(report.month.range(startDay)),
-          style: theme.textTheme.bodySmall?.copyWith(color: c.dim),
-        ),
-        const SizedBox(height: Gap.l),
-        const SectionLabel('The month'),
-        const SizedBox(height: Gap.s),
-        FactRow(
-          label: 'Received',
-          subtitle: versus((m) => m.receivedCents),
-          value: formatMoney(t.receivedCents, symbol, showPlus: true),
-        ),
-        FactRow(
-          label: 'Spent',
-          subtitle: versus((m) => m.spentCents),
-          value: formatMoney(-t.spentCents, symbol),
-        ),
-        FactRow(
-          label: 'Net',
-          subtitle: versus((m) => m.netCents),
-          value: formatMoney(t.netCents, symbol, showPlus: true),
-        ),
-        FactRow(
-          label: copy.purityName,
-          subtitle: before?.purity == null
-              ? null
-              : '$beforeName: ${purityText(before!.purity!)}',
-          value: t.purity == null ? 'nothing received' : purityText(t.purity!),
-          valueIsPlain: t.purity == null,
         ),
         ..._budgets(context, ref, symbol),
         ..._movers(context, symbol),

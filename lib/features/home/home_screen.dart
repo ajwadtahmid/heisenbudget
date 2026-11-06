@@ -28,6 +28,7 @@ import 'coming_up_tile.dart';
 import '../trends/trends_screen.dart';
 import 'delta_line.dart';
 import 'home_notice_slot.dart';
+import 'last_report_line.dart';
 import 'spectrum_chart.dart';
 import 'upcoming_screen.dart';
 
@@ -196,6 +197,7 @@ class HomeScreen extends ConsumerWidget {
                 onRetry: () => ref.invalidate(periodSummaryProvider),
               ),
             const HomeBudgetLine(),
+            const LastReportLine(),
             const SizedBox(height: Gap.xl),
             SectionLabel(copy.chartTitle),
             const SizedBox(height: Gap.m),
