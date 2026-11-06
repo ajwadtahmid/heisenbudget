@@ -386,7 +386,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('1 transaction and 2 categories'),
+      find.textContaining(RegExp(r'1 transaction dated .+ and 2 categories')),
+      findsOneWidget,
+    );
+    // What is here now is shown beside what the file holds.
+    expect(
+      find.textContaining('This phone has 1 transaction now.'),
       findsOneWidget,
     );
     expect(find.textContaining('cannot be undone'), findsOneWidget);

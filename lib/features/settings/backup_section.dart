@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show BaseAggregate;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -177,13 +178,19 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     final bytes = await ref.read(fileExchangeProvider).pickFile();
     if (bytes == null) return;
     final data = await BackupData.parseInBackground(bytes);
+    final db = ref.read(appDatabaseProvider);
+    final nowHere = await (db.selectOnly(
+      db.transactions,
+    )..addColumns([db.transactions.id.count()])).getSingle();
+    final current = nowHere.read(db.transactions.id.count());
     // The dialog offers a backup of what is here now first; after it, the
     // question is asked again.
     while (true) {
       if (!mounted) return;
       final choice = await showDialog<_RestoreChoice>(
         context: context,
-        builder: (_) => _ConfirmRestoreDialog(data: data),
+        builder: (_) =>
+            _ConfirmRestoreDialog(data: data, currentTransactions: current),
       );
       if (choice == _RestoreChoice.backupFirst) {
         await _exportBackup();
@@ -278,9 +285,12 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
 enum _RestoreChoice { cancel, backupFirst, restore }
 
 class _ConfirmRestoreDialog extends StatelessWidget {
-  const _ConfirmRestoreDialog({required this.data});
+  const _ConfirmRestoreDialog({required this.data, this.currentTransactions});
 
   final BackupData data;
+
+  /// How many transactions this phone has now, to compare with the file.
+  final int? currentTransactions;
 
   @override
   Widget build(BuildContext context) {
@@ -289,13 +299,23 @@ class _ConfirmRestoreDialog extends StatelessWidget {
     final made = data.exportedAt.millisecondsSinceEpoch == 0
         ? null
         : formatDate(data.exportedAt.toLocal());
+    final dates = [for (final t in data.transactions) t.date]..sort();
+    final span = dates.isEmpty
+        ? ''
+        : ' dated ${formatDate(fromIsoDate(dates.first))}'
+              '${dates.first == dates.last ? '' : ' to ${formatDate(fromIsoDate(dates.last))}'}';
+    final here = currentTransactions == null
+        ? ''
+        : 'This phone has $currentTransactions transaction'
+              '${currentTransactions == 1 ? '' : 's'} now.\n\n';
     return AlertDialog(
       scrollable: true,
       title: const Text('Restore this backup?'),
       content: Text(
         '${made == null ? 'This backup' : 'Backup from $made'} has '
-        '$n transaction${n == 1 ? '' : 's'} and '
+        '$n transaction${n == 1 ? '' : 's'}$span and '
         '$k categor${k == 1 ? 'y' : 'ies'}.\n\n'
+        '$here'
         'It replaces this app’s transactions, categories, repeating rules, '
         'favorites, budget limits, savings goals and goal entries, then applies '
         'the backup’s portable settings. This cannot be undone.\n\n'
