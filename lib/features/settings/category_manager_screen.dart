@@ -87,6 +87,16 @@ class _CategoryList extends ConsumerWidget {
                       existing: c,
                     ),
                   ),
+                  if (!c.isProtected && active.length > 1)
+                    IconButton(
+                      key: ValueKey('merge-${c.id}'),
+                      tooltip: 'Merge ${c.name} into another',
+                      icon: const Icon(Icons.merge_type),
+                      onPressed: () => _merge(context, repo, c, [
+                        for (final other in active)
+                          if (other.id != c.id) other,
+                      ]),
+                    ),
                   if (!c.isProtected)
                     IconButton(
                       tooltip: 'Archive ${c.name}',
@@ -123,6 +133,84 @@ class _CategoryList extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Moves everything in [from] to a category the person picks, then archives
+  /// it. It cannot be undone, so it asks twice: where, then to confirm.
+  Future<void> _merge(
+    BuildContext context,
+    CategoryRepository repo,
+    CategoryRow from,
+    List<CategoryRow> targets,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final into = await showDialog<CategoryRow>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('Merge "${from.name}" into'),
+        children: [
+          for (final target in targets)
+            SimpleDialogOption(
+              key: ValueKey('merge-into-${target.id}'),
+              onPressed: () => Navigator.of(dialogContext).pop(target),
+              child: Row(
+                children: [
+                  CategoryTile(iconKey: target.icon, size: 32),
+                  const SizedBox(width: Gap.m),
+                  Expanded(child: Text(target.name)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+    if (into == null || !context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Merge into "${into.name}"?'),
+        content: Text(
+          'Every transaction, repeating transaction and favorite in '
+          '"${from.name}" moves to "${into.name}", and "${from.name}" is '
+          'archived. A budget limit moves too, unless "${into.name}" already '
+          'has its own. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('merge-confirm'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Merge'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final moved = await repo.merge(fromId: from.id, intoId: into.id);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              moved == 1
+                  ? 'Moved 1 transaction to "${into.name}"'
+                  : 'Moved $moved transactions to "${into.name}"',
+            ),
+          ),
+        );
+    } catch (_) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Could not merge. Nothing was changed.'),
+          ),
+        );
+    }
   }
 
   Future<void> _archive(

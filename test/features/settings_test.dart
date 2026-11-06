@@ -246,6 +246,40 @@ void main() {
     await disposeEnv(tester, env);
   });
 
+  testWidgets('a category can be merged into another', (tester) async {
+    final env = await createEnv(tester);
+    await addExpense(
+      tester,
+      env,
+      4550,
+      DateTime(2026, 10, 3),
+      category: 'Food',
+    );
+    await tester.pumpWidget(wholeApp(env));
+    await openCategoryManager(tester);
+
+    await tester.tap(find.byTooltip('Merge Food into another'));
+    await settle(tester);
+    expect(find.text('Merge "Food" into'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SimpleDialog),
+        matching: find.text('Rent'),
+      ),
+    );
+    await settle(tester);
+    expect(find.text('Merge into "Rent"?'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('merge-confirm')));
+    await settle(tester);
+
+    expect(find.text('Moved 1 transaction to "Rent"'), findsOneWidget);
+    expect(find.text('Archived'), findsOneWidget);
+    expect(find.byTooltip('Restore Food'), findsOneWidget);
+    final saved = await savedTransactions(tester, env);
+    expect(saved.single.category.name, 'Rent');
+    await disposeEnv(tester, env);
+  });
+
   testWidgets('"Other" cannot be archived (and keeps its name)', (
     tester,
   ) async {

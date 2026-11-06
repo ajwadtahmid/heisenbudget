@@ -145,6 +145,58 @@ class CategoryRepository {
 
   Future<void> restore(int id) => _setArchived(id, false);
 
+  /// Moves everything that uses [fromId] (transactions, repeating rules,
+  /// favorites and budget limits) to [intoId], then archives [fromId]. Both
+  /// must be of the same type, [fromId] cannot be "Other" and [intoId] must not
+  /// be archived. A budget limit moves only when [intoId] has none of its own;
+  /// otherwise the limit on [fromId] is dropped (two limits would clash). All
+  /// of it happens in one transaction. Returns how many transactions moved.
+  Future<int> merge({required int fromId, required int intoId}) {
+    return _db.transaction(() async {
+      if (fromId == intoId) {
+        throw ArgumentError('A category cannot be merged into itself');
+      }
+      final from = await getById(fromId);
+      final into = await getById(intoId);
+      if (from == null || into == null) {
+        throw ArgumentError('Category not found');
+      }
+      if (from.type != into.type) {
+        throw ArgumentError('Categories of different types cannot be merged');
+      }
+      if (from.isProtected) throw const ProtectedCategoryException();
+      if (into.isArchived) {
+        throw ArgumentError('Restore the category to merge into it');
+      }
+      final moved =
+          await (_db.update(_db.transactions)
+                ..where((t) => t.categoryId.equals(fromId)))
+              .write(TransactionsCompanion(categoryId: Value(intoId)));
+      await (_db.update(_db.recurringRules)
+            ..where((r) => r.categoryId.equals(fromId)))
+          .write(RecurringRulesCompanion(categoryId: Value(intoId)));
+      await (_db.update(_db.favorites)
+            ..where((f) => f.categoryId.equals(fromId)))
+          .write(FavoritesCompanion(categoryId: Value(intoId)));
+      final targetHasLimits =
+          await (_db.select(_db.budgetLimits)
+                ..where((l) => l.categoryId.equals(intoId))
+                ..limit(1))
+              .get();
+      if (targetHasLimits.isEmpty) {
+        await (_db.update(_db.budgetLimits)
+              ..where((l) => l.categoryId.equals(fromId)))
+            .write(BudgetLimitsCompanion(categoryId: Value(intoId)));
+      } else {
+        await (_db.delete(
+          _db.budgetLimits,
+        )..where((l) => l.categoryId.equals(fromId))).go();
+      }
+      await _setArchived(fromId, true);
+      return moved;
+    });
+  }
+
   Future<void> _setArchived(int id, bool value) {
     return (_db.update(_t)..where((c) => c.id.equals(id))).write(
       CategoriesCompanion(isArchived: Value(value)),
