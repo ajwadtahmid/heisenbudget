@@ -9,6 +9,7 @@ import '../../core/formatters.dart';
 import '../../data/backup/backup_data.dart';
 import '../../data/backup/backup_service.dart';
 import '../../data/backup/csv_export.dart';
+import '../../data/backup/csv_import.dart';
 import '../../domain/iso_date.dart';
 import '../../domain/backup_status.dart';
 import '../../providers/backup_providers.dart';
@@ -20,6 +21,7 @@ import '../../providers/period_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../shared/recurring_catch_up.dart';
 import 'backup_actions.dart';
+import 'csv_import_screen.dart';
 import 'settings_widgets.dart';
 import '../../providers/database_providers.dart';
 
@@ -104,6 +106,14 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
           summary: 'All transactions, for a spreadsheet.',
           enabled: !_busy,
           onTap: () => _run(_exportCsv),
+        ),
+        SettingsRow(
+          key: const ValueKey('import-csv'),
+          icon: Icons.upload_file_outlined,
+          title: 'Import from CSV',
+          summary: 'Add transactions from a spreadsheet or a bank file.',
+          enabled: !_busy,
+          onTap: () => _run(_importCsv),
         ),
         SettingsRow(
           key: const ValueKey('erase-everything'),
@@ -210,6 +220,42 @@ class _BackupSectionState extends ConsumerState<BackupSection> {
     _say('Backup restored.');
     // Repeating transactions that fell due since the backup was made.
     await runRecurringCatchUp(ref);
+  }
+
+  /// Reads a CSV file the person picks and opens the import page. A file that
+  /// is empty, not text, damaged or not a table is refused here with the
+  /// reason; the page handles the rest (columns, bad rows, duplicates).
+  Future<void> _importCsv() async {
+    final bytes = await ref.read(fileExchangeProvider).pickCsv();
+    if (bytes == null) return;
+    final decoded = decodeCsvBytes(bytes);
+    final table = await parseCsvInBackground(decoded.text);
+    final width = table.rows.fold<int>(
+      0,
+      (w, r) => r.length > w ? r.length : w,
+    );
+    if (width < 2) {
+      throw const BackupFormatException(
+        'This does not look like a table of transactions: it needs at least '
+        'a date column and an amount column.',
+      );
+    }
+    if (!mounted) return;
+    final result = await openCsvImport(
+      context,
+      table,
+      guessedEncoding: decoded.guessedEncoding,
+    );
+    if (result == null) return;
+    final n = result.imported;
+    _say(
+      [
+        'Imported $n transaction${n == 1 ? '' : 's'}',
+        if (result.duplicates > 0) '${result.duplicates} already here, skipped',
+        if (result.categoriesCreated > 0)
+          '${result.categoriesCreated} new categor${result.categoriesCreated == 1 ? 'y' : 'ies'}',
+      ].join(' · '),
+    );
   }
 
   /// Two steps, then everything is wiped and the app starts over.

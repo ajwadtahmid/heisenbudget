@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'backup_data.dart';
+import 'csv_import.dart' show maxCsvBytes;
 
 enum FileShareOutcome { selected, dismissed, unavailable }
 
@@ -124,14 +125,29 @@ class FileExchange {
 
   /// Lets the user choose a file and returns its bytes, or null if they
   /// cancel. Throws [BackupFormatException] when the file is far too large.
-  Future<Uint8List?> pickFile() async {
-    final file = await FilePicker.pickFile(dialogTitle: 'Choose a backup file');
+  Future<Uint8List?> pickFile() => _pick(
+    title: 'Choose a backup file',
+    limit: maxBackupBytes,
+    tooLarge: 'That file is too large to be a backup.',
+  );
+
+  /// The same for a CSV file to import (the limit is [maxCsvBytes]).
+  Future<Uint8List?> pickCsv() => _pick(
+    title: 'Choose a CSV file',
+    limit: maxCsvBytes,
+    tooLarge: 'That file is too large to import. Split it into smaller parts.',
+  );
+
+  Future<Uint8List?> _pick({
+    required String title,
+    required int limit,
+    required String tooLarge,
+  }) async {
+    final file = await FilePicker.pickFile(dialogTitle: title);
     if (file == null) return null;
     final length = await file.length();
-    if (length != null && length > maxBackupBytes) {
-      throw const BackupFormatException(
-        'That file is too large to be a backup.',
-      );
+    if (length != null && length > limit) {
+      throw BackupFormatException(tooLarge);
     }
     final bytes = await file.readAsBytes();
     // On Android the picker works on a copy in the app's cache; it holds the

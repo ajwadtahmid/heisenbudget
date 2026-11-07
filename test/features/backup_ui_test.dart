@@ -58,6 +58,16 @@ class FakeFileExchange extends FileExchange {
   @override
   Future<Uint8List?> pickFile() async => toPick;
 
+  /// What the CSV picker returns, or throws [csvPickError] when it is set.
+  Uint8List? toPickCsv;
+  Object? csvPickError;
+
+  @override
+  Future<Uint8List?> pickCsv() async {
+    if (csvPickError != null) throw csvPickError!;
+    return toPickCsv;
+  }
+
   int sweeps = 0;
   bool cleanupFails = false;
 

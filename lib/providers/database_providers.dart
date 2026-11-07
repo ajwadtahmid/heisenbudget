@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/backup/csv_importer.dart';
 import '../data/database/app_database.dart';
 import '../data/database/database_files.dart';
 import '../data/repositories/category_repository.dart';
@@ -26,6 +27,11 @@ class LedgerRevision extends Notifier<int> {
   int build() => 0;
   void replaced() => state++;
 }
+
+/// Adds the rows of a CSV file in one transaction.
+final csvImporterProvider = Provider<CsvImporter>(
+  (ref) => CsvImporter(ref.watch(appDatabaseProvider)),
+);
 
 final transactionRepositoryProvider = Provider<TransactionRepository>(
   (ref) => TransactionRepository(ref.watch(appDatabaseProvider)),
