@@ -134,7 +134,7 @@ Everything is stored on your phone, and the app has no server of its own.
 
 | Tool | Version |
 |------|---------|
-| Flutter SDK | 3.x (stable channel), Dart ^3.13.5 |
+| Flutter SDK | 3.50 (stable channel), Dart ^3.13.5 |
 | Android: Java | JDK 21 for the verified Gradle build; Java 17 bytecode target |
 | iOS: Xcode | A current Xcode on a Mac (deployment target iOS 15) |
 
