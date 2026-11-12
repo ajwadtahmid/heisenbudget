@@ -1173,6 +1173,63 @@ void main() {
     });
   });
 
+  group('changing the category of a new limit', () {
+    testWidgets('switching from Food to Rent saves the limit on Rent', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      // Food by mistake, then the right one without closing the sheet.
+      await startNewLimit(tester, env, 'Food');
+      final rent = await catId(tester, env, 'Rent');
+      final food = await catId(tester, env, 'Food');
+
+      await tester.tap(find.byKey(const ValueKey('budget-category')));
+      await settle(tester);
+      await tester.tap(find.text('Rent').last);
+      await settle(tester);
+      await saveEditor(tester, '300');
+
+      final rows = await limitRows(tester, env);
+      expect(rows.single.categoryId, rent);
+      expect(rows.single.categoryId, isNot(food));
+      expect(find.byKey(ValueKey('gauge-$rent')), findsOneWidget);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('it can be switched to all spending', (tester) async {
+      final env = await createEnv(tester);
+      await openBudgets(tester, env);
+      await startNewLimit(tester, env, 'Food');
+
+      await tester.tap(find.byKey(const ValueKey('budget-category')));
+      await settle(tester);
+      await tester.tap(find.text('All spending').last);
+      await settle(tester);
+      await saveEditor(tester, '900');
+
+      final rows = await limitRows(tester, env);
+      expect(rows.single.categoryId, isNull);
+      await disposeEnv(tester, env);
+    });
+
+    testWidgets('a limit that already exists keeps its category fixed', (
+      tester,
+    ) async {
+      final env = await createEnv(tester);
+      await limit(tester, env, 'Food', 20000);
+      await openBudgets(tester, env);
+      await tester.tap(
+        find.byKey(ValueKey('gauge-${await catId(tester, env, 'Food')}')),
+      );
+      await settle(tester);
+
+      expect(find.text('Change the limit'), findsOneWidget);
+      expect(find.byKey(const ValueKey('budget-category')), findsNothing);
+      await disposeEnv(tester, env);
+    });
+  });
+
   group('setting several limits at once', () {
     testWidgets('fills in from history, saves what is ticked in one go', (
       tester,

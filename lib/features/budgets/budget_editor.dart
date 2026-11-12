@@ -6,6 +6,7 @@ import '../../core/design/text_scale.dart';
 import '../../core/formatters.dart';
 import '../../core/money_parser.dart';
 import '../../core/theme.dart';
+import '../../data/database/app_database.dart';
 import '../../domain/budget.dart';
 import '../../domain/date_range.dart';
 import '../../domain/iso_date.dart';
@@ -84,6 +85,30 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
   int? _suggestion;
 
   BudgetLine? get _current => widget.current;
+
+  /// What the limit is on: a category id, or null for all spending. A new
+  /// limit can be pointed somewhere else until it is saved.
+  late int? _categoryId = widget.categoryId;
+  late String _name = widget.name;
+
+  /// A limit that is being made (not changed, not copied forward) lets the
+  /// person pick another category without closing the sheet.
+  bool get _canPickCategory => _current == null && widget.copyFrom == null;
+
+  static const _allSpending = -1;
+
+  void _pickCategory(int value, List<CategoryRow> categories) {
+    final id = value == _allSpending ? null : value;
+    if (id == _categoryId) return;
+    setState(() {
+      _categoryId = id;
+      _name = id == null
+          ? 'All spending'
+          : categories.firstWhere((c) => c.id == id).name;
+      _suggestion = null;
+    });
+    _loadSuggestion();
+  }
 
   @override
   void initState() {
@@ -217,7 +242,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
       unit: unit,
       current: range,
       monthStartDay: ref.read(monthStartDayProvider),
-      categoryId: widget.categoryId,
+      categoryId: _categoryId,
     );
     // The period may have been changed while this was working out.
     if (mounted && unit == _unit) setState(() => _suggestion = suggestion);
@@ -310,7 +335,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
         await repo.setLimit(
           start: current.range.start,
           unit: current.unit,
-          categoryId: widget.categoryId,
+          categoryId: _categoryId,
           amountCents: null,
           today: today,
         );
@@ -319,7 +344,7 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
           start: _range.start,
           unit: _unit,
           repeats: _repeats,
-          categoryId: widget.categoryId,
+          categoryId: _categoryId,
           amountCents: parseMoney(_amount.text).cents,
           today: today,
         );
@@ -334,6 +359,45 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
         });
       }
     }
+  }
+
+  /// Every place a new limit can go: all spending (when it has none) and the
+  /// categories with none, plus whatever the sheet was opened on.
+  Widget _categoryPicker() {
+    final overview = ref.watch(budgetOverviewProvider).value;
+    final categories = [...?overview?.withoutLimit];
+    final allFree = overview == null || overview.overall == null;
+    final options = <(int, String)>[
+      if (allFree || _categoryId == null) (_allSpending, 'All spending'),
+      for (final category in categories) (category.id, category.name),
+    ];
+    final current = _categoryId ?? _allSpending;
+    if (!options.any((o) => o.$1 == current)) {
+      options.add((current, _name));
+    }
+    return DropdownButtonFormField<int>(
+      key: const ValueKey('budget-category'),
+      isExpanded: true,
+      initialValue: current,
+      decoration: const InputDecoration(
+        labelText: 'Put the limit on',
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        for (final option in options)
+          DropdownMenuItem<int>(
+            value: option.$1,
+            child: Text(
+              option.$2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (v) {
+        if (v != null) _pickCategory(v, categories);
+      },
+    );
   }
 
   @override
@@ -382,7 +446,10 @@ class _BudgetEditorState extends ConsumerState<_BudgetEditor> {
                 shrinkWrap: true,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 children: [
-                  Text(widget.name, style: theme.textTheme.titleMedium),
+                  if (_canPickCategory)
+                    _categoryPicker()
+                  else
+                    Text(_name, style: theme.textTheme.titleMedium),
                   if (widget.copyFrom != null && isNew) ...[
                     const SizedBox(height: Gap.xs),
                     Text(
