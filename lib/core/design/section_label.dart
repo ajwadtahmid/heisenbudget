@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A tracked section label and rule, with an optional trailing action. The
 /// rule uses the space remaining after the action has actually been laid out.

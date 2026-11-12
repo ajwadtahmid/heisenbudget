@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The interface accent: primary key, selected states, switches, chart focus.
 /// Received (green) and Spent (amber) never change with it, so a colour always

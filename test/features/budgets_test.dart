@@ -1,5 +1,5 @@
 import 'package:drift/drift.dart' show OrderingTerm;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:heisenbudget/core/money_parser.dart';
 import 'package:heisenbudget/data/database/app_database.dart';

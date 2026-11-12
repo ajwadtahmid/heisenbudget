@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Keeps one broken screen or a stray error from taking the whole app down,
 /// and swaps Flutter's grey error box for a plain message. Errors are only

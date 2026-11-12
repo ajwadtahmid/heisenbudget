@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart' show ThemeMode;
+import 'package:material_ui/material_ui.dart' show ThemeMode;
 
 import '../../core/category_icons.dart'
     show defaultCategoryIconKey, defaultGoalIconKey;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A readout that counts to its new value instead of jumping, like an
 /// instrument settling. Honors the system reduce-motion setting.

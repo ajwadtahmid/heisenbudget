@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// An icon a category can use. Categories store only the [key] (text in the
 /// database); the picture comes from Flutter's built-in Material icons, so no
